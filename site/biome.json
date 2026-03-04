@@ -17,6 +17,14 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
+			"correctness": {
+				"noUnusedImports": {
+					"level": "off"
+				},
+				"noUnusedVariables": {
+					"level": "off"
+				}
+			},
 			"suspicious": {
 				"noUnknownAtRules": {
 					"level": "off"
