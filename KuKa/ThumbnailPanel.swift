@@ -1,6 +1,6 @@
 import Cocoa
 
-class ThumbnailPanel: NSPanel {
+class ThumbnailPanel: FloatingPanel {
     var onEdit: (() -> Void)?
     var onDismiss: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -44,17 +44,11 @@ class ThumbnailPanel: NSPanel {
 
     /// Frame-based init for use by ThumbnailStackManager
     init(image: NSImage, frame: NSRect) {
-        super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        isReleasedWhenClosed = false
+        super.init(contentRect: frame)
         setupPanel(image: image, size: frame.size)
     }
 
     private func setupPanel(image: NSImage, size: NSSize) {
-        level = .floating
-        isOpaque = false
-        backgroundColor = .clear
-        hasShadow = true
-
         let container = NSView(frame: NSRect(origin: .zero, size: size))
 
         let imageView = NSImageView(frame: container.bounds)
@@ -102,21 +96,9 @@ class ThumbnailPanel: NSPanel {
         dismissTimer = nil
     }
 
-    @objc private func thumbnailClicked() {
-        cancelDismissTimer()
-        close()
-        onEdit?()
-    }
-
-    @objc private func dismissThumbnail() {
-        cancelDismissTimer()
-        close()
-        onDismiss?()
-    }
-
-    @objc private func deleteThumbnail() {
-        cancelDismissTimer()
-        close()
-        onDelete?()
-    }
+    // Notify only — ThumbnailStackManager.remove(panel:) owns timer cancellation,
+    // closing, and removal from the stack.
+    @objc private func thumbnailClicked() { onEdit?() }
+    @objc private func dismissThumbnail() { onDismiss?() }
+    @objc private func deleteThumbnail() { onDelete?() }
 }

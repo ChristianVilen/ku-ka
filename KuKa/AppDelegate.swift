@@ -280,11 +280,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Drop our reference once the window closes (Done/Delete/close button/Escape)
-        // so the editor and its full-resolution image deallocate. Deferred to the
-        // next runloop tick to avoid releasing the window mid-close.
-        editor.onClose = { [weak self] in
-            DispatchQueue.main.async { self?.editorWindow = nil }
-        }
+        // so the editor and its full-resolution image deallocate. Closing only
+        // ever replaces this one editor, so clear it unconditionally.
+        editor.onClose = { [weak self] in self?.editorWindow = nil }
 
         editor.makeKeyAndOrderFront(nil)
     }
