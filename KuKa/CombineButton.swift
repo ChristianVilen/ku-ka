@@ -8,6 +8,7 @@ class CombineButton: NSPanel {
 
     init(frame: NSRect) {
         super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        isReleasedWhenClosed = false
         level = .floating
         isOpaque = false
         backgroundColor = .clear

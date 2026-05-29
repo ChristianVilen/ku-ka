@@ -241,7 +241,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func dismissOverlay() {
         NSCursor.pop()
         for overlay in overlayWindows {
-            overlay.orderOut(nil)
+            overlay.close()
         }
         overlayWindows.removeAll()
     }
@@ -273,12 +273,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         editor.onSave = { [weak self] annotatedImage in
             self?.captureManager.saveAnnotated(image: annotatedImage, to: result.fileURL)
-            self?.editorWindow = nil
         }
 
         editor.onDelete = { [weak self] in
             self?.captureManager.deleteScreenshot(at: result.fileURL)
-            self?.editorWindow = nil
+        }
+
+        // Drop our reference once the window closes (Done/Delete/close button/Escape)
+        // so the editor and its full-resolution image deallocate. Deferred to the
+        // next runloop tick to avoid releasing the window mid-close.
+        editor.onClose = { [weak self] in
+            DispatchQueue.main.async { self?.editorWindow = nil }
         }
 
         editor.makeKeyAndOrderFront(nil)
