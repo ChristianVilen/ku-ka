@@ -370,6 +370,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let duration: WakeDuration = sender.tag == 0
             ? .indefinite
             : .timed(TimeInterval(sender.tag * 60))
+        // Only timed sessions fire an expiry notification (tag 0 = indefinite),
+        // so request notification permission only for them.
         if sender.tag != 0 {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         }
@@ -400,19 +402,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let activeTag = activeKeepAwakeTag()
         for item in keepAwakePresetItems {
-            item.state = (active && item.tag == activeTag) ? .on : .off
+            item.state = (item.tag == activeTag) ? .on : .off
         }
     }
 
-    private func activeKeepAwakeTag() -> Int {
-        guard let session = wakeManager.session else { return -1 }
+    private func activeKeepAwakeTag() -> Int? {
+        guard let session = wakeManager.session else { return nil }
         switch session.duration {
         case .indefinite: return 0
         case .timed(let interval): return Int(interval / 60)
         }
     }
 
-    static func formatRemaining(_ interval: TimeInterval) -> String {
+    private static func formatRemaining(_ interval: TimeInterval) -> String {
         let totalMinutes = Int(ceil(interval / 60))
         if totalMinutes <= 0 { return "less than a minute left" }
         if totalMinutes < 60 { return "\(totalMinutes) min left" }
