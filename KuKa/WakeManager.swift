@@ -77,9 +77,11 @@ final class WakeManager {
 
         if let expiresAt = session.expiresAt {
             let interval = max(0, expiresAt.timeIntervalSince(now()))
-            timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
                 self?.deactivate(expired: true)
             }
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
         }
 
         onStateChange?()

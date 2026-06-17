@@ -73,4 +73,22 @@ final class WakeManagerTests: XCTestCase {
         XCTAssertEqual(preventer.endCount, 1)
         XCTAssertTrue(expired)
     }
+
+    func testSwitchingToIndefiniteCancelsExpiryTimer() {
+        var expired = false
+        manager.onExpire = { expired = true }
+
+        manager.activate(.timed(0.2))
+        manager.activate(.indefinite)
+
+        // Wait past the original 0.2s expiry to prove the cancelled timer never fires.
+        let stayedActive = expectation(description: "remains active past original expiry")
+        let waiter = Timer(timeInterval: 0.5, repeats: false) { _ in stayedActive.fulfill() }
+        RunLoop.current.add(waiter, forMode: .common)
+        wait(for: [stayedActive], timeout: 2.0)
+
+        XCTAssertTrue(manager.isActive)
+        XCTAssertFalse(expired)
+        XCTAssertEqual(preventer.endCount, 0)
+    }
 }
