@@ -28,6 +28,7 @@
 		B20000004 /* ScrollTransformTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000014 /* ScrollTransformTests.swift */; };
 		B20000005 /* WakeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000015 /* WakeSessionTests.swift */; };
 		B20000002 /* Mocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000012 /* Mocks.swift */; };
+		B20000006 /* WakeManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000016 /* WakeManagerTests.swift */; };
 		C30000001 /* MenuBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000011 /* MenuBarTests.swift */; };
 		E227F2EA2F51CF630032905B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -75,6 +76,7 @@
 		B20000011 /* CaptureManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManagerTests.swift; sourceTree = "<group>"; };
 		B20000012 /* Mocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mocks.swift; sourceTree = "<group>"; };
 		B20000013 /* WindowListProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowListProviderTests.swift; sourceTree = "<group>"; };
+		B20000016 /* WakeManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeManagerTests.swift; sourceTree = "<group>"; };
 		C30000010 /* KuKaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KuKaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C30000011 /* MenuBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarTests.swift; sourceTree = "<group>"; };
 		E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				B20000013 /* WindowListProviderTests.swift */,
 				B20000014 /* ScrollTransformTests.swift */,
 				B20000015 /* WakeSessionTests.swift */,
+				B20000016 /* WakeManagerTests.swift */,
 				B20000012 /* Mocks.swift */,
 			);
 			path = KuKaTests;
@@ -298,6 +301,7 @@
 				B20000003 /* WindowListProviderTests.swift in Sources */,
 				B20000004 /* ScrollTransformTests.swift in Sources */,
 				B20000005 /* WakeSessionTests.swift in Sources */,
+				B20000006 /* WakeManagerTests.swift in Sources */,
 				B20000002 /* Mocks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

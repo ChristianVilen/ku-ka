@@ -45,3 +45,53 @@ final class IOKitSleepPreventer: SleepPreventing {
         isPreventing = false
     }
 }
+
+/// Orchestrates a keep-awake session: drives the `SleepPreventing` seam,
+/// schedules expiry for timed sessions, and reports state via closures.
+/// Not thread-safe; intended to be used from the main thread.
+final class WakeManager {
+    private let preventer: SleepPreventing
+    private let now: () -> Date
+    private var timer: Timer?
+
+    private(set) var session: WakeSession?
+    var isActive: Bool { session != nil }
+
+    /// Fired whenever the active/inactive state or session changes.
+    var onStateChange: (() -> Void)?
+    /// Fired only when a timed session reaches its expiry (not on manual off).
+    var onExpire: (() -> Void)?
+
+    init(preventer: SleepPreventing = IOKitSleepPreventer(), now: @escaping () -> Date = { Date() }) {
+        self.preventer = preventer
+        self.now = now
+    }
+
+    func activate(_ duration: WakeDuration) {
+        timer?.invalidate()
+        timer = nil
+
+        let session = WakeSession(startedAt: now(), duration: duration)
+        self.session = session
+        preventer.begin(reason: "Ku-Ka Keep Awake")
+
+        if let expiresAt = session.expiresAt {
+            let interval = max(0, expiresAt.timeIntervalSince(now()))
+            timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+                self?.deactivate(expired: true)
+            }
+        }
+
+        onStateChange?()
+    }
+
+    func deactivate(expired: Bool = false) {
+        guard session != nil else { return }
+        timer?.invalidate()
+        timer = nil
+        preventer.end()
+        session = nil
+        onStateChange?()
+        if expired { onExpire?() }
+    }
+}
