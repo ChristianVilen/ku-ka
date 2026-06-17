@@ -424,7 +424,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateKeepAwakeMenu()
         guard wakeManager.isActive, wakeManager.session?.expiresAt != nil else { return }
         let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.updateKeepAwakeMenu()
+            guard let self else { return }
+            self.updateKeepAwakeMenu()
+            if !self.wakeManager.isActive {
+                self.menuCountdownTimer?.invalidate()
+                self.menuCountdownTimer = nil
+            }
         }
         // .common mode so it keeps firing while the menu tracks events.
         RunLoop.current.add(timer, forMode: .common)
@@ -474,6 +479,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.contentTintColor = wakeManager.isActive ? .controlAccentColor : nil
     }
     private func notifyKeepAwakeEnded() {
+        // If notification authorization was denied or never requested (indefinite
+        // sessions don't request it), the center silently drops this request. That's
+        // fine — the notification is purely informational.
         let content = UNMutableNotificationContent()
         content.title = "Ku-Ka"
         content.body = "Keep-awake ended — your Mac can sleep again."
