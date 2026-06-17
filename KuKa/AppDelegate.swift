@@ -469,5 +469,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let button = statusItem.button else { return }
         button.contentTintColor = wakeManager.isActive ? .controlAccentColor : nil
     }
-    private func notifyKeepAwakeEnded() {}
+    private func notifyKeepAwakeEnded() {
+        let content = UNMutableNotificationContent()
+        content.title = "Ku-Ka"
+        content.body = "Keep-awake ended — your Mac can sleep again."
+        let request = UNNotificationRequest(
+            identifier: "keepAwakeEnded",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
 }
