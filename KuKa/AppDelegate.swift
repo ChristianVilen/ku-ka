@@ -67,6 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             if let icon = NSImage(named: "MenuBarIcon") {
                 icon.size = NSSize(width: 18, height: 18)
+                icon.isTemplate = true
                 button.image = icon
             } else {
                 button.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka")
@@ -447,6 +448,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func updateStatusItemIcon() {}
+    private func updateStatusItemIcon() {
+        guard let button = statusItem.button else { return }
+        button.contentTintColor = wakeManager.isActive ? .controlAccentColor : nil
+    }
     private func notifyKeepAwakeEnded() {}
 }
