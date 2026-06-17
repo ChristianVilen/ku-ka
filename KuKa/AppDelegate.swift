@@ -25,6 +25,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let scrollAccelKey = "scrollDisableAcceleration"
     private let scrollLinesKey = "scrollLinesPerTick"
 
+    func applicationWillTerminate(_ notification: Notification) {
+        wakeManager.deactivate()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || CommandLine.arguments.contains("--uitesting")
