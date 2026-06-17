@@ -13,7 +13,7 @@ protocol SleepPreventing: AnyObject {
 
 /// Production implementation backed by `IOPMAssertionCreateWithName` with the
 /// `PreventUserIdleSystemSleep` assertion type — keeps the system awake while
-/// allowing the display to sleep.
+/// allowing the display to sleep. Not thread-safe; call from the main thread.
 final class IOKitSleepPreventer: SleepPreventing {
     private var assertionID: IOPMAssertionID = 0
     private(set) var isPreventing = false
@@ -37,7 +37,10 @@ final class IOKitSleepPreventer: SleepPreventing {
 
     func end() {
         guard isPreventing else { return }
-        IOPMAssertionRelease(assertionID)
+        let result = IOPMAssertionRelease(assertionID)
+        if result != kIOReturnSuccess {
+            NSLog("Ku-Ka: failed to release power assertion (code \(result))")
+        }
         assertionID = 0
         isPreventing = false
     }
