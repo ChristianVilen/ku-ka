@@ -1,5 +1,6 @@
 import Cocoa
 import ServiceManagement
+import UserNotifications
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -14,6 +15,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollInvertItem: NSMenuItem!
     private var scrollAccelItem: NSMenuItem!
     private var linesPerTickItems: [NSMenuItem] = []
+    private let wakeManager = WakeManager()
+    private var keepAwakeHeaderItem: NSMenuItem!
+    private var keepAwakeTurnOffItem: NSMenuItem!
+    private var keepAwakePresetItems: [NSMenuItem] = []
+    private var menuCountdownTimer: Timer?
 
     private let scrollInvertKey = "scrollInversionEnabled"
     private let scrollAccelKey = "scrollDisableAcceleration"
@@ -28,6 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setupMenuBar()
         setupThumbnailStack()
+        setupWakeManager()
     }
 
     private func setupScrollWheel() {
@@ -93,6 +100,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(item)
             durationItems.append(item)
         }
+
+        menu.addItem(.separator())
+
+        // --- Keep Awake ---
+        let keepAwakeLabel = NSMenuItem(title: "Keep Awake", action: nil, keyEquivalent: "")
+        keepAwakeLabel.isEnabled = false
+        menu.addItem(keepAwakeLabel)
+
+        keepAwakeHeaderItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        keepAwakeHeaderItem.isEnabled = false
+        keepAwakeHeaderItem.isHidden = true
+        menu.addItem(keepAwakeHeaderItem)
+
+        keepAwakeTurnOffItem = NSMenuItem(title: "Turn Off", action: #selector(turnOffKeepAwake), keyEquivalent: "")
+        keepAwakeTurnOffItem.target = self
+        keepAwakeTurnOffItem.isHidden = true
+        menu.addItem(keepAwakeTurnOffItem)
+
+        let keepAwakeForItem = NSMenuItem(title: "Keep Awake For", action: nil, keyEquivalent: "")
+        let keepAwakeMenu = NSMenu()
+        for (title, minutes) in [("30 minutes", 30), ("1 hour", 60), ("2 hours", 120), ("4 hours", 240), ("Until I turn it off", 0)] {
+            let item = NSMenuItem(title: title, action: #selector(selectKeepAwakeDuration(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = minutes
+            keepAwakeMenu.addItem(item)
+            keepAwakePresetItems.append(item)
+        }
+        keepAwakeForItem.submenu = keepAwakeMenu
+        menu.addItem(keepAwakeForItem)
+
+        let lidHintItem = NSMenuItem(title: "Closing the lid still sleeps your Mac", action: nil, keyEquivalent: "")
+        lidHintItem.isEnabled = false
+        lidHintItem.indentationLevel = 1
+        menu.addItem(lidHintItem)
 
         menu.addItem(.separator())
 
@@ -260,6 +301,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func setupWakeManager() {
+        wakeManager.onStateChange = { [weak self] in self?.refreshKeepAwakeUI() }
+        wakeManager.onExpire = { [weak self] in self?.notifyKeepAwakeEnded() }
+    }
+
     private func showThumbnail(result: CaptureResult, screen: NSScreen) {
         let duration = UserDefaults.standard.object(forKey: "thumbnailDuration") as? Double ?? 5.0
         thumbnailStack.add(image: result.image, result: result, screen: screen, duration: duration)
@@ -318,6 +364,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if scrollWheelManager.isRunning { scrollWheelManager.reload() }
     }
 
+    // MARK: - Keep Awake
+
+    @objc private func selectKeepAwakeDuration(_ sender: NSMenuItem) {
+        let duration: WakeDuration = sender.tag == 0
+            ? .indefinite
+            : .timed(TimeInterval(sender.tag * 60))
+        if sender.tag != 0 {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        }
+        wakeManager.activate(duration)
+    }
+
+    @objc private func turnOffKeepAwake() {
+        wakeManager.deactivate()
+    }
+
+    private func refreshKeepAwakeUI() {
+        updateKeepAwakeMenu()
+        updateStatusItemIcon()
+    }
+
+    private func updateKeepAwakeMenu() {
+        let active = wakeManager.isActive
+        keepAwakeHeaderItem.isHidden = !active
+        keepAwakeTurnOffItem.isHidden = !active
+
+        if active, let session = wakeManager.session {
+            if let remaining = session.remaining(now: Date()) {
+                keepAwakeHeaderItem.title = "☕ Awake · \(Self.formatRemaining(remaining))"
+            } else {
+                keepAwakeHeaderItem.title = "☕ Awake · On"
+            }
+        }
+
+        let activeTag = activeKeepAwakeTag()
+        for item in keepAwakePresetItems {
+            item.state = (active && item.tag == activeTag) ? .on : .off
+        }
+    }
+
+    private func activeKeepAwakeTag() -> Int {
+        guard let session = wakeManager.session else { return -1 }
+        switch session.duration {
+        case .indefinite: return 0
+        case .timed(let interval): return Int(interval / 60)
+        }
+    }
+
+    static func formatRemaining(_ interval: TimeInterval) -> String {
+        let totalMinutes = Int(ceil(interval / 60))
+        if totalMinutes <= 0 { return "less than a minute left" }
+        if totalMinutes < 60 { return "\(totalMinutes) min left" }
+        let hours = totalMinutes / 60
+        let minutes = totalMinutes % 60
+        return minutes == 0 ? "\(hours)h left" : "\(hours)h \(minutes)m left"
+    }
+
     @objc private func openReportBug() {
         NSWorkspace.shared.open(URL(string: "https://github.com/ChristianVilen/ku-ka/issues/new?labels=bug")!)
     }
@@ -341,4 +444,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("Launch at login toggle failed: \(error)")
         }
     }
+
+    private func updateStatusItemIcon() {}
+    private func notifyKeepAwakeEnded() {}
 }
