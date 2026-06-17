@@ -2,7 +2,7 @@ import Cocoa
 import ServiceManagement
 import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
     private let captureManager = CaptureManager()
@@ -205,6 +205,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let quitItem = NSMenuItem(title: "Quit Ku-Ka", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
+        menu.delegate = self
         statusItem.menu = menu
     }
 
@@ -413,6 +414,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .indefinite: return 0
         case .timed(let interval): return Int(interval / 60)
         }
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        updateKeepAwakeMenu()
+        guard wakeManager.isActive, wakeManager.session?.expiresAt != nil else { return }
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.updateKeepAwakeMenu()
+        }
+        // .common mode so it keeps firing while the menu tracks events.
+        RunLoop.current.add(timer, forMode: .common)
+        menuCountdownTimer = timer
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        menuCountdownTimer?.invalidate()
+        menuCountdownTimer = nil
     }
 
     private static func formatRemaining(_ interval: TimeInterval) -> String {
