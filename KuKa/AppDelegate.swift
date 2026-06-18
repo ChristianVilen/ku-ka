@@ -432,7 +432,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         // .common mode so it keeps firing while the menu tracks events.
-        RunLoop.current.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .common)
         menuCountdownTimer = timer
     }
 
@@ -475,8 +475,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateStatusItemIcon() {
-        guard let button = statusItem.button else { return }
-        button.contentTintColor = wakeManager.isActive ? .controlAccentColor : nil
+        guard let button = statusItem.button, let base = NSImage(named: "MenuBarIcon") else { return }
+        let icon = (base.copy() as? NSImage) ?? base
+        icon.size = NSSize(width: 18, height: 18)
+
+        if wakeManager.isActive {
+            let tinted = NSImage(size: icon.size, flipped: false) { rect in
+                icon.draw(in: rect)
+                NSColor.controlAccentColor.set()
+                rect.fill(using: .sourceAtop)
+                return true
+            }
+            tinted.isTemplate = false
+            button.image = tinted
+        } else {
+            icon.isTemplate = true
+            button.image = icon
+        }
     }
     private func notifyKeepAwakeEnded() {
         // If notification authorization was denied or never requested (indefinite
