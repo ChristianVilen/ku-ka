@@ -71,7 +71,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let button = statusItem.button {
             if let icon = NSImage(named: "MenuBarIcon") {
                 icon.size = NSSize(width: 18, height: 18)
-                icon.isTemplate = true
                 button.image = icon
             } else {
                 button.image = NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka")
@@ -476,22 +475,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateStatusItemIcon() {
         guard let button = statusItem.button, let base = NSImage(named: "MenuBarIcon") else { return }
-        let icon = (base.copy() as? NSImage) ?? base
-        icon.size = NSSize(width: 18, height: 18)
+        let size = NSSize(width: 18, height: 18)
 
-        if wakeManager.isActive {
-            let tinted = NSImage(size: icon.size, flipped: false) { rect in
-                icon.draw(in: rect)
-                NSColor.controlAccentColor.set()
-                rect.fill(using: .sourceAtop)
-                return true
-            }
-            tinted.isTemplate = false
-            button.image = tinted
-        } else {
-            icon.isTemplate = true
+        guard wakeManager.isActive else {
+            let icon = (base.copy() as? NSImage) ?? base
+            icon.size = size
+            icon.isTemplate = false
             button.image = icon
+            return
         }
+
+        // Active: keep the normal icon and add a small accent dot (with a light
+        // ring for contrast) in the bottom-right corner.
+        let badged = NSImage(size: size, flipped: false) { rect in
+            base.draw(in: rect)
+            let dot = NSRect(x: rect.maxX - 8, y: rect.minY + 1, width: 7, height: 7)
+            let ring = dot.insetBy(dx: -1.5, dy: -1.5)
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: ring).fill()
+            NSColor.controlAccentColor.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
+        badged.isTemplate = false
+        button.image = badged
     }
     private func notifyKeepAwakeEnded() {
         // If notification authorization was denied or never requested (indefinite
