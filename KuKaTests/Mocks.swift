@@ -57,10 +57,15 @@ class MockScreenCapture: ScreenCapturing {
 
     /// Creates a 1x1 red CGImage for testing
     static func make1x1Image() -> CGImage {
+        makeImage(width: 1, height: 1)
+    }
+
+    /// Creates a solid-color CGImage of the given pixel size (red by default)
+    static func makeImage(width: Int, height: Int, red: CGFloat = 1, green: CGFloat = 0, blue: CGFloat = 0) -> CGImage {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        context.setFillColor(red: red, green: green, blue: blue, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         return context.makeImage()!
     }
 }

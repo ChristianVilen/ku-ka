@@ -133,18 +133,21 @@ class CaptureManager {
     /// Images above this pixel count go on the pasteboard as PNG only. An
     /// uncompressed TIFF costs ~4 bytes per pixel of transient allocation,
     /// and every modern app reads PNG from the pasteboard.
-    static let clipboardTIFFMaxPixels = 30_000_000
+    static let defaultClipboardTIFFMaxPixels = 30_000_000
 
     let fileManager: FileManaging
     let clipboard: ClipboardManaging
     let screenCapture: ScreenCapturing
+    let clipboardTIFFMaxPixels: Int
 
     init(fileManager: FileManaging = FileManager.default,
          clipboard: ClipboardManaging = SystemClipboard(),
-         screenCapture: ScreenCapturing = SystemScreenCapture()) {
+         screenCapture: ScreenCapturing = SystemScreenCapture(),
+         clipboardTIFFMaxPixels: Int = CaptureManager.defaultClipboardTIFFMaxPixels) {
         self.fileManager = fileManager
         self.clipboard = clipboard
         self.screenCapture = screenCapture
+        self.clipboardTIFFMaxPixels = clipboardTIFFMaxPixels
     }
 
     func captureFullScreen(screen: NSScreen) async -> CaptureResult? {
@@ -218,7 +221,7 @@ class CaptureManager {
                   let bitmap = NSBitmapImageRep(data: tiff),
                   let png = bitmap.representation(using: .png, properties: [:]) else { return }
             let pixels = bitmap.pixelsWide * bitmap.pixelsHigh
-            clipboard.copyImage(tiffData: pixels <= Self.clipboardTIFFMaxPixels ? tiff : nil, pngData: png)
+            clipboard.copyImage(tiffData: pixels <= clipboardTIFFMaxPixels ? tiff : nil, pngData: png)
         }
     }
 
@@ -226,7 +229,7 @@ class CaptureManager {
         autoreleasepool {
             let bitmap = NSBitmapImageRep(cgImage: cgImage)
             guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
-            let tiff: Data? = cgImage.width * cgImage.height <= Self.clipboardTIFFMaxPixels
+            let tiff: Data? = cgImage.width * cgImage.height <= clipboardTIFFMaxPixels
                 ? bitmap.representation(using: .tiff, properties: [:])
                 : nil
             clipboard.copyImage(tiffData: tiff, pngData: png)
