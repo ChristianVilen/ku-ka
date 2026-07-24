@@ -12,7 +12,7 @@ protocol FileManaging {
 }
 
 protocol ClipboardManaging {
-    func copyImage(tiffData: Data, pngData: Data)
+    func copyImage(tiffData: Data?, pngData: Data)
     func clearClipboard()
 }
 
@@ -30,15 +30,33 @@ extension FileManager: FileManaging {
 }
 
 class SystemClipboard: ClipboardManaging {
-    func copyImage(tiffData: Data, pngData: Data) {
+    func copyImage(tiffData: Data?, pngData: Data) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setData(tiffData, forType: .tiff)
+        if let tiffData {
+            pb.setData(tiffData, forType: .tiff)
+        }
         pb.setData(pngData, forType: .png)
     }
 
     func clearClipboard() {
         NSPasteboard.general.clearContents()
+    }
+}
+
+// MARK: - MemoryReclaim
+
+enum MemoryReclaim {
+    /// Ask libmalloc to return freed pages to the OS. Captures and combines
+    /// churn through image-sized buffers (raster, TIFF, PNG); once freed the
+    /// allocator keeps those pages as dirty cache, which Activity Monitor
+    /// counts as app memory. Scheduled with a delay so it runs after the
+    /// buffers are actually released (autorelease pools drained, panels
+    /// deallocated).
+    static func schedule(afterSeconds delay: TimeInterval = 1.0) {
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) {
+            malloc_zone_pressure_relief(nil, 0)
+        }
     }
 }
 
@@ -112,6 +130,11 @@ struct CaptureResult {
 // MARK: - CaptureManager
 
 class CaptureManager {
+    /// Images above this pixel count go on the pasteboard as PNG only. An
+    /// uncompressed TIFF costs ~4 bytes per pixel of transient allocation,
+    /// and every modern app reads PNG from the pasteboard.
+    static let clipboardTIFFMaxPixels = 30_000_000
+
     let fileManager: FileManaging
     let clipboard: ClipboardManaging
     let screenCapture: ScreenCapturing
@@ -174,6 +197,7 @@ class CaptureManager {
         let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         let fileURL = saveToDisk(cgImage: cgImage, fileName: fileName)
         copyToClipboard(cgImage: cgImage)
+        MemoryReclaim.schedule()
         return CaptureResult(image: image, fileURL: fileURL)
     }
 
@@ -185,6 +209,7 @@ class CaptureManager {
             try? fileManager.writeImageData(png, to: url)
         }
         copyToClipboard(image: image)
+        MemoryReclaim.schedule()
     }
 
     func copyToClipboard(image: NSImage) {
@@ -192,15 +217,18 @@ class CaptureManager {
             guard let tiff = image.tiffRepresentation,
                   let bitmap = NSBitmapImageRep(data: tiff),
                   let png = bitmap.representation(using: .png, properties: [:]) else { return }
-            clipboard.copyImage(tiffData: tiff, pngData: png)
+            let pixels = bitmap.pixelsWide * bitmap.pixelsHigh
+            clipboard.copyImage(tiffData: pixels <= Self.clipboardTIFFMaxPixels ? tiff : nil, pngData: png)
         }
     }
 
     func copyToClipboard(cgImage: CGImage) {
         autoreleasepool {
             let bitmap = NSBitmapImageRep(cgImage: cgImage)
-            guard let tiff = bitmap.representation(using: .tiff, properties: [:]),
-                  let png = bitmap.representation(using: .png, properties: [:]) else { return }
+            guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
+            let tiff: Data? = cgImage.width * cgImage.height <= Self.clipboardTIFFMaxPixels
+                ? bitmap.representation(using: .tiff, properties: [:])
+                : nil
             clipboard.copyImage(tiffData: tiff, pngData: png)
         }
     }

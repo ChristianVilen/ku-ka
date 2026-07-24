@@ -233,7 +233,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Drop our reference once the window closes (Done/Delete/close button/Escape)
         // so the editor and its full-resolution image deallocate. Closing only
         // ever replaces this one editor, so clear it unconditionally.
-        editor.onClose = { [weak self] in self?.editorWindow = nil }
+        editor.onClose = { [weak self] in
+            self?.editorWindow = nil
+            MemoryReclaim.schedule()
+        }
 
         editor.makeKeyAndOrderFront(nil)
     }

@@ -45,6 +45,12 @@ class ThumbnailStackManager {
             entries[0].panel.startDismissTimer(duration: currentDuration)
         }
 
+        // The stack holds the full-resolution captures; once the last panel
+        // is gone they deallocate, so hand the freed pages back to the OS.
+        if entries.isEmpty {
+            MemoryReclaim.schedule()
+        }
+
         repositionAll(animated: true)
     }
 

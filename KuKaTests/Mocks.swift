@@ -30,7 +30,7 @@ class MockClipboard: ClipboardManaging {
     var lastTiffData: Data?
     var lastPngData: Data?
 
-    func copyImage(tiffData: Data, pngData: Data) {
+    func copyImage(tiffData: Data?, pngData: Data) {
         copiedCount += 1
         lastTiffData = tiffData
         lastPngData = pngData
