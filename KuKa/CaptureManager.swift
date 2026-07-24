@@ -88,7 +88,7 @@ class CaptureManager {
             return nil
         }
 
-        return finalize(cgImage: cgImage)
+        return finalize(cgImage: cgImage, fileName: generateFileName())
     }
 
     func captureWindow(windowID: CGWindowID, screen: NSScreen) -> CaptureResult? {
@@ -96,7 +96,7 @@ class CaptureManager {
             NSLog("Ku-Ka: Window capture returned nil")
             return nil
         }
-        return finalize(cgImage: cgImage)
+        return finalize(cgImage: cgImage, fileName: generateFileName())
     }
 
     func capture(rect: CGRect, screen: NSScreen) -> CaptureResult? {
@@ -113,15 +113,15 @@ class CaptureManager {
             return nil
         }
 
-        return finalize(cgImage: cgImage)
+        return finalize(cgImage: cgImage, fileName: generateFileName())
     }
 
     /// Build the NSImage, persist, and copy to clipboard for a freshly captured
     /// CGImage. Clipboard data is generated from the CGImage in an autorelease
     /// pool so the long-lived NSImage never caches an uncompressed TIFF rep.
-    private func finalize(cgImage: CGImage) -> CaptureResult {
+    private func finalize(cgImage: CGImage, fileName: String) -> CaptureResult {
         let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        let fileURL = saveToDisk(cgImage: cgImage)
+        let fileURL = saveToDisk(cgImage: cgImage, fileName: fileName)
         copyToClipboard(cgImage: cgImage)
         return CaptureResult(image: image, fileURL: fileURL)
     }
@@ -172,31 +172,32 @@ class CaptureManager {
         "Screenshot_\(dateString(for: date))_combined.png"
     }
 
+    /// Stack two captures vertically, composited in a CGBitmapContext at the
+    /// sources' pixel dimensions. Composing via NSImage.lockFocus would
+    /// re-render at the screen's backing scale, doubling the pixel size on
+    /// every combine (exponentially for repeated combines).
     func saveCombined(topImage: NSImage, bottomImage: NSImage) -> CaptureResult? {
-        let width = max(topImage.size.width, bottomImage.size.width)
-        let height = topImage.size.height + bottomImage.size.height
-        let combined = NSImage(size: NSSize(width: width, height: height))
+        guard let topCG = topImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let bottomCG = bottomImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
 
-        combined.lockFocus()
-        topImage.draw(in: NSRect(x: 0, y: bottomImage.size.height, width: topImage.size.width, height: topImage.size.height))
-        bottomImage.draw(in: NSRect(x: 0, y: 0, width: bottomImage.size.width, height: bottomImage.size.height))
-        combined.unlockFocus()
+        let width = max(topCG.width, bottomCG.width)
+        let height = topCG.height + bottomCG.height
 
-        let dir = screenshotsDirectory()
-        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
-        let url = dir.appendingPathComponent(generateCombinedFileName())
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: topCG.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else { return nil }
 
-        let written: Bool = autoreleasepool {
-            guard let tiff = combined.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let pngData = bitmap.representation(using: .png, properties: [:]) else { return false }
-            try? fileManager.writeImageData(pngData, to: url)
-            return true
-        }
-        guard written else { return nil }
-        copyToClipboard(image: combined)
+        context.draw(bottomCG, in: CGRect(x: 0, y: 0, width: bottomCG.width, height: bottomCG.height))
+        context.draw(topCG, in: CGRect(x: 0, y: bottomCG.height, width: topCG.width, height: topCG.height))
 
-        return CaptureResult(image: combined, fileURL: url)
+        guard let combined = context.makeImage() else { return nil }
+        return finalize(cgImage: combined, fileName: generateCombinedFileName())
     }
 
     func deleteScreenshot(at url: URL) {
@@ -204,11 +205,11 @@ class CaptureManager {
         clipboard.clearClipboard()
     }
 
-    private func saveToDisk(cgImage: CGImage) -> URL {
+    private func saveToDisk(cgImage: CGImage, fileName: String) -> URL {
         let dir = screenshotsDirectory()
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
 
-        let url = dir.appendingPathComponent(generateFileName())
+        let url = dir.appendingPathComponent(fileName)
 
         autoreleasepool {
             let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
