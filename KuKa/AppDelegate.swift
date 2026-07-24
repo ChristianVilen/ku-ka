@@ -180,7 +180,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { @MainActor in
             // Give the overlay a moment to disappear before capturing
             try? await Task.sleep(nanoseconds: 50_000_000)
-            guard let result = await self.captureManager.captureWindow(windowID: windowID, screen: screen) else { return }
+            guard let result = await self.captureManager.captureWindow(windowID: windowID) else { return }
             self.showThumbnail(result: result, screen: screen)
         }
     }

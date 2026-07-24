@@ -46,19 +46,19 @@ final class CaptureManagerTests: XCTestCase {
 
     func testCaptureWindowReturnsResultOnSuccess() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        let result = await sut.captureWindow(windowID: 42, screen: NSScreen.main!)
+        let result = await sut.captureWindow(windowID: 42)
         XCTAssertNotNil(result)
     }
 
     func testCaptureWindowReturnsNilOnFailure() async {
         mockScreenCapture.imageToReturn = nil
-        let result = await sut.captureWindow(windowID: 42, screen: NSScreen.main!)
+        let result = await sut.captureWindow(windowID: 42)
         XCTAssertNil(result)
     }
 
     func testCaptureWindowSavesFileAndCopiesClipboard() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        _ = await sut.captureWindow(windowID: 42, screen: NSScreen.main!)
+        _ = await sut.captureWindow(windowID: 42)
         XCTAssertEqual(mockFileManager.createdDirectories.count, 1)
         XCTAssertEqual(mockClipboard.copiedCount, 1)
     }
