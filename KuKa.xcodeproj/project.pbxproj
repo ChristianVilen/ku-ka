@@ -31,6 +31,7 @@
 		B20000006 /* WakeManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000016 /* WakeManagerTests.swift */; };
 		B20000007 /* KeepAwakeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000017 /* KeepAwakeControllerTests.swift */; };
 		B20000008 /* ThumbnailStackManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000018 /* ThumbnailStackManagerTests.swift */; };
+		B20000009 /* DrawingViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000019 /* DrawingViewTests.swift */; };
 		E227F2EA2F51CF630032905B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -73,6 +74,7 @@
 		B20000016 /* WakeManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeManagerTests.swift; sourceTree = "<group>"; };
 		B20000017 /* KeepAwakeControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeepAwakeControllerTests.swift; sourceTree = "<group>"; };
 		B20000018 /* ThumbnailStackManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailStackManagerTests.swift; sourceTree = "<group>"; };
+		B20000019 /* DrawingViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawingViewTests.swift; sourceTree = "<group>"; };
 		E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -148,6 +150,7 @@
 				B20000016 /* WakeManagerTests.swift */,
 				B20000017 /* KeepAwakeControllerTests.swift */,
 				B20000018 /* ThumbnailStackManagerTests.swift */,
+				B20000019 /* DrawingViewTests.swift */,
 				B20000012 /* Mocks.swift */,
 			);
 			path = KuKaTests;
@@ -265,6 +268,7 @@
 				B20000006 /* WakeManagerTests.swift in Sources */,
 				B20000007 /* KeepAwakeControllerTests.swift in Sources */,
 				B20000008 /* ThumbnailStackManagerTests.swift in Sources */,
+				B20000009 /* DrawingViewTests.swift in Sources */,
 				B20000002 /* Mocks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

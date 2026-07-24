@@ -205,24 +205,15 @@ class CaptureManager {
     }
 
     func saveAnnotated(image: NSImage, to url: URL) {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         autoreleasepool {
-            guard let tiff = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let png = bitmap.representation(using: .png, properties: [:]) else { return }
-            try? fileManager.writeImageData(png, to: url)
+            let bitmap = NSBitmapImageRep(cgImage: cgImage)
+            if let png = bitmap.representation(using: .png, properties: [:]) {
+                try? fileManager.writeImageData(png, to: url)
+            }
         }
-        copyToClipboard(image: image)
+        copyToClipboard(cgImage: cgImage)
         MemoryReclaim.schedule()
-    }
-
-    func copyToClipboard(image: NSImage) {
-        autoreleasepool {
-            guard let tiff = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiff),
-                  let png = bitmap.representation(using: .png, properties: [:]) else { return }
-            let pixels = bitmap.pixelsWide * bitmap.pixelsHigh
-            clipboard.copyImage(tiffData: pixels <= clipboardTIFFMaxPixels ? tiff : nil, pngData: png)
-        }
     }
 
     func copyToClipboard(cgImage: CGImage) {

@@ -275,14 +275,6 @@ final class CaptureManagerTests: XCTestCase {
         XCTAssertNotNil(mockClipboard.lastPngData)
     }
 
-    func testClipboardSkipsTiffAboveThresholdForNSImage() {
-        let sut = makeManager(tiffMaxPixels: 100)
-        sut.copyToClipboard(image: makeCaptureImage(width: 11, height: 10))
-        XCTAssertEqual(mockClipboard.copiedCount, 1)
-        XCTAssertNil(mockClipboard.lastTiffData)
-        XCTAssertNotNil(mockClipboard.lastPngData)
-    }
-
     // MARK: - deleteScreenshot()
 
     func testDeleteScreenshotRemovesFile() {
