@@ -158,23 +158,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func startFullScreenCapture() {
         let mouseLocation = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main else { return }
-        guard let result = captureManager.captureFullScreen(screen: screen) else { return }
-        FlashView.flash(on: screen)
-        showThumbnail(result: result, screen: screen)
+        Task { @MainActor in
+            guard let result = await self.captureManager.captureFullScreen(screen: screen) else { return }
+            FlashView.flash(on: screen)
+            self.showThumbnail(result: result, screen: screen)
+        }
     }
 
     private func finishCapture(rect: CGRect, screen: NSScreen) {
         dismissOverlay()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            guard let result = self.captureManager.capture(rect: rect, screen: screen) else { return }
+        Task { @MainActor in
+            // Give the overlay a moment to disappear before capturing
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard let result = await self.captureManager.capture(rect: rect, screen: screen) else { return }
             self.showThumbnail(result: result, screen: screen)
         }
     }
 
     private func finishWindowCapture(windowID: CGWindowID, screen: NSScreen) {
         dismissOverlay()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            guard let result = self.captureManager.captureWindow(windowID: windowID, screen: screen) else { return }
+        Task { @MainActor in
+            // Give the overlay a moment to disappear before capturing
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard let result = await self.captureManager.captureWindow(windowID: windowID, screen: screen) else { return }
             self.showThumbnail(result: result, screen: screen)
         }
     }

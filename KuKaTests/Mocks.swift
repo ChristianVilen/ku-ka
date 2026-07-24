@@ -47,11 +47,11 @@ class MockScreenCapture: ScreenCapturing {
     var imageToReturn: CGImage?
     var windowImageToReturn: CGImage?
 
-    func captureScreen(rect: CGRect) -> CGImage? {
+    func captureScreen(rect: CGRect) async -> CGImage? {
         imageToReturn
     }
 
-    func captureWindow(windowID: CGWindowID) -> CGImage? {
+    func captureWindow(windowID: CGWindowID) async -> CGImage? {
         windowImageToReturn ?? imageToReturn
     }
 

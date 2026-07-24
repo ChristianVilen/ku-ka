@@ -17,95 +17,95 @@ final class CaptureManagerTests: XCTestCase {
 
     // MARK: - captureFullScreen()
 
-    func testCaptureFullScreenReturnsResultOnSuccess() {
+    func testCaptureFullScreenReturnsResultOnSuccess() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        let result = sut.captureFullScreen(screen: NSScreen.main!)
+        let result = await sut.captureFullScreen(screen: NSScreen.main!)
         XCTAssertNotNil(result)
     }
 
-    func testCaptureFullScreenReturnsNilOnFailure() {
+    func testCaptureFullScreenReturnsNilOnFailure() async {
         mockScreenCapture.imageToReturn = nil
-        let result = sut.captureFullScreen(screen: NSScreen.main!)
+        let result = await sut.captureFullScreen(screen: NSScreen.main!)
         XCTAssertNil(result)
     }
 
-    func testCaptureFullScreenCopiesClipboard() {
+    func testCaptureFullScreenCopiesClipboard() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        _ = sut.captureFullScreen(screen: NSScreen.main!)
+        _ = await sut.captureFullScreen(screen: NSScreen.main!)
         XCTAssertEqual(mockClipboard.copiedCount, 1)
     }
 
-    func testCaptureFullScreenCreatesDirectory() {
+    func testCaptureFullScreenCreatesDirectory() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        _ = sut.captureFullScreen(screen: NSScreen.main!)
+        _ = await sut.captureFullScreen(screen: NSScreen.main!)
         XCTAssertEqual(mockFileManager.createdDirectories.count, 1)
         XCTAssertTrue(mockFileManager.createdDirectories[0].path.hasSuffix("Screenshots"))
     }
 
     // MARK: - captureWindow()
 
-    func testCaptureWindowReturnsResultOnSuccess() {
+    func testCaptureWindowReturnsResultOnSuccess() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        let result = sut.captureWindow(windowID: 42, screen: NSScreen.main!)
+        let result = await sut.captureWindow(windowID: 42, screen: NSScreen.main!)
         XCTAssertNotNil(result)
     }
 
-    func testCaptureWindowReturnsNilOnFailure() {
+    func testCaptureWindowReturnsNilOnFailure() async {
         mockScreenCapture.imageToReturn = nil
-        let result = sut.captureWindow(windowID: 42, screen: NSScreen.main!)
+        let result = await sut.captureWindow(windowID: 42, screen: NSScreen.main!)
         XCTAssertNil(result)
     }
 
-    func testCaptureWindowSavesFileAndCopiesClipboard() {
+    func testCaptureWindowSavesFileAndCopiesClipboard() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        _ = sut.captureWindow(windowID: 42, screen: NSScreen.main!)
+        _ = await sut.captureWindow(windowID: 42, screen: NSScreen.main!)
         XCTAssertEqual(mockFileManager.createdDirectories.count, 1)
         XCTAssertEqual(mockClipboard.copiedCount, 1)
     }
 
     // MARK: - capture()
 
-    func testCaptureReturnsNilWhenScreenCaptureReturnsNil() {
+    func testCaptureReturnsNilWhenScreenCaptureReturnsNil() async {
         mockScreenCapture.imageToReturn = nil
         let screen = NSScreen.main!
-        let result = sut.capture(rect: CGRect(x: 0, y: 0, width: 100, height: 100), screen: screen)
+        let result = await sut.capture(rect: CGRect(x: 0, y: 0, width: 100, height: 100), screen: screen)
         XCTAssertNil(result)
     }
 
-    func testCaptureReturnsResultOnSuccess() {
+    func testCaptureReturnsResultOnSuccess() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
         let screen = NSScreen.main!
-        let result = sut.capture(rect: CGRect(x: 10, y: 20, width: 100, height: 50), screen: screen)
+        let result = await sut.capture(rect: CGRect(x: 10, y: 20, width: 100, height: 50), screen: screen)
         XCTAssertNotNil(result)
         XCTAssertNotNil(result?.image)
         XCTAssertNotNil(result?.fileURL)
     }
 
-    func testCaptureCreatesScreenshotsDirectory() {
+    func testCaptureCreatesScreenshotsDirectory() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
         let screen = NSScreen.main!
-        _ = sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
+        _ = await sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
         XCTAssertEqual(mockFileManager.createdDirectories.count, 1)
         XCTAssertTrue(mockFileManager.createdDirectories[0].path.hasSuffix("Screenshots"))
     }
 
-    func testCaptureCopiesImageToClipboard() {
+    func testCaptureCopiesImageToClipboard() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
         let screen = NSScreen.main!
-        _ = sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
+        _ = await sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
         XCTAssertEqual(mockClipboard.copiedCount, 1)
     }
 
-    func testCaptureDoesNotCopyToClipboardOnFailure() {
+    func testCaptureDoesNotCopyToClipboardOnFailure() async {
         mockScreenCapture.imageToReturn = nil
         let screen = NSScreen.main!
-        _ = sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
+        _ = await sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
         XCTAssertEqual(mockClipboard.copiedCount, 0)
     }
 
     // MARK: - Coordinate Conversion
 
-    func testCoordinateConversion() {
+    func testCoordinateConversion() async {
         // The capture method converts from NSView (bottom-left origin) to CG (top-left origin)
         // For a screen of height 1000, a rect at y=200 with height=100 should become y=700 in CG coords
         // y_cg = screenHeight - rect.y - rect.height = 1000 - 200 - 100 = 700
@@ -117,18 +117,18 @@ final class CaptureManagerTests: XCTestCase {
         var capturedRect: CGRect?
         class SpyScreenCapture: ScreenCapturing {
             var onCapture: ((CGRect) -> Void)?
-            func captureScreen(rect: CGRect) -> CGImage? {
+            func captureScreen(rect: CGRect) async -> CGImage? {
                 onCapture?(rect)
                 return MockScreenCapture.make1x1Image()
             }
-            func captureWindow(windowID: CGWindowID) -> CGImage? { nil }
+            func captureWindow(windowID: CGWindowID) async -> CGImage? { nil }
         }
         let spy = SpyScreenCapture()
         spy.onCapture = { capturedRect = $0 }
         let manager = CaptureManager(fileManager: mockFileManager, clipboard: mockClipboard, screenCapture: spy)
 
         let screen = NSScreen.main!
-        _ = manager.capture(rect: rect, screen: screen)
+        _ = await manager.capture(rect: rect, screen: screen)
 
         XCTAssertNotNil(capturedRect)
         XCTAssertEqual(capturedRect!.origin.x, screenFrame.origin.x + 50, accuracy: 0.01)

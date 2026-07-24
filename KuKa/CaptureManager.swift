@@ -1,4 +1,5 @@
 import Cocoa
+import ScreenCaptureKit
 import UniformTypeIdentifiers
 
 // MARK: - Protocols
@@ -16,8 +17,8 @@ protocol ClipboardManaging {
 }
 
 protocol ScreenCapturing {
-    func captureScreen(rect: CGRect) -> CGImage?
-    func captureWindow(windowID: CGWindowID) -> CGImage?
+    func captureScreen(rect: CGRect) async -> CGImage?
+    func captureWindow(windowID: CGWindowID) async -> CGImage?
 }
 
 // MARK: - Real Implementations
@@ -42,12 +43,62 @@ class SystemClipboard: ClipboardManaging {
 }
 
 class SystemScreenCapture: ScreenCapturing {
-    func captureScreen(rect: CGRect) -> CGImage? {
-        CGWindowListCreateImage(rect, .optionOnScreenOnly, kCGNullWindowID, .bestResolution)
+    /// `rect` is in CG global coordinates (top-left origin), same contract as
+    /// the old CGWindowListCreateImage-based implementation.
+    func captureScreen(rect: CGRect) async -> CGImage? {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let display = content.displays.first(where: { $0.frame.contains(CGPoint(x: rect.midX, y: rect.midY)) })
+                    ?? content.displays.first else {
+                NSLog("Ku-Ka: No display found for capture rect")
+                return nil
+            }
+
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let scale = CGFloat(filter.pointPixelScale)
+            let sourceRect = CGRect(
+                x: rect.origin.x - display.frame.origin.x,
+                y: rect.origin.y - display.frame.origin.y,
+                width: rect.width,
+                height: rect.height
+            )
+
+            let config = SCStreamConfiguration()
+            config.sourceRect = sourceRect
+            config.width = Int(sourceRect.width * scale)
+            config.height = Int(sourceRect.height * scale)
+            config.showsCursor = false
+            config.captureResolution = .best
+
+            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        } catch {
+            NSLog("Ku-Ka: Screen capture failed: \(error)")
+            return nil
+        }
     }
 
-    func captureWindow(windowID: CGWindowID) -> CGImage? {
-        CGWindowListCreateImage(.null, .optionIncludingWindow, windowID, .bestResolution)
+    func captureWindow(windowID: CGWindowID) async -> CGImage? {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+                NSLog("Ku-Ka: Window \(windowID) not found for capture")
+                return nil
+            }
+
+            let filter = SCContentFilter(desktopIndependentWindow: window)
+            let scale = CGFloat(filter.pointPixelScale)
+
+            let config = SCStreamConfiguration()
+            config.width = Int(filter.contentRect.width * scale)
+            config.height = Int(filter.contentRect.height * scale)
+            config.showsCursor = false
+            config.captureResolution = .best
+
+            return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        } catch {
+            NSLog("Ku-Ka: Window capture failed: \(error)")
+            return nil
+        }
     }
 }
 
@@ -73,7 +124,7 @@ class CaptureManager {
         self.screenCapture = screenCapture
     }
 
-    func captureFullScreen(screen: NSScreen) -> CaptureResult? {
+    func captureFullScreen(screen: NSScreen) async -> CaptureResult? {
         let screenFrame = screen.frame
         let primaryHeight = NSScreen.screens[0].frame.height
         let cgRect = CGRect(
@@ -83,7 +134,7 @@ class CaptureManager {
             height: screenFrame.height
         )
 
-        guard let cgImage = screenCapture.captureScreen(rect: cgRect) else {
+        guard let cgImage = await screenCapture.captureScreen(rect: cgRect) else {
             NSLog("Ku-Ka: Full screen capture returned nil")
             return nil
         }
@@ -91,15 +142,15 @@ class CaptureManager {
         return finalize(cgImage: cgImage, fileName: generateFileName())
     }
 
-    func captureWindow(windowID: CGWindowID, screen: NSScreen) -> CaptureResult? {
-        guard let cgImage = screenCapture.captureWindow(windowID: windowID) else {
+    func captureWindow(windowID: CGWindowID, screen: NSScreen) async -> CaptureResult? {
+        guard let cgImage = await screenCapture.captureWindow(windowID: windowID) else {
             NSLog("Ku-Ka: Window capture returned nil")
             return nil
         }
         return finalize(cgImage: cgImage, fileName: generateFileName())
     }
 
-    func capture(rect: CGRect, screen: NSScreen) -> CaptureResult? {
+    func capture(rect: CGRect, screen: NSScreen) async -> CaptureResult? {
         let screenFrame = screen.frame
         let cgRect = CGRect(
             x: screenFrame.origin.x + rect.origin.x,
@@ -108,7 +159,7 @@ class CaptureManager {
             height: rect.height
         )
 
-        guard let cgImage = screenCapture.captureScreen(rect: cgRect) else {
+        guard let cgImage = await screenCapture.captureScreen(rect: cgRect) else {
             NSLog("Ku-Ka: Screen capture returned nil")
             return nil
         }
