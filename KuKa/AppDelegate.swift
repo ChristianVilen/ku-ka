@@ -166,21 +166,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func finishCapture(rect: CGRect, screen: NSScreen) {
-        dismissOverlay()
-        Task { @MainActor in
-            // Give the overlay a moment to disappear before capturing
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            guard let result = await self.captureManager.capture(rect: rect, screen: screen) else { return }
-            self.showThumbnail(result: result, screen: screen)
+        captureAfterOverlayDismiss(screen: screen) {
+            await self.captureManager.capture(rect: rect, screen: screen)
         }
     }
 
     private func finishWindowCapture(windowID: CGWindowID, screen: NSScreen) {
+        captureAfterOverlayDismiss(screen: screen) {
+            await self.captureManager.captureWindow(windowID: windowID)
+        }
+    }
+
+    private func captureAfterOverlayDismiss(screen: NSScreen, _ capture: @escaping () async -> CaptureResult?) {
         dismissOverlay()
         Task { @MainActor in
             // Give the overlay a moment to disappear before capturing
             try? await Task.sleep(nanoseconds: 50_000_000)
-            guard let result = await self.captureManager.captureWindow(windowID: windowID) else { return }
+            guard let result = await capture() else { return }
             self.showThumbnail(result: result, screen: screen)
         }
     }
@@ -205,6 +207,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         thumbnailStack.onDelete = { [weak self] result in
             self?.captureManager.deleteScreenshot(at: result.fileURL)
         }
+        // The stack holds the full-resolution captures; once the last panel
+        // closes they deallocate, so hand the freed pages back to the OS.
+        thumbnailStack.onStackEmptied = { MemoryReclaim.schedule() }
     }
 
     private func setupKeepAwake() {

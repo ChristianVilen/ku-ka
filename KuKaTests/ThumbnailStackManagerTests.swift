@@ -58,6 +58,19 @@ final class ThumbnailStackManagerTests: XCTestCase {
         XCTAssertEqual(sut.entries[0].result.fileURL.lastPathComponent, "keep.png")
     }
 
+    func testRemoveLastPanelNotifiesStackEmptied() {
+        add(makeResult(name: "a.png"))
+        add(makeResult(name: "b.png"))
+        var emptiedCount = 0
+        sut.onStackEmptied = { emptiedCount += 1 }
+
+        sut.remove(panel: sut.entries[0].panel)
+        XCTAssertEqual(emptiedCount, 0)
+
+        sut.remove(panel: sut.entries[0].panel)
+        XCTAssertEqual(emptiedCount, 1)
+    }
+
     // MARK: - combine()
 
     func testCombinePassesOlderImageAsTopAndReplacesBothEntries() {

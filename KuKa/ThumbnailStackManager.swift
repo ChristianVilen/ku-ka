@@ -5,6 +5,7 @@ class ThumbnailStackManager {
     var onEdit: ((CaptureResult) -> Void)?
     var onCombine: ((NSImage, NSImage) -> CaptureResult?)?
     var onDelete: ((CaptureResult) -> Void)?
+    var onStackEmptied: (() -> Void)?
     private var combineButtons: [CombineButton] = []
     private var currentDuration: TimeInterval = 5.0
     private var currentScreen: NSScreen?
@@ -45,10 +46,8 @@ class ThumbnailStackManager {
             entries[0].panel.startDismissTimer(duration: currentDuration)
         }
 
-        // The stack holds the full-resolution captures; once the last panel
-        // is gone they deallocate, so hand the freed pages back to the OS.
         if entries.isEmpty {
-            MemoryReclaim.schedule()
+            onStackEmptied?()
         }
 
         repositionAll(animated: true)
