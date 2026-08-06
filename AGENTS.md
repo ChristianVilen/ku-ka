@@ -113,6 +113,7 @@ Ctrl+Opt+Left/Right/Return → HotkeyManager (suppresses event) → WindowTiling
 - **Frameworks**: AppKit, CoreGraphics, ScreenCaptureKit, ServiceManagement
 - **Permissions**: Accessibility (CGEvent tap), Screen Recording (ScreenCaptureKit)
 - **Launch at Login**: `SMAppService.mainApp.register()` / `unregister()`
+- **Build flag**: the KuKa app target sets `OTHER_SWIFT_FLAGS = "-enable-upcoming-feature IsolatedDefaultValues"`. This exists because `WindowTilingController`'s init has default argument values (`AccessibilityWindowControl()`, etc.) that construct `@MainActor` types, and under Swift 5 language mode the compiler otherwise treats those defaults as evaluated outside the actor. The flag becomes redundant once the project moves to Swift 6 language mode, where this is the default behavior.
 
 ---
 

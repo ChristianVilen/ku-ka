@@ -155,6 +155,7 @@ KuKa/
 ## Known Limitations
 
 - You must disable or accept that the system `Shift+Command+3` and `Shift+Command+4` are intercepted (the app suppresses the system shortcuts when running)
+- `Ctrl+Option+Left/Right/Return` are intercepted globally while Ku-Ka is running, even inside apps that use those same keys for something else. There's no off switch for this short of quitting Ku-Ka.
 - Requires macOS 14+ for ScreenCaptureKit screenshot capture
 - No preferences UI for changing the shortcut keys, including the window tiling hotkeys
 

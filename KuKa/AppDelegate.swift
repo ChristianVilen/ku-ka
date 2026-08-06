@@ -114,9 +114,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setupHotkey() {
         hotkeyManager.onHotkey = { [weak self] in self?.startCapture() }
         hotkeyManager.onFullScreenHotkey = { [weak self] in self?.startFullScreenCapture() }
-        hotkeyManager.onTileLeft = { [weak self] in Task { @MainActor in self?.windowTiling.tile(.leftHalf) } }
-        hotkeyManager.onTileRight = { [weak self] in Task { @MainActor in self?.windowTiling.tile(.rightHalf) } }
-        hotkeyManager.onTileMaximize = { [weak self] in Task { @MainActor in self?.windowTiling.tile(.maximize) } }
+        // HotkeyManager always invokes these via DispatchQueue.main.async, so
+        // we're already on the main thread here — assumeIsolated documents
+        // that instead of hopping through a Task, which would run the tile
+        // one runloop turn late and could reorder rapid key presses.
+        hotkeyManager.onTileLeft = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.leftHalf) } }
+        hotkeyManager.onTileRight = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.rightHalf) } }
+        hotkeyManager.onTileMaximize = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.maximize) } }
         hotkeyManager.start()
     }
 

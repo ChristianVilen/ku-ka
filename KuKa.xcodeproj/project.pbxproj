@@ -41,6 +41,7 @@
 		B20000009 /* DrawingViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000019 /* DrawingViewTests.swift */; };
 		B2000000A /* TilingLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001A /* TilingLayoutEngineTests.swift */; };
 		B2000000B /* TilingAdaptersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001B /* TilingAdaptersTests.swift */; };
+		B2000000C /* WindowTilingControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001C /* WindowTilingControllerTests.swift */; };
 		E227F2EA2F51CF630032905B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -93,6 +94,7 @@
 		B20000019 /* DrawingViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawingViewTests.swift; sourceTree = "<group>"; };
 		B2000001A /* TilingLayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingLayoutEngineTests.swift; sourceTree = "<group>"; };
 		B2000001B /* TilingAdaptersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingAdaptersTests.swift; sourceTree = "<group>"; };
+		B2000001C /* WindowTilingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTilingControllerTests.swift; sourceTree = "<group>"; };
 		E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -178,6 +180,7 @@
 				B20000019 /* DrawingViewTests.swift */,
 				B2000001A /* TilingLayoutEngineTests.swift */,
 				B2000001B /* TilingAdaptersTests.swift */,
+				B2000001C /* WindowTilingControllerTests.swift */,
 				B20000012 /* Mocks.swift */,
 			);
 			path = KuKaTests;
@@ -305,6 +308,7 @@
 				B20000009 /* DrawingViewTests.swift in Sources */,
 				B2000000A /* TilingLayoutEngineTests.swift in Sources */,
 				B2000000B /* TilingAdaptersTests.swift in Sources */,
+				B2000000C /* WindowTilingControllerTests.swift in Sources */,
 				B20000002 /* Mocks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -333,7 +337,7 @@
 				ENABLE_TESTING_SEARCH_PATHS = YES;
 				INFOPLIST_FILE = KuKa/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-enable-upcoming-feature IsolatedDefaultValues";
+				OTHER_SWIFT_FLAGS = "$(inherited) -enable-upcoming-feature IsolatedDefaultValues";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuka.screenshot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -352,7 +356,7 @@
 				ENABLE_TESTING_SEARCH_PATHS = YES;
 				INFOPLIST_FILE = KuKa/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				OTHER_SWIFT_FLAGS = "-enable-upcoming-feature IsolatedDefaultValues";
+				OTHER_SWIFT_FLAGS = "$(inherited) -enable-upcoming-feature IsolatedDefaultValues";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuka.screenshot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

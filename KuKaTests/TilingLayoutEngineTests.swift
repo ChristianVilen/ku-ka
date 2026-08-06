@@ -190,4 +190,66 @@ final class TilingLayoutEngineTests: XCTestCase {
 
         XCTAssertEqual(result, .move(to: target, savePrevious: true))
     }
+
+    // MARK: - resolve() with achievedTargetFrame (apps that snap sizes, e.g. Terminal)
+
+    func testResolveMaximizeWithinToleranceOfAchievedFrameButFarFromIdealTargetRestores() {
+        let context = makeContext(windows: 1, stageManager: false)
+        let idealTarget = screen
+        // Simulate an app that snapped the requested maximize to a
+        // meaningfully different frame (a character-cell grid, say) — the
+        // achieved frame is nowhere near the ideal target, but it's what's
+        // really on screen, and the window hasn't moved since.
+        let achieved = CGRect(x: idealTarget.minX + 20, y: idealTarget.minY, width: idealTarget.width - 20, height: idealTarget.height)
+        let current = achieved
+        let saved = CGRect(x: 500, y: 500, width: 400, height: 400)
+
+        let result = engine.resolve(
+            action: .maximize,
+            currentFrame: current,
+            savedFrame: saved,
+            achievedTargetFrame: achieved,
+            context: context
+        )
+
+        XCTAssertEqual(result, .restore(to: saved))
+    }
+
+    func testResolveMaximizeIgnoresIdealTargetWhenAchievedFrameProvidedAndDiffers() {
+        let context = makeContext(windows: 1, stageManager: false)
+        let idealTarget = screen
+        let achieved = CGRect(x: idealTarget.minX + 50, y: idealTarget.minY, width: idealTarget.width - 50, height: idealTarget.height)
+        // Current frame matches the IDEAL target exactly, not the achieved
+        // frame — with an achieved frame on record, that should no longer
+        // read as "already maximized".
+        let current = idealTarget
+        let saved = CGRect(x: 500, y: 500, width: 400, height: 400)
+
+        let result = engine.resolve(
+            action: .maximize,
+            currentFrame: current,
+            savedFrame: saved,
+            achievedTargetFrame: achieved,
+            context: context
+        )
+
+        XCTAssertEqual(result, .move(to: idealTarget, savePrevious: true))
+    }
+
+    func testResolveMaximizeWithNilAchievedFrameFallsBackToIdealTarget() {
+        let context = makeContext(windows: 1, stageManager: false)
+        let target = screen
+        let current = CGRect(x: target.minX + 1, y: target.minY, width: target.width, height: target.height)
+        let saved = CGRect(x: 500, y: 500, width: 400, height: 400)
+
+        let result = engine.resolve(
+            action: .maximize,
+            currentFrame: current,
+            savedFrame: saved,
+            achievedTargetFrame: nil,
+            context: context
+        )
+
+        XCTAssertEqual(result, .restore(to: saved))
+    }
 }

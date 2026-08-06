@@ -120,7 +120,7 @@ class HotkeyManager {
     private func promptAccessibility() {
         let alert = NSAlert()
         alert.messageText = "Accessibility Permission Required"
-        alert.informativeText = "Ku-Ka needs Accessibility permission to capture the Shift+Command+4 shortcut.\n\nPlease enable it in System Settings → Privacy & Security → Accessibility, then relaunch the app."
+        alert.informativeText = "Ku-Ka needs Accessibility permission to capture the Shift+Command+4 shortcut, and to move windows for the window tiling hotkeys.\n\nPlease enable it in System Settings → Privacy & Security → Accessibility, then relaunch the app."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open System Settings")
         alert.addButton(withTitle: "OK")

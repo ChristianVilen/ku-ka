@@ -36,9 +36,9 @@ enum TilingResolution: Equatable {
     /// Move the window to `to`. When `savePrevious` is true, the caller
     /// should remember the window's current frame before moving it.
     case move(to: CGRect, savePrevious: Bool)
-    /// Restore the window to a previously saved frame. The caller may keep
-    /// the saved frame around afterward — the next maximize simply
-    /// overwrites it, so there's no eviction to do in v1.
+    /// Restore the window to a previously saved frame. What the caller does
+    /// with the saved entry afterward — evict it or keep it around — is the
+    /// caller's call; the engine itself doesn't track eviction.
     case restore(to: CGRect)
 }
 
@@ -91,10 +91,24 @@ struct TilingLayoutEngine {
         }
     }
 
+    /// Decides what a tiling action should do to a window.
+    ///
+    /// For `.maximize`, `achievedTargetFrame` — the frame the window actually
+    /// landed on after a previous maximize, if any — takes priority over the
+    /// freshly computed target when deciding whether the window "is" already
+    /// maximized. Some apps (e.g. Terminal, which snaps windows to a
+    /// character-cell grid) never land exactly on the ideal target, so
+    /// comparing against the ideal target on every press would never
+    /// recognize a second press as "already maximized" and would silently
+    /// clobber the saved pre-maximize frame every time. Pass `nil` (the
+    /// default) when there's no prior achieved frame to compare against —
+    /// the freshly computed target is used instead, same as before this
+    /// parameter existed.
     func resolve(
         action: TilingAction,
         currentFrame: CGRect,
         savedFrame: CGRect?,
+        achievedTargetFrame: CGRect? = nil,
         context: TilingContext
     ) -> TilingResolution {
         let target = targetFrame(for: action, in: context)
@@ -103,7 +117,8 @@ struct TilingLayoutEngine {
         case .leftHalf, .rightHalf:
             return .move(to: target, savePrevious: false)
         case .maximize:
-            if let savedFrame, Self.isWithinTolerance(currentFrame, target) {
+            let comparisonTarget = achievedTargetFrame ?? target
+            if let savedFrame, Self.isWithinTolerance(currentFrame, comparisonTarget) {
                 return .restore(to: savedFrame)
             }
             return .move(to: target, savePrevious: true)
