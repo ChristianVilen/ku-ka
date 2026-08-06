@@ -34,11 +34,17 @@ KuKa/
 ├── CombineButton.swift  # Floating "Combine" button between adjacent thumbnails
 ├── DrawingView.swift    # NSView for freehand red drawing on screenshot image
 ├── EditorWindow.swift   # Centered modal window for annotating screenshots
-├── WindowListProvider.swift # Enumerates on-screen windows for window capture
+├── WindowListProvider.swift  # CGWindowListCopyWindowInfo wrapper: layer-0 on-screen windows, NS-space coordinates
 ├── WakeSession.swift    # Pure model of a keep-awake session (duration, expiry)
 ├── WakeManager.swift    # Keep-awake orchestration + IOKit power assertion seam
 ├── KeepAwakeController.swift # Keep Awake menu section: state, countdown, persistence, notification
 ├── KeepAwakePanelView.swift # Inline menu panel: duration chips + display-awake checkbox
+├── WindowTilingController.swift # @MainActor: ties tiling hotkeys to TilingLayoutEngine and AccessibilityWindowControl
+├── TilingLayoutEngine.swift  # Pure layout math: target frame + move/restore decision for left/right/maximize
+├── TilingWindowCounter.swift # Counts windows belonging to a given screen (for the Stage Manager check)
+├── StageManagerDetector.swift # Reads the system Stage Manager on/off setting, fresh on every access
+├── AccessibilityWindowControl.swift # AX-API glue: reads/moves the focused window, NS-space coordinates
+├── ScreenCoordinates.swift   # Shared top-left (CG/AX) <-> bottom-left (NS) coordinate flip
 ├── Info.plist           # LSUIElement=true, NSScreenCaptureUsageDescription
 └── KuKa.entitlements    # Sandbox disabled (required for CGEvent tap + screen capture)
 ```
@@ -62,6 +68,13 @@ KuKa/
 | `WakeManager` | Drives the `SleepPreventing` seam (IOKit power assertion), expiry timer, `keepDisplayAwake` mode |
 | `KeepAwakeController` | Keep Awake AppKit glue: builds the menu section, per-second countdown, persists the display preference, expiry notification |
 | `KeepAwakePanelView` | Custom `NSView` menu item: status line, duration chips (segmented control), "Keep display awake" checkbox |
+| `WindowTilingController` | `@MainActor`, thin orchestrator: reads the focused window, picks its screen, asks `TilingLayoutEngine` what to do, carries it out through `WindowControlling`; owns the pre-maximize saved-frame map |
+| `TilingLayoutEngine` | Pure, stateless layout math: target frame for left-half/right-half/maximize, and whether a maximize should move the window or restore its pre-maximize frame |
+| `TilingWindowCounter` | Counts how many on-screen windows "belong" to a given screen, for the Stage Manager strip check |
+| `StageManagerDetector` | Reads whether Stage Manager is turned on, fresh on every access (no caching, since the user can toggle it any time) |
+| `AccessibilityWindowControl` | Accessibility-API glue: reads the focused window's frame and moves/resizes it; converts between AX (top-left origin) and NS (bottom-left origin) coordinates |
+| `WindowListProvider` | Lists on-screen, layer-0 windows (excluding Ku-Ka's own) via `CGWindowListCopyWindowInfo`, converted to NS coordinates |
+| `ScreenCoordinates` | Shared vertical-flip math used by both `WindowListProvider` and `AccessibilityWindowControl` for CG/AX ↔ NS coordinate conversion |
 
 ### Flow
 
@@ -76,6 +89,10 @@ Shift+Cmd+4 → HotkeyManager (suppresses event) → AppDelegate.startCapture()
 → CaptureManager.capture(rect, screen) → Save PNG + Copy clipboard
 → ThumbnailPanel shown (bottom-right, 5s timeout) → Click thumbnail → EditorWindow opens
 → Freehand drawing → Done → Overwrite PNG + Update clipboard
+
+Ctrl+Opt+Left/Right/Return → HotkeyManager (suppresses event) → WindowTilingController.tile(action)
+→ TilingLayoutEngine.resolve(action, ...) decides move-and-save or restore
+→ AccessibilityWindowControl.setFrame(...) moves the window
 ```
 
 ---
@@ -151,6 +168,8 @@ KuKaTests/                    # Unit tests (XCTest, macOS 14.0+)
 ├── WakeSessionTests.swift    # Tests for the pure keep-awake session model
 ├── WakeManagerTests.swift    # Tests for keep-awake orchestration against a fake preventer
 ├── KeepAwakeControllerTests.swift # Tests for the Keep Awake menu section and persistence
+├── TilingLayoutEngineTests.swift # Target frame math and move/restore decisions for left/right/maximize
+├── TilingAdaptersTests.swift # TilingWindowCounter screen-membership rules + AX/NS coordinate conversion
 └── Mocks.swift               # MockFileManager, MockClipboard, MockScreenCapture, FakeSleepPreventer
 
 KuKaUITests/                  # UI tests (XCUITest, macOS 14.0+)

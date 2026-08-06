@@ -6,6 +6,9 @@ class HotkeyManager {
     private var watchdogTimer: Timer?
     var onHotkey: (() -> Void)?
     var onFullScreenHotkey: (() -> Void)?
+    var onTileLeft: (() -> Void)?
+    var onTileRight: (() -> Void)?
+    var onTileMaximize: (() -> Void)?
 
     func start() {
         let trusted = AXIsProcessTrustedWithOptions(
@@ -78,18 +81,39 @@ class HotkeyManager {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
-        guard flags.contains(.maskShift), flags.contains(.maskCommand) else {
-            return Unmanaged.passUnretained(event)
+        // Screenshot shortcuts: Shift+Command+3/4.
+        if flags.contains(.maskShift), flags.contains(.maskCommand) {
+            if keyCode == 0x14 {
+                DispatchQueue.main.async { [weak self] in self?.onFullScreenHotkey?() }
+                return nil
+            }
+            if keyCode == 0x15 {
+                DispatchQueue.main.async { [weak self] in self?.onHotkey?() }
+                return nil
+            }
         }
 
-        if keyCode == 0x14 {
-            DispatchQueue.main.async { [weak self] in self?.onFullScreenHotkey?() }
-            return nil
+        // Tiling shortcuts: Ctrl+Option+Left/Right/Return. Arrow key events
+        // also carry .maskSecondaryFn and .maskNumericPad, so this only
+        // requires the two modifiers it cares about rather than matching the
+        // full flag set, and explicitly rules out Command/Shift so it can't
+        // collide with the screenshot shortcuts above.
+        if flags.contains(.maskControl), flags.contains(.maskAlternate),
+            !flags.contains(.maskCommand), !flags.contains(.maskShift) {
+            if keyCode == 0x7B {
+                DispatchQueue.main.async { [weak self] in self?.onTileLeft?() }
+                return nil
+            }
+            if keyCode == 0x7C {
+                DispatchQueue.main.async { [weak self] in self?.onTileRight?() }
+                return nil
+            }
+            if keyCode == 0x24 {
+                DispatchQueue.main.async { [weak self] in self?.onTileMaximize?() }
+                return nil
+            }
         }
-        if keyCode == 0x15 {
-            DispatchQueue.main.async { [weak self] in self?.onHotkey?() }
-            return nil
-        }
+
         return Unmanaged.passUnretained(event)
     }
 

@@ -11,12 +11,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var launchAtLoginItem: NSMenuItem!
     private var durationItems: [NSMenuItem] = []
     private let keepAwake = KeepAwakeController()
+    private var windowTiling: WindowTilingController!
 
     func applicationWillTerminate(_ notification: Notification) {
         keepAwake.deactivate()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        windowTiling = WindowTilingController()
         let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || CommandLine.arguments.contains("--uitesting")
         if !isTesting {
@@ -112,6 +114,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setupHotkey() {
         hotkeyManager.onHotkey = { [weak self] in self?.startCapture() }
         hotkeyManager.onFullScreenHotkey = { [weak self] in self?.startFullScreenCapture() }
+        hotkeyManager.onTileLeft = { [weak self] in Task { @MainActor in self?.windowTiling.tile(.leftHalf) } }
+        hotkeyManager.onTileRight = { [weak self] in Task { @MainActor in self?.windowTiling.tile(.rightHalf) } }
+        hotkeyManager.onTileMaximize = { [weak self] in Task { @MainActor in self?.windowTiling.tile(.maximize) } }
         hotkeyManager.start()
     }
 

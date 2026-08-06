@@ -30,6 +30,7 @@
 		A10000105 /* AccessibilityWindowControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000028 /* AccessibilityWindowControl.swift */; };
 		A10000106 /* TilingWindowCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000029 /* TilingWindowCounter.swift */; };
 		A10000107 /* ScreenCoordinates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002A /* ScreenCoordinates.swift */; };
+		A10000108 /* WindowTilingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002B /* WindowTilingController.swift */; };
 		B20000001 /* CaptureManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000011 /* CaptureManagerTests.swift */; };
 		B20000003 /* WindowListProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000013 /* WindowListProviderTests.swift */; };
 		B20000005 /* WakeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000015 /* WakeSessionTests.swift */; };
@@ -80,6 +81,7 @@
 		A10000028 /* AccessibilityWindowControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityWindowControl.swift; sourceTree = "<group>"; };
 		A10000029 /* TilingWindowCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingWindowCounter.swift; sourceTree = "<group>"; };
 		A1000002A /* ScreenCoordinates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCoordinates.swift; sourceTree = "<group>"; };
+		A1000002B /* WindowTilingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTilingController.swift; sourceTree = "<group>"; };
 		B20000015 /* WakeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeSessionTests.swift; sourceTree = "<group>"; };
 		B20000010 /* KuKaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KuKaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000011 /* CaptureManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManagerTests.swift; sourceTree = "<group>"; };
@@ -145,6 +147,7 @@
 				A10000028 /* AccessibilityWindowControl.swift */,
 				A10000029 /* TilingWindowCounter.swift */,
 				A1000002A /* ScreenCoordinates.swift */,
+				A1000002B /* WindowTilingController.swift */,
 				A1000001A /* DrawingView.swift */,
 				A1000001B /* EditorWindow.swift */,
 				A10000017 /* Info.plist */,
@@ -285,6 +288,7 @@
 				A10000105 /* AccessibilityWindowControl.swift in Sources */,
 				A10000106 /* TilingWindowCounter.swift in Sources */,
 				A10000107 /* ScreenCoordinates.swift in Sources */,
+				A10000108 /* WindowTilingController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -329,6 +333,7 @@
 				ENABLE_TESTING_SEARCH_PATHS = YES;
 				INFOPLIST_FILE = KuKa/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-enable-upcoming-feature IsolatedDefaultValues";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuka.screenshot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -347,6 +352,7 @@
 				ENABLE_TESTING_SEARCH_PATHS = YES;
 				INFOPLIST_FILE = KuKa/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-enable-upcoming-feature IsolatedDefaultValues";
 				PRODUCT_BUNDLE_IDENTIFIER = com.kuka.screenshot;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
