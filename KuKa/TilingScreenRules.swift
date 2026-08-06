@@ -1,8 +1,12 @@
 import CoreGraphics
 
-/// Counts how many windows "belong" to a given screen, for
-/// `TilingContext.windowCount`.
-enum TilingWindowCounter {
+/// Two screen-related rules the tiling feature needs and the layout engine
+/// deliberately doesn't own: counting how many windows "belong" to a given
+/// screen (for `TilingContext.windowCount`), and picking which screen a
+/// window should be tiled against in the first place. Both work purely off
+/// `CGRect` geometry, with no AppKit or Accessibility dependency, so they
+/// stay easy to unit test.
+enum TilingScreenRules {
     /// Owner name of Stage Manager's strip/backdrop process. Its windows
     /// never count toward a screen's window count.
     static let stageManagerOwnerName = "WindowManager"

@@ -28,7 +28,7 @@
 		A10000111 /* TilingLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110 /* TilingLayoutEngine.swift */; };
 		A10000104 /* StageManagerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000027 /* StageManagerDetector.swift */; };
 		A10000105 /* AccessibilityWindowControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000028 /* AccessibilityWindowControl.swift */; };
-		A10000106 /* TilingWindowCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000029 /* TilingWindowCounter.swift */; };
+		A10000106 /* TilingScreenRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000029 /* TilingScreenRules.swift */; };
 		A10000107 /* ScreenCoordinates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002A /* ScreenCoordinates.swift */; };
 		A10000108 /* WindowTilingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002B /* WindowTilingController.swift */; };
 		B20000001 /* CaptureManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000011 /* CaptureManagerTests.swift */; };
@@ -80,7 +80,7 @@
 		A10000110 /* TilingLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingLayoutEngine.swift; sourceTree = "<group>"; };
 		A10000027 /* StageManagerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageManagerDetector.swift; sourceTree = "<group>"; };
 		A10000028 /* AccessibilityWindowControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityWindowControl.swift; sourceTree = "<group>"; };
-		A10000029 /* TilingWindowCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingWindowCounter.swift; sourceTree = "<group>"; };
+		A10000029 /* TilingScreenRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingScreenRules.swift; sourceTree = "<group>"; };
 		A1000002A /* ScreenCoordinates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCoordinates.swift; sourceTree = "<group>"; };
 		A1000002B /* WindowTilingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTilingController.swift; sourceTree = "<group>"; };
 		B20000015 /* WakeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeSessionTests.swift; sourceTree = "<group>"; };
@@ -147,7 +147,7 @@
 				A10000110 /* TilingLayoutEngine.swift */,
 				A10000027 /* StageManagerDetector.swift */,
 				A10000028 /* AccessibilityWindowControl.swift */,
-				A10000029 /* TilingWindowCounter.swift */,
+				A10000029 /* TilingScreenRules.swift */,
 				A1000002A /* ScreenCoordinates.swift */,
 				A1000002B /* WindowTilingController.swift */,
 				A1000001A /* DrawingView.swift */,
@@ -289,7 +289,7 @@
 				A10000111 /* TilingLayoutEngine.swift in Sources */,
 				A10000104 /* StageManagerDetector.swift in Sources */,
 				A10000105 /* AccessibilityWindowControl.swift in Sources */,
-				A10000106 /* TilingWindowCounter.swift in Sources */,
+				A10000106 /* TilingScreenRules.swift in Sources */,
 				A10000107 /* ScreenCoordinates.swift in Sources */,
 				A10000108 /* WindowTilingController.swift in Sources */,
 			);

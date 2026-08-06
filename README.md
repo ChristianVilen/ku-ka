@@ -143,7 +143,7 @@ KuKa/
 ├── EditorWindow.swift   # Centered modal for annotating screenshots
 ├── WindowTilingController.swift # Ties tiling hotkeys to the layout engine and window control
 ├── TilingLayoutEngine.swift  # Pure layout math for left/right/maximize tiling
-├── TilingWindowCounter.swift # Counts windows on a screen, for the Stage Manager check
+├── TilingScreenRules.swift # Screen-picking + windows-per-screen counting, for the Stage Manager check
 ├── StageManagerDetector.swift # Reads whether Stage Manager is turned on
 ├── AccessibilityWindowControl.swift # Reads/moves the focused window via the Accessibility API
 ├── WindowListProvider.swift  # Lists on-screen windows via the window server

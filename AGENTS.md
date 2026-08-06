@@ -41,7 +41,7 @@ KuKa/
 ├── KeepAwakePanelView.swift # Inline menu panel: duration chips + display-awake checkbox
 ├── WindowTilingController.swift # @MainActor: ties tiling hotkeys to TilingLayoutEngine and AccessibilityWindowControl
 ├── TilingLayoutEngine.swift  # Pure layout math: target frame + move/restore decision for left/right/maximize
-├── TilingWindowCounter.swift # Counts windows belonging to a given screen (for the Stage Manager check)
+├── TilingScreenRules.swift # Screen-picking + windows-per-screen counting (for the Stage Manager check)
 ├── StageManagerDetector.swift # Reads the system Stage Manager on/off setting, fresh on every access
 ├── AccessibilityWindowControl.swift # AX-API glue: reads/moves the focused window, NS-space coordinates
 ├── ScreenCoordinates.swift   # Shared top-left (CG/AX) <-> bottom-left (NS) coordinate flip
@@ -70,7 +70,7 @@ KuKa/
 | `KeepAwakePanelView` | Custom `NSView` menu item: status line, duration chips (segmented control), "Keep display awake" checkbox |
 | `WindowTilingController` | `@MainActor`, thin orchestrator: reads the focused window, picks its screen, asks `TilingLayoutEngine` what to do, carries it out through `WindowControlling`; owns the pre-maximize saved-frame map |
 | `TilingLayoutEngine` | Pure, stateless layout math: target frame for left-half/right-half/maximize, and whether a maximize should move the window or restore its pre-maximize frame |
-| `TilingWindowCounter` | Counts how many on-screen windows "belong" to a given screen, for the Stage Manager strip check |
+| `TilingScreenRules` | Two screen-related rules: counts how many on-screen windows "belong" to a given screen (for the Stage Manager strip check), and picks which screen a window should be tiled against |
 | `StageManagerDetector` | Reads whether Stage Manager is turned on, fresh on every access (no caching, since the user can toggle it any time) |
 | `AccessibilityWindowControl` | Accessibility-API glue: reads the focused window's frame and moves/resizes it; converts between AX (top-left origin) and NS (bottom-left origin) coordinates |
 | `WindowListProvider` | Lists on-screen, layer-0 windows (excluding Ku-Ka's own) via `CGWindowListCopyWindowInfo`, converted to NS coordinates |
@@ -170,8 +170,9 @@ KuKaTests/                    # Unit tests (XCTest, macOS 14.0+)
 ├── WakeManagerTests.swift    # Tests for keep-awake orchestration against a fake preventer
 ├── KeepAwakeControllerTests.swift # Tests for the Keep Awake menu section and persistence
 ├── TilingLayoutEngineTests.swift # Target frame math and move/restore decisions for left/right/maximize
-├── TilingAdaptersTests.swift # TilingWindowCounter screen-membership rules + AX/NS coordinate conversion
-└── Mocks.swift               # MockFileManager, MockClipboard, MockScreenCapture, FakeSleepPreventer
+├── TilingAdaptersTests.swift # TilingScreenRules screen-membership + screen-picking rules, AX/NS coordinate conversion
+├── WindowTilingControllerTests.swift # Saved-frame map behavior: save-then-restore, failed moves, entry lifecycle
+└── Mocks.swift               # MockFileManager, MockClipboard, MockScreenCapture, MockWindowListProvider, MockWindowControlling, MockStageManagerDetecting, FakeSleepPreventer
 
 KuKaUITests/                  # UI tests (XCUITest, macOS 14.0+)
 └── MenuBarTests.swift        # Menu bar icon, menu items, thumbnail duration selection
@@ -198,6 +199,8 @@ When running under XCTest, `AppDelegate` skips hotkey registration and notificat
 - `saveAnnotated()` writes file and updates clipboard
 - `deleteScreenshot()` removes file and clears clipboard
 - Keep Awake: activation passes the display-awake flag to the preventer; toggling it mid-session swaps the assertion without ending the session; timed sessions expire and fire callbacks; the menu panel reflects state and the display preference persists across launches
+- Tiling layout math and the maximize/restore toggle, including apps that snap window sizes (`TilingLayoutEngine`)
+- Screen-membership and screen-picking rules (`TilingScreenRules`), and the controller's saved-frame map behavior across save/restore/failure (`WindowTilingController`)
 
 ### Keep Awake implementation
 

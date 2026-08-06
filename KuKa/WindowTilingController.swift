@@ -22,8 +22,11 @@ private struct TilingRestoreState {
 /// Thin by design: every decision belongs to the engine, this class just
 /// wires the adapters to it. `savedFrames` entries for windows that have
 /// since closed are never cleaned up — accepted for v1, since a stale entry
-/// is harmless (its key is a handle that will simply never come up as the
-/// focused window again) and not worth extra bookkeeping to garbage-collect.
+/// is mostly harmless (its key is a handle that in practice will not come up
+/// again as the focused window — pids do get recycled, but the odds of a
+/// collision landing on a stale entry are low) and not worth extra
+/// bookkeeping to garbage-collect. The one real cost: each entry keeps its
+/// `AXUIElement` alive for as long as it sits in the map.
 @MainActor
 final class WindowTilingController {
     private let windowControl: WindowControlling
@@ -51,7 +54,7 @@ final class WindowTilingController {
 
         let context = TilingContext(
             visibleFrame: screen.visibleFrame,
-            windowCount: TilingWindowCounter.windowCount(on: screen.frame, windows: windowList.windowsOnScreen()),
+            windowCount: TilingScreenRules.windowCount(on: screen.frame, windows: windowList.windowsOnScreen()),
             stageManagerEnabled: stageManager.isStageManagerEnabled
         )
 
@@ -76,7 +79,11 @@ final class WindowTilingController {
                 savedFrames[handle] = TilingRestoreState(previousFrame: previousFrame, achievedFrame: achievedFrame)
             }
         case .restore(let saved):
-            windowControl.setFrame(saved, of: handle)
+            // Symmetric with the move branch above: only drop the saved
+            // entry once the restore actually landed. If setFrame fails, the
+            // window never moved, so a later press should still be able to
+            // restore it rather than starting over as a fresh maximize.
+            guard windowControl.setFrame(saved, of: handle) != nil else { return }
             savedFrames.removeValue(forKey: handle)
         }
     }
@@ -86,7 +93,7 @@ final class WindowTilingController {
     /// any screen at all (e.g. it's slightly off-screen).
     private func targetScreen(for windowFrame: CGRect) -> NSScreen? {
         let screens = NSScreen.screens
-        if let index = TilingWindowCounter.bestScreenIndex(for: windowFrame, screenFrames: screens.map(\.frame)) {
+        if let index = TilingScreenRules.bestScreenIndex(for: windowFrame, screenFrames: screens.map(\.frame)) {
             return screens[index]
         }
         return NSScreen.main ?? screens.first

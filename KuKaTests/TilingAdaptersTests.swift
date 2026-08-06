@@ -3,7 +3,7 @@ import XCTest
 
 final class TilingAdaptersTests: XCTestCase {
 
-    // MARK: - TilingWindowCounter.windowCount(on:windows:)
+    // MARK: - TilingScreenRules.windowCount(on:windows:)
 
     private let screen = CGRect(x: 0, y: 0, width: 1000, height: 1000)
 
@@ -13,40 +13,40 @@ final class TilingAdaptersTests: XCTestCase {
 
     func testWindowFullyOnScreenCounts() {
         let windows = [window(x: 100, y: 100, width: 200, height: 200)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 1)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 1)
     }
 
     func testWindowMostlyOnThisScreenCounts() {
         // 800x1000 window straddling the right edge: 600 of its 800 width
         // (75%) is on this screen.
         let windows = [window(x: 400, y: 0, width: 800, height: 1000)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 1)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 1)
     }
 
     func testWindowMostlyOnNeighboringScreenDoesNotCount() {
         // Mirror of the above: only 25% of the window's width is on this screen.
         let windows = [window(x: 800, y: 0, width: 800, height: 1000)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 0)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 0)
     }
 
     func testWindowAtExactlyFiftyPercentBoundaryCounts() {
         // 200x1000 window: exactly 100 (50%) of its width overlaps this screen.
         let windows = [window(x: 900, y: 0, width: 200, height: 1000)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 1)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 1)
     }
 
     func testWindowManagerOwnedWindowIsExcluded() {
         let windows = [window(x: 100, y: 100, width: 200, height: 200, ownerName: "WindowManager")]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 0)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 0)
     }
 
     func testZeroSizeWindowIsExcluded() {
         let windows = [window(x: 100, y: 100, width: 0, height: 0)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 0)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 0)
     }
 
     func testEmptyWindowListReturnsZero() {
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: []), 0)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: []), 0)
     }
 
     func testMultipleWindowsCountsOnlyThoseQualifying() {
@@ -55,14 +55,14 @@ final class TilingAdaptersTests: XCTestCase {
             window(x: 800, y: 0, width: 800, height: 1000),    // mostly off screen: doesn't count
             window(x: 100, y: 100, width: 200, height: 200, ownerName: "WindowManager") // excluded by owner
         ]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 1)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 1)
     }
 
     func testWindowNotTouchingScreenAtAllDoesNotCount() {
         // Entirely off to the right: CGRect.intersection returns .null here,
         // a different code path than a low-but-nonzero overlap.
         let windows = [window(x: 2000, y: 0, width: 200, height: 200)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 0)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 0)
     }
 
     func testWindowWiderThanTwiceTheScreenCountsOnNoScreen() {
@@ -70,9 +70,9 @@ final class TilingAdaptersTests: XCTestCase {
         // width, centered over it, never reaches the 50% overlap threshold
         // for that screen (only ~45% of its area overlaps here), so it
         // counts on none of the windows' screens. See the doc comment on
-        // TilingWindowCounter.windowCount for the same note.
+        // TilingScreenRules.windowCount for the same note.
         let windows = [window(x: -1100, y: 0, width: 2200, height: 1000)]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: screen, windows: windows), 0)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: screen, windows: windows), 0)
     }
 
     func testCountingOnScreenWithNonZeroOrigin() {
@@ -81,33 +81,33 @@ final class TilingAdaptersTests: XCTestCase {
             window(x: 2000, y: 100, width: 400, height: 400),   // fully on the offset screen
             window(x: 100, y: 100, width: 400, height: 400)     // nowhere near it
         ]
-        XCTAssertEqual(TilingWindowCounter.windowCount(on: offsetScreen, windows: windows), 1)
+        XCTAssertEqual(TilingScreenRules.windowCount(on: offsetScreen, windows: windows), 1)
     }
 
-    // MARK: - TilingWindowCounter.bestScreenIndex(for:screenFrames:)
+    // MARK: - TilingScreenRules.bestScreenIndex(for:screenFrames:)
 
     private let screenA = CGRect(x: 0, y: 0, width: 1000, height: 1000)
     private let screenB = CGRect(x: 1000, y: 0, width: 1200, height: 1000)
 
     func testBestScreenIndexPicksScreenWindowIsClearlyOn() {
         let window = CGRect(x: 1100, y: 100, width: 200, height: 200) // fully within screenB
-        XCTAssertEqual(TilingWindowCounter.bestScreenIndex(for: window, screenFrames: [screenA, screenB]), 1)
+        XCTAssertEqual(TilingScreenRules.bestScreenIndex(for: window, screenFrames: [screenA, screenB]), 1)
     }
 
     func testBestScreenIndexPicksScreenWithLargerShareWhenStraddling() {
         // Straddles the x=1000 boundary: 700pt of width on screenA, 100pt on screenB.
         let window = CGRect(x: 700, y: 100, width: 400, height: 200)
-        XCTAssertEqual(TilingWindowCounter.bestScreenIndex(for: window, screenFrames: [screenA, screenB]), 0)
+        XCTAssertEqual(TilingScreenRules.bestScreenIndex(for: window, screenFrames: [screenA, screenB]), 0)
     }
 
     func testBestScreenIndexReturnsNilWhenNoScreenIntersects() {
         let window = CGRect(x: 5000, y: 5000, width: 100, height: 100)
-        XCTAssertNil(TilingWindowCounter.bestScreenIndex(for: window, screenFrames: [screenA, screenB]))
+        XCTAssertNil(TilingScreenRules.bestScreenIndex(for: window, screenFrames: [screenA, screenB]))
     }
 
     func testBestScreenIndexReturnsNilForEmptyScreenList() {
         let window = CGRect(x: 0, y: 0, width: 100, height: 100)
-        XCTAssertNil(TilingWindowCounter.bestScreenIndex(for: window, screenFrames: []))
+        XCTAssertNil(TilingScreenRules.bestScreenIndex(for: window, screenFrames: []))
     }
 
     func testBestScreenIndexWithNonZeroOriginScreens() {
@@ -116,7 +116,7 @@ final class TilingAdaptersTests: XCTestCase {
             CGRect(x: 500, y: 25, width: 1600, height: 975)
         ]
         let window = CGRect(x: 600, y: 100, width: 300, height: 300) // within the second screen
-        XCTAssertEqual(TilingWindowCounter.bestScreenIndex(for: window, screenFrames: screens), 1)
+        XCTAssertEqual(TilingScreenRules.bestScreenIndex(for: window, screenFrames: screens), 1)
     }
 
     func testBestScreenIndexTiesBreakTowardLowestIndex() {
@@ -126,7 +126,7 @@ final class TilingAdaptersTests: XCTestCase {
         ]
         // Straddles exactly in the middle: 100pt of overlap with each screen.
         let window = CGRect(x: 100, y: 0, width: 200, height: 200)
-        XCTAssertEqual(TilingWindowCounter.bestScreenIndex(for: window, screenFrames: screens), 0)
+        XCTAssertEqual(TilingScreenRules.bestScreenIndex(for: window, screenFrames: screens), 0)
     }
 
     // MARK: - AccessibilityWindowControl coordinate conversion

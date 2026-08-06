@@ -73,17 +73,30 @@ final class WindowTilingControllerTests: XCTestCase {
         let originalFrame = CGRect(x: screen.frame.minX + 10, y: screen.frame.minY + 10, width: 300, height: 300)
 
         // setFrame fails (returns nil, as AccessibilityWindowControl does
-        // when the AX call or the re-read fails) — the window never moved.
+        // when the AX call or the re-read fails).
         mock.focusedWindowToReturn = focusedWindow(frame: originalFrame)
         mock.achievedFrameToReturn = nil
         controller.tile(.maximize)
 
         XCTAssertEqual(mock.setFrameCalls.count, 1)
 
-        // A second press, with the window still unmoved, should be treated
-        // as a fresh maximize rather than a restore — nothing should have
-        // been saved from the failed attempt.
-        mock.focusedWindowToReturn = focusedWindow(frame: originalFrame)
+        // Second press: the window now happens to be sitting exactly at the
+        // ideal target (maybe the AX move actually landed but the re-read
+        // that reports the achieved frame failed, so setFrame still
+        // returned nil — a plausible partial failure). This specific
+        // follow-up is what discriminates the fix from the bug it replaced:
+        // the pre-fix controller stored `previousFrame` unconditionally
+        // whenever `savePrevious` was true, regardless of whether setFrame
+        // succeeded, so it would have `originalFrame` on record here, and
+        // its resolve() compared currentFrame only against the ideal
+        // target (no achieved-frame concept yet) — so with currentFrame
+        // now reading as "at the ideal target", the pre-fix code would
+        // resolve this as a RESTORE back to `originalFrame`
+        // (setFrameCalls[1].frame == originalFrame). The fix only records
+        // state when setFrame actually returns an achieved frame, so
+        // nothing was saved from the failed first press, and this reads as
+        // a fresh maximize instead (setFrameCalls[1].frame == idealTarget).
+        mock.focusedWindowToReturn = focusedWindow(frame: idealTarget)
         controller.tile(.maximize)
 
         XCTAssertEqual(mock.setFrameCalls.count, 2)
@@ -119,6 +132,40 @@ final class WindowTilingControllerTests: XCTestCase {
 
         XCTAssertEqual(mock.setFrameCalls.count, 3)
         XCTAssertEqual(mock.setFrameCalls[2].frame, idealTarget)
+    }
+
+    // MARK: - Failed restore keeps the entry
+
+    func testFailedRestoreKeepsEntrySoSecondAttemptStillRestores() {
+        let mock = MockWindowControlling()
+        let controller = makeController(mock)
+        let screen = mainScreen
+        let originalFrame = CGRect(x: screen.frame.minX + 10, y: screen.frame.minY + 10, width: 300, height: 300)
+        let achievedFrame = CGRect(x: screen.frame.minX + 5, y: screen.frame.minY + 5, width: 400, height: 400)
+
+        mock.focusedWindowToReturn = focusedWindow(frame: originalFrame)
+        mock.achievedFrameToReturn = achievedFrame
+        controller.tile(.maximize) // move + save
+
+        // Restore attempt fails (setFrame returns nil, e.g. the AX re-read
+        // failed) — the window is still sitting at achievedFrame, unmoved.
+        mock.focusedWindowToReturn = focusedWindow(frame: achievedFrame)
+        mock.achievedFrameToReturn = nil
+        controller.tile(.maximize)
+
+        XCTAssertEqual(mock.setFrameCalls.count, 2)
+        XCTAssertEqual(mock.setFrameCalls[1].frame, originalFrame)
+
+        // A second restore attempt, with the window still unmoved and the
+        // entry still intact, should try to restore to the same original
+        // frame again — not fall back to a fresh maximize, which is what
+        // would happen if the failed attempt above had dropped the entry.
+        mock.focusedWindowToReturn = focusedWindow(frame: achievedFrame)
+        mock.achievedFrameToReturn = originalFrame
+        controller.tile(.maximize)
+
+        XCTAssertEqual(mock.setFrameCalls.count, 3)
+        XCTAssertEqual(mock.setFrameCalls[2].frame, originalFrame)
     }
 
     // MARK: - Halves never touch the map
