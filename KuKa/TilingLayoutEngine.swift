@@ -8,15 +8,25 @@ enum TilingAction {
 }
 
 /// Everything the layout engine needs to compute a target frame, gathered
-/// from the screen the window currently lives on. All geometry is in
-/// bottom-left-origin coordinates relative to `visibleFrame`, matching
-/// `NSScreen.visibleFrame` semantics.
+/// from the screen the window currently lives on. All rectangles this engine
+/// takes and returns are in the same coordinate space as
+/// `NSScreen.visibleFrame` (global screen coordinates, bottom-left origin).
+/// Converting to/from Accessibility (top-left origin) coordinates is the
+/// caller's job.
 struct TilingContext {
     /// The screen's visible frame (excludes menu bar and Dock).
     let visibleFrame: CGRect
     /// Visible normal windows on that screen, including the window being tiled.
     let windowCount: Int
     let stageManagerEnabled: Bool
+
+    /// Whether the Stage Manager strip is actually reserving screen space.
+    /// With only a single window, Stage Manager hides its strip, so a
+    /// maximized window can use the full visible frame even when Stage
+    /// Manager is turned on.
+    var stageStripTakesSpace: Bool {
+        stageManagerEnabled && windowCount >= 2
+    }
 }
 
 /// What the caller should do to a window in response to a tiling action.
@@ -26,7 +36,9 @@ enum TilingResolution: Equatable {
     /// Move the window to `to`. When `savePrevious` is true, the caller
     /// should remember the window's current frame before moving it.
     case move(to: CGRect, savePrevious: Bool)
-    /// Restore the window to a previously saved frame.
+    /// Restore the window to a previously saved frame. The caller may keep
+    /// the saved frame around afterward — the next maximize simply
+    /// overwrites it, so there's no eviction to do in v1.
     case restore(to: CGRect)
 }
 
@@ -35,17 +47,12 @@ enum TilingResolution: Equatable {
 /// window or toggle it back to its pre-maximize frame.
 struct TilingLayoutEngine {
     /// Fraction of `visibleFrame.width` reserved on the left for the Stage
-    /// Manager strip when maximizing with Stage Manager active.
-    private static let stageManagerXInset: CGFloat = 0.07
-    /// Fraction of `visibleFrame.width` the maximized window occupies when
-    /// Stage Manager is active (reaches the right edge).
-    private static let stageManagerWidthFraction: CGFloat = 0.93
+    /// Manager strip when maximizing with Stage Manager active. The window
+    /// fills the remaining width, reaching the right edge.
+    private static let stageManagerLeftInsetFraction: CGFloat = 0.07
     /// Fraction of `visibleFrame.height` reserved as breathing room at the
-    /// bottom when maximizing with Stage Manager active.
-    private static let stageManagerYInset: CGFloat = 0.01
-    /// Fraction of `visibleFrame.height` the maximized window occupies when
-    /// Stage Manager is active (1% breathing room top and bottom).
-    private static let stageManagerHeightFraction: CGFloat = 0.98
+    /// top and bottom (each) when maximizing with Stage Manager active.
+    private static let stageManagerVerticalInsetFraction: CGFloat = 0.01
 
     /// Tolerance, in points, used to decide whether a window's current frame
     /// "is" the maximize target. The Accessibility API doesn't position
@@ -70,12 +77,14 @@ struct TilingLayoutEngine {
                 height: context.visibleFrame.height
             )
         case .maximize:
-            if context.stageManagerEnabled && context.windowCount >= 2 {
+            if context.stageStripTakesSpace {
+                let leftInset = Self.stageManagerLeftInsetFraction * context.visibleFrame.width
+                let verticalInset = Self.stageManagerVerticalInsetFraction * context.visibleFrame.height
                 return CGRect(
-                    x: context.visibleFrame.minX + Self.stageManagerXInset * context.visibleFrame.width,
-                    y: context.visibleFrame.minY + Self.stageManagerYInset * context.visibleFrame.height,
-                    width: Self.stageManagerWidthFraction * context.visibleFrame.width,
-                    height: Self.stageManagerHeightFraction * context.visibleFrame.height
+                    x: context.visibleFrame.minX + leftInset,
+                    y: context.visibleFrame.minY + verticalInset,
+                    width: context.visibleFrame.width - leftInset,
+                    height: context.visibleFrame.height - 2 * verticalInset
                 )
             }
             return context.visibleFrame
