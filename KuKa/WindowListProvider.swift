@@ -32,6 +32,6 @@ class CGWindowListProvider: WindowListProvider {
     }
 
     static func cgToNS(cgRect: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        AccessibilityWindowControl.flipVertical(cgRect, primaryScreenHeight: primaryScreenHeight)
+        ScreenCoordinates.flipVertical(cgRect, primaryScreenHeight: primaryScreenHeight)
     }
 }

@@ -30,8 +30,10 @@ protocol WindowControlling {
     /// Moves/resizes `handle` to `frame` (NS space), then re-reads the
     /// window's actual resulting frame and returns it (also NS space) — some
     /// apps snap to a cell grid or otherwise adjust what was asked for, and
-    /// callers may want to compare against what actually happened. Returns
-    /// nil if the set or the re-read failed.
+    /// callers may want to compare against what actually happened. A failed
+    /// set is logged but doesn't stop the re-read, so the caller still gets
+    /// back whatever frame the window actually ended up at. Returns nil only
+    /// if the re-read (or the NS/AX conversion) itself fails.
     @discardableResult
     func setFrame(_ frame: CGRect, of handle: WindowHandle) -> CGRect?
 }
@@ -74,10 +76,10 @@ struct AccessibilityWindowControl: WindowControlling {
         guard let window = Self.axElement(kAXFocusedWindowAttribute as CFString, from: app, label: "focused window") else {
             return nil
         }
-        guard let position: CGPoint = Self.axValue(kAXPositionAttribute as CFString, from: window, type: .cgPoint, zero: .zero, label: "window position") else {
+        guard let position = Self.axPoint(kAXPositionAttribute as CFString, from: window, label: "window position") else {
             return nil
         }
-        guard let size: CGSize = Self.axValue(kAXSizeAttribute as CFString, from: window, type: .cgSize, zero: .zero, label: "window size") else {
+        guard let size = Self.axSize(kAXSizeAttribute as CFString, from: window, label: "window size") else {
             return nil
         }
 
@@ -94,6 +96,7 @@ struct AccessibilityWindowControl: WindowControlling {
         }
 
         let element = handle.element
+        AXUIElementSetMessagingTimeout(element, Self.messagingTimeout)
 
         var positionSettable: DarwinBoolean = false
         let positionSettableError = AXUIElementIsAttributeSettable(element, kAXPositionAttribute as CFString, &positionSettable)
@@ -130,10 +133,10 @@ struct AccessibilityWindowControl: WindowControlling {
             NSLog("Ku-Ka: Failed to re-set window position (AXError \(setPosition2Error.rawValue))")
         }
 
-        guard let achievedPosition: CGPoint = Self.axValue(kAXPositionAttribute as CFString, from: element, type: .cgPoint, zero: .zero, label: "window position after set") else {
+        guard let achievedPosition = Self.axPoint(kAXPositionAttribute as CFString, from: element, label: "window position after set") else {
             return nil
         }
-        guard let achievedSize: CGSize = Self.axValue(kAXSizeAttribute as CFString, from: element, type: .cgSize, zero: .zero, label: "window size after set") else {
+        guard let achievedSize = Self.axSize(kAXSizeAttribute as CFString, from: element, label: "window size after set") else {
             return nil
         }
 
@@ -157,13 +160,13 @@ struct AccessibilityWindowControl: WindowControlling {
             NSLog("Ku-Ka: \(label) attribute was not an AXUIElement")
             return nil
         }
-        return (value as! AXUIElement) // swiftlint:disable:this force_cast
+        return (value as! AXUIElement)
     }
 
-    /// Reads an attribute expected to hold an `AXValue` (position/size) and
-    /// unpacks it as `T` (`CGPoint` or `CGSize`), logging the attribute name
-    /// and `AXError`/unpack failure.
-    private static func axValue<T>(_ attribute: CFString, from element: AXUIElement, type: AXValueType, zero: T, label: String) -> T? {
+    /// Reads an attribute expected to hold an `AXValue` (position/size),
+    /// logging the attribute name and `AXError` on failure. Shared by
+    /// `axPoint`/`axSize`, which unpack the concrete type.
+    private static func axValue(_ attribute: CFString, from element: AXUIElement, label: String) -> AXValue? {
         var ref: CFTypeRef?
         let error = AXUIElementCopyAttributeValue(element, attribute, &ref)
         guard error == .success else {
@@ -174,12 +177,31 @@ struct AccessibilityWindowControl: WindowControlling {
             NSLog("Ku-Ka: \(label) attribute was not an AXValue")
             return nil
         }
-        var result = zero
-        guard AXValueGetValue((value as! AXValue), type, &result) else { // swiftlint:disable:this force_cast
-            NSLog("Ku-Ka: Failed to unpack \(label)")
+        return (value as! AXValue)
+    }
+
+    /// Reads and unpacks an `AXValue` attribute expected to hold a `CGPoint`
+    /// (e.g. `kAXPositionAttribute`), logging on failure.
+    private static func axPoint(_ attribute: CFString, from element: AXUIElement, label: String) -> CGPoint? {
+        guard let value = axValue(attribute, from: element, label: label) else { return nil }
+        var point = CGPoint.zero
+        guard AXValueGetValue(value, .cgPoint, &point) else {
+            NSLog("Ku-Ka: Failed to unpack \(label) as CGPoint")
             return nil
         }
-        return result
+        return point
+    }
+
+    /// Reads and unpacks an `AXValue` attribute expected to hold a `CGSize`
+    /// (e.g. `kAXSizeAttribute`), logging on failure.
+    private static func axSize(_ attribute: CFString, from element: AXUIElement, label: String) -> CGSize? {
+        guard let value = axValue(attribute, from: element, label: label) else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue(value, .cgSize, &size) else {
+            NSLog("Ku-Ka: Failed to unpack \(label) as CGSize")
+            return nil
+        }
+        return size
     }
 
     /// The primary screen's height, or nil if no screens are available (so
@@ -190,30 +212,19 @@ struct AccessibilityWindowControl: WindowControlling {
 
     // MARK: - Coordinate conversion
     //
-    // Pure math, independent of any actor/thread — marked `nonisolated` so
-    // they stay callable from plain synchronous code (WindowListProvider,
-    // tests) without hopping onto the main actor.
+    // Thin wrappers over ScreenCoordinates' shared flip — pure math,
+    // independent of any actor/thread, so they're marked `nonisolated` and
+    // stay callable from plain synchronous code (tests) without hopping onto
+    // the main actor.
 
     /// NS (bottom-left origin) -> AX (top-left origin) global coordinates.
     nonisolated static func nsToAX(_ frame: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
+        ScreenCoordinates.flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
     }
 
     /// AX (top-left origin) -> NS (bottom-left origin) global coordinates.
     /// The flip is self-inverse, so this is the same transform as `nsToAX`.
     nonisolated static func axToNS(_ frame: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
-    }
-
-    /// The shared vertical flip behind `nsToAX`/`axToNS`, also used by
-    /// `CGWindowListProvider.cgToNS` (CG and AX share the same top-left
-    /// global origin).
-    nonisolated static func flipVertical(_ frame: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        CGRect(
-            x: frame.origin.x,
-            y: primaryScreenHeight - frame.origin.y - frame.height,
-            width: frame.width,
-            height: frame.height
-        )
+        ScreenCoordinates.flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
     }
 }
