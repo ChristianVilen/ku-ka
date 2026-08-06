@@ -32,14 +32,15 @@ final class TilingLayoutEngineTests: XCTestCase {
     }
 
     func testHalvesOnOddWidthScreenLandOnHalfPoints() {
-        let oddScreen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let oddScreen = CGRect(x: 0, y: 0, width: 1511, height: 982)
         let context = makeContext(windows: 1, stageManager: false, visibleFrame: oddScreen)
 
         let left = engine.targetFrame(for: .leftHalf, in: context)
         let right = engine.targetFrame(for: .rightHalf, in: context)
 
-        XCTAssertEqual(left, CGRect(x: 0, y: 0, width: 756, height: 982))
-        XCTAssertEqual(right, CGRect(x: 756, y: 0, width: 756, height: 982))
+        XCTAssertEqual(left, CGRect(x: 0, y: 0, width: 755.5, height: 982))
+        XCTAssertEqual(right.origin.x, 755.5)
+        XCTAssertEqual(right.maxX, 1511)
     }
 
     func testLeftHalfIgnoresStageManagerAndWindowCount() {
@@ -83,7 +84,7 @@ final class TilingLayoutEngineTests: XCTestCase {
         let frame = engine.targetFrame(for: .maximize, in: context)
 
         XCTAssertGreaterThanOrEqual(frame.minX, screen.minX)
-        XCTAssertLessThanOrEqual(frame.maxX, screen.maxX)
+        XCTAssertEqual(frame.maxX, screen.maxX, accuracy: 0.0001)
         XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
         XCTAssertLessThanOrEqual(frame.maxY, screen.maxY)
 
