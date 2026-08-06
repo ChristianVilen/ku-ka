@@ -32,22 +32,6 @@ class CGWindowListProvider: WindowListProvider {
     }
 
     static func cgToNS(cgRect: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        CGRect(x: cgRect.origin.x, y: primaryScreenHeight - cgRect.origin.y - cgRect.height, width: cgRect.width, height: cgRect.height)
-    }
-
-    /// Counts windows that "belong" to `screenFrame`: on-screen, normal
-    /// windows (already pre-filtered by the caller for layer 0 and our own
-    /// process) whose overlap with `screenFrame` covers at least half of the
-    /// window's own area. Windows owned by "WindowManager" are Stage Manager's
-    /// strip/backdrop and are always excluded.
-    static func windowCount(on screenFrame: CGRect, windows: [WindowInfo]) -> Int {
-        windows.filter { window in
-            guard window.ownerName != "WindowManager" else { return false }
-            let windowArea = window.frame.width * window.frame.height
-            guard windowArea > 0 else { return false }
-            let intersection = window.frame.intersection(screenFrame)
-            let intersectionArea = intersection.width * intersection.height
-            return intersectionArea >= windowArea * 0.5
-        }.count
+        AccessibilityWindowControl.flipVertical(cgRect, primaryScreenHeight: primaryScreenHeight)
     }
 }

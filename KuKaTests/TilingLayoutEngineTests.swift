@@ -39,8 +39,7 @@ final class TilingLayoutEngineTests: XCTestCase {
         let right = engine.targetFrame(for: .rightHalf, in: context)
 
         XCTAssertEqual(left, CGRect(x: 0, y: 0, width: 755.5, height: 982))
-        XCTAssertEqual(right.origin.x, 755.5)
-        XCTAssertEqual(right.maxX, 1511)
+        XCTAssertEqual(right, CGRect(x: 755.5, y: 0, width: 755.5, height: 982))
     }
 
     func testLeftHalfIgnoresStageManagerAndWindowCount() {
@@ -84,7 +83,9 @@ final class TilingLayoutEngineTests: XCTestCase {
         let frame = engine.targetFrame(for: .maximize, in: context)
 
         XCTAssertGreaterThanOrEqual(frame.minX, screen.minX)
-        XCTAssertEqual(frame.maxX, screen.maxX, accuracy: 0.0001)
+        // Exact maxX is pinned by testMaximizeStageLayoutExactMathWhenStageManagerOnWithMultipleWindows;
+        // this test only needs containment.
+        XCTAssertLessThanOrEqual(frame.maxX, screen.maxX)
         XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
         XCTAssertLessThanOrEqual(frame.maxY, screen.maxY)
 

@@ -28,6 +28,7 @@
 		A10000111 /* TilingLayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000110 /* TilingLayoutEngine.swift */; };
 		A10000104 /* StageManagerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000027 /* StageManagerDetector.swift */; };
 		A10000105 /* AccessibilityWindowControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000028 /* AccessibilityWindowControl.swift */; };
+		A10000106 /* TilingWindowCounter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000029 /* TilingWindowCounter.swift */; };
 		B20000001 /* CaptureManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000011 /* CaptureManagerTests.swift */; };
 		B20000003 /* WindowListProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000013 /* WindowListProviderTests.swift */; };
 		B20000005 /* WakeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000015 /* WakeSessionTests.swift */; };
@@ -76,6 +77,7 @@
 		A10000110 /* TilingLayoutEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingLayoutEngine.swift; sourceTree = "<group>"; };
 		A10000027 /* StageManagerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StageManagerDetector.swift; sourceTree = "<group>"; };
 		A10000028 /* AccessibilityWindowControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityWindowControl.swift; sourceTree = "<group>"; };
+		A10000029 /* TilingWindowCounter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingWindowCounter.swift; sourceTree = "<group>"; };
 		B20000015 /* WakeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeSessionTests.swift; sourceTree = "<group>"; };
 		B20000010 /* KuKaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KuKaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000011 /* CaptureManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManagerTests.swift; sourceTree = "<group>"; };
@@ -139,6 +141,7 @@
 				A10000110 /* TilingLayoutEngine.swift */,
 				A10000027 /* StageManagerDetector.swift */,
 				A10000028 /* AccessibilityWindowControl.swift */,
+				A10000029 /* TilingWindowCounter.swift */,
 				A1000001A /* DrawingView.swift */,
 				A1000001B /* EditorWindow.swift */,
 				A10000017 /* Info.plist */,
@@ -277,6 +280,7 @@
 				A10000111 /* TilingLayoutEngine.swift in Sources */,
 				A10000104 /* StageManagerDetector.swift in Sources */,
 				A10000105 /* AccessibilityWindowControl.swift in Sources */,
+				A10000106 /* TilingWindowCounter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
