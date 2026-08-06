@@ -86,13 +86,15 @@ class FakeSleepPreventer: SleepPreventing {
     private(set) var beginCount = 0
     private(set) var endCount = 0
     private(set) var lastReason: String?
+    private(set) var lastKeepDisplayAwake: Bool?
     private(set) var isPreventing = false
 
-    func begin(reason: String) {
+    func begin(reason: String, keepDisplayAwake: Bool) {
         guard !isPreventing else { return }
         isPreventing = true
         beginCount += 1
         lastReason = reason
+        lastKeepDisplayAwake = keepDisplayAwake
     }
 
     func end() {
