@@ -46,6 +46,25 @@ enum TilingScreenRules {
     /// afford that: a window has to move somewhere, so even a one-point
     /// sliver of overlap is still the only candidate screen available, and
     /// the picker has to return it rather than say "nowhere".
+    /// Index of the screen next to `currentIndex` in `direction`, for the
+    /// "second half-press sends the window to the other monitor" rule.
+    /// Screens are ordered left-to-right by horizontal center (ties, e.g.
+    /// vertically stacked screens, break by array index) and the step wraps
+    /// around at the edges — so with two screens, either direction gives the
+    /// other one. Returns nil when there is no other screen to hop to, or
+    /// `currentIndex` is out of range.
+    static func adjacentScreenIndex(of currentIndex: Int, direction: HorizontalDirection, screenFrames: [CGRect]) -> Int? {
+        guard screenFrames.count >= 2, screenFrames.indices.contains(currentIndex) else { return nil }
+        // Explicit index tie-break: Swift's sort is not guaranteed stable,
+        // and the wrap-around math needs one total order.
+        let ordered = screenFrames.indices.sorted {
+            (screenFrames[$0].midX, $0) < (screenFrames[$1].midX, $1)
+        }
+        guard let position = ordered.firstIndex(of: currentIndex) else { return nil }
+        let step = direction == .left ? -1 : 1
+        return ordered[(position + step + ordered.count) % ordered.count]
+    }
+
     static func bestScreenIndex(for windowFrame: CGRect, screenFrames: [CGRect]) -> Int? {
         var bestIndex: Int?
         var bestArea: CGFloat = 0
