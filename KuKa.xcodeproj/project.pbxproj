@@ -31,6 +31,7 @@
 		A10000106 /* TilingScreenRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000029 /* TilingScreenRules.swift */; };
 		A10000107 /* ScreenCoordinates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002A /* ScreenCoordinates.swift */; };
 		A10000108 /* WindowTilingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002B /* WindowTilingController.swift */; };
+		A10000112 /* SelectionSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002C /* SelectionSession.swift */; };
 		B20000001 /* CaptureManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000011 /* CaptureManagerTests.swift */; };
 		B20000003 /* WindowListProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000013 /* WindowListProviderTests.swift */; };
 		B20000005 /* WakeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20000015 /* WakeSessionTests.swift */; };
@@ -43,6 +44,7 @@
 		B2000000B /* TilingAdaptersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001B /* TilingAdaptersTests.swift */; };
 		B2000000C /* WindowTilingControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001C /* WindowTilingControllerTests.swift */; };
 		B2000000D /* HotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001D /* HotkeyManagerTests.swift */; };
+		B2000000E /* SelectionSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001E /* SelectionSessionTests.swift */; };
 		E227F2EA2F51CF630032905B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -84,6 +86,7 @@
 		A10000029 /* TilingScreenRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingScreenRules.swift; sourceTree = "<group>"; };
 		A1000002A /* ScreenCoordinates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCoordinates.swift; sourceTree = "<group>"; };
 		A1000002B /* WindowTilingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTilingController.swift; sourceTree = "<group>"; };
+		A1000002C /* SelectionSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionSession.swift; sourceTree = "<group>"; };
 		B20000015 /* WakeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeSessionTests.swift; sourceTree = "<group>"; };
 		B20000010 /* KuKaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KuKaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20000011 /* CaptureManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureManagerTests.swift; sourceTree = "<group>"; };
@@ -97,6 +100,7 @@
 		B2000001B /* TilingAdaptersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingAdaptersTests.swift; sourceTree = "<group>"; };
 		B2000001C /* WindowTilingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTilingControllerTests.swift; sourceTree = "<group>"; };
 		B2000001D /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
+		B2000001E /* SelectionSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionSessionTests.swift; sourceTree = "<group>"; };
 		E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -135,6 +139,7 @@
 				A10000013 /* HotkeyManager.swift */,
 				A10000014 /* OverlayWindow.swift */,
 				A10000015 /* SelectionView.swift */,
+				A1000002C /* SelectionSession.swift */,
 				A10000016 /* CaptureManager.swift */,
 				A10000019 /* ThumbnailPanel.swift */,
 				A1000001C /* ThumbnailStackManager.swift */,
@@ -184,6 +189,7 @@
 				B2000001B /* TilingAdaptersTests.swift */,
 				B2000001C /* WindowTilingControllerTests.swift */,
 				B2000001D /* HotkeyManagerTests.swift */,
+				B2000001E /* SelectionSessionTests.swift */,
 				B20000012 /* Mocks.swift */,
 			);
 			path = KuKaTests;
@@ -276,6 +282,7 @@
 				A10000003 /* HotkeyManager.swift in Sources */,
 				A10000004 /* OverlayWindow.swift in Sources */,
 				A10000005 /* SelectionView.swift in Sources */,
+				A10000112 /* SelectionSession.swift in Sources */,
 				A10000006 /* CaptureManager.swift in Sources */,
 				A10000007 /* ThumbnailPanel.swift in Sources */,
 				A10000008 /* DrawingView.swift in Sources */,
@@ -313,6 +320,7 @@
 				B2000000B /* TilingAdaptersTests.swift in Sources */,
 				B2000000C /* WindowTilingControllerTests.swift in Sources */,
 				B2000000D /* HotkeyManagerTests.swift in Sources */,
+				B2000000E /* SelectionSessionTests.swift in Sources */,
 				B20000002 /* Mocks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

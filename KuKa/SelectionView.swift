@@ -4,7 +4,7 @@ class SelectionView: NSView {
     enum Mode { case selection, windowCapture }
 
     var onSelection: ((CGRect) -> Void)?
-    var onWindowSelection: ((CGWindowID) -> Void)?
+    var onWindowSelection: ((WindowInfo) -> Void)?
     var onCancel: (() -> Void)?
     var windowListProvider: WindowListProvider = CGWindowListProvider()
 
@@ -94,7 +94,7 @@ class SelectionView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         if mode == .windowCapture {
-            if let win = highlightedWindow { onWindowSelection?(win.windowID) }
+            if let win = highlightedWindow { onWindowSelection?(win) }
             return
         }
         isDragging = false

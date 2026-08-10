@@ -6,7 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
     private let captureManager = CaptureManager()
-    private var overlayWindows: [OverlayWindow] = []
+    private let selectionSession = SelectionSession()
     private let thumbnailStack = ThumbnailStackManager()
     private var editorWindow: EditorWindow?
     private var launchAtLoginItem: NSMenuItem!
@@ -140,39 +140,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Capture Flow
 
     private func startCapture() {
-        guard overlayWindows.isEmpty else { return }
-
-        let mouseLocation = NSEvent.mouseLocation
-        var cursorScreenOverlay: OverlayWindow?
-
-        for screen in NSScreen.screens {
-            let overlay = OverlayWindow(screen: screen)
-
-            overlay.selectionView.onSelection = { [weak self] rect in
-                self?.finishCapture(rect: rect, screen: screen)
-            }
-            overlay.selectionView.onCancel = { [weak self] in
-                self?.dismissOverlay()
-            }
-            overlay.selectionView.onWindowSelection = { [weak self] windowID in
-                self?.finishWindowCapture(windowID: windowID, screen: screen)
-            }
-
-            overlayWindows.append(overlay)
-
-            if screen.frame.contains(mouseLocation) {
-                cursorScreenOverlay = overlay
-            }
-        }
-
-        NSApp.activate(ignoringOtherApps: true)
-
-        for overlay in overlayWindows {
-            if overlay === cursorScreenOverlay {
-                overlay.makeKeyAndOrderFront(nil)
-                overlay.makeFirstResponder(overlay.selectionView)
-            } else {
-                overlay.orderFront(nil)
+        Task { @MainActor in
+            switch await selectionSession.run(on: NSScreen.screens, mouseLocation: NSEvent.mouseLocation) {
+            case .rect(let rect, let screen):
+                await self.captureAndShow(screen: screen) {
+                    await self.captureManager.capture(rect: rect, screen: screen)
+                }
+            case .window(let windowID, let screen):
+                await self.captureAndShow(screen: screen) {
+                    await self.captureManager.captureWindow(windowID: windowID)
+                }
+            case .cancelled:
+                break
             }
         }
     }
@@ -187,34 +166,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func finishCapture(rect: CGRect, screen: NSScreen) {
-        captureAfterOverlayDismiss(screen: screen) {
-            await self.captureManager.capture(rect: rect, screen: screen)
-        }
-    }
-
-    private func finishWindowCapture(windowID: CGWindowID, screen: NSScreen) {
-        captureAfterOverlayDismiss(screen: screen) {
-            await self.captureManager.captureWindow(windowID: windowID)
-        }
-    }
-
-    private func captureAfterOverlayDismiss(screen: NSScreen, _ capture: @escaping () async -> CaptureResult?) {
-        dismissOverlay()
-        Task { @MainActor in
-            // Give the overlay a moment to disappear before capturing
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            guard let result = await capture() else { return }
-            self.showThumbnail(result: result, screen: screen)
-        }
-    }
-
-    private func dismissOverlay() {
-        NSCursor.pop()
-        for overlay in overlayWindows {
-            overlay.close()
-        }
-        overlayWindows.removeAll()
+    private func captureAndShow(screen: NSScreen, _ capture: () async -> CaptureResult?) async {
+        // The overlay has just closed; give it a moment to disappear before capturing
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        guard let result = await capture() else { return }
+        showThumbnail(result: result, screen: screen)
     }
 
     // MARK: - Thumbnail & Editor
