@@ -67,18 +67,19 @@ final class TilingLayoutEngineTests: XCTestCase {
         let frame = engine.targetFrame(for: .maximize, in: context)
 
         // Hand-computed from screen = (x:1920, y:25, w:1600, h:975) and the
-        // two insets (left 7%, vertical 1% top and bottom):
+        // two insets (left 7% of width; 2% of height at top, bottom, right):
         // leftInset = 0.07*1600 = 112 -> x = 1920 + 112 = 2032
-        // width = 1600 - 112 = 1488
-        // verticalInset = 0.01*975 = 9.75 -> y = 25 + 9.75 = 34.75
-        // height = 975 - 2*9.75 = 955.5
+        // edgeInset = 0.02*975 = 19.5
+        // width = 1600 - 112 - 19.5 = 1468.5
+        // y = 25 + 19.5 = 44.5
+        // height = 975 - 2*19.5 = 936
         XCTAssertEqual(frame.origin.x, 2032, accuracy: 0.0001)
-        XCTAssertEqual(frame.origin.y, 34.75, accuracy: 0.0001)
-        XCTAssertEqual(frame.width, 1488, accuracy: 0.0001)
-        XCTAssertEqual(frame.height, 955.5, accuracy: 0.0001)
+        XCTAssertEqual(frame.origin.y, 44.5, accuracy: 0.0001)
+        XCTAssertEqual(frame.width, 1468.5, accuracy: 0.0001)
+        XCTAssertEqual(frame.height, 936, accuracy: 0.0001)
     }
 
-    func testMaximizeStageLayoutStaysInsideVisibleFrameWithEqualTopAndBottomGaps() {
+    func testMaximizeStageLayoutStaysInsideVisibleFrameWithEqualTopBottomAndRightGaps() {
         let context = makeContext(windows: 2, stageManager: true)
         let frame = engine.targetFrame(for: .maximize, in: context)
 
@@ -91,7 +92,9 @@ final class TilingLayoutEngineTests: XCTestCase {
 
         let topGap = screen.maxY - frame.maxY
         let bottomGap = frame.minY - screen.minY
+        let rightGap = screen.maxX - frame.maxX
         XCTAssertEqual(topGap, bottomGap, accuracy: 0.0001)
+        XCTAssertEqual(rightGap, topGap, accuracy: 0.0001)
     }
 
     func testMaximizeFillsScreenWhenOnlyOneWindowEvenWithStageManagerOn() {

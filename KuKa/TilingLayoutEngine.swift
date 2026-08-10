@@ -47,12 +47,13 @@ enum TilingResolution: Equatable {
 /// window or toggle it back to its pre-maximize frame.
 struct TilingLayoutEngine {
     /// Fraction of `visibleFrame.width` reserved on the left for the Stage
-    /// Manager strip when maximizing with Stage Manager active. The window
-    /// fills the remaining width, reaching the right edge.
+    /// Manager strip when maximizing with Stage Manager active.
     private static let stageManagerLeftInsetFraction: CGFloat = 0.07
     /// Fraction of `visibleFrame.height` reserved as breathing room at the
-    /// top and bottom (each) when maximizing with Stage Manager active.
-    private static let stageManagerVerticalInsetFraction: CGFloat = 0.01
+    /// top, bottom, and right (each) when maximizing with Stage Manager
+    /// active. Height-based for all three edges so the gaps come out equal
+    /// in points.
+    private static let stageManagerEdgeInsetFraction: CGFloat = 0.02
 
     /// Tolerance, in points, used to decide whether a window's current frame
     /// "is" the maximize target. The Accessibility API doesn't position
@@ -79,12 +80,12 @@ struct TilingLayoutEngine {
         case .maximize:
             if context.stageStripTakesSpace {
                 let leftInset = Self.stageManagerLeftInsetFraction * context.visibleFrame.width
-                let verticalInset = Self.stageManagerVerticalInsetFraction * context.visibleFrame.height
+                let edgeInset = Self.stageManagerEdgeInsetFraction * context.visibleFrame.height
                 return CGRect(
                     x: context.visibleFrame.minX + leftInset,
-                    y: context.visibleFrame.minY + verticalInset,
-                    width: context.visibleFrame.width - leftInset,
-                    height: context.visibleFrame.height - 2 * verticalInset
+                    y: context.visibleFrame.minY + edgeInset,
+                    width: context.visibleFrame.width - leftInset - edgeInset,
+                    height: context.visibleFrame.height - 2 * edgeInset
                 )
             }
             return context.visibleFrame

@@ -33,7 +33,7 @@ Three hotkeys move the active window around its display:
 - `Ctrl+Option+Right Arrow` — snap the window to the right half of the screen
 - `Ctrl+Option+Return` — maximize the window; press it again to put the window back where it was before
 
-If you use Stage Manager (the macOS feature that shows recent apps as small thumbnails down the side of the screen), maximize leaves room for its strip on the left, plus a small gap at the top and bottom. This only happens when Stage Manager is turned on **and** there are two or more windows visible on that screen — with just one window, or with Stage Manager off, maximize fills the whole screen.
+If you use Stage Manager (the macOS feature that shows recent apps as small thumbnails down the side of the screen), maximize leaves room for its strip on the left, plus a small gap at the top, bottom, and right. This only happens when Stage Manager is turned on **and** there are two or more windows visible on that screen — with just one window, or with Stage Manager off, maximize fills the whole screen.
 
 These hotkeys aren't configurable — there's no menu or settings screen for them.
 
