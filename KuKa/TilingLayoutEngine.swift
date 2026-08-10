@@ -7,8 +7,8 @@ enum TilingAction {
     case maximize
     case center
 
-    /// The horizontal direction a half action pushes toward — the direction
-    /// a second press hops screens in. Nil for actions with no direction.
+    /// The direction a half action pushes toward, and a second press hops
+    /// screens in.
     var horizontalDirection: HorizontalDirection? {
         switch self {
         case .leftHalf: return .left
@@ -18,8 +18,6 @@ enum TilingAction {
     }
 }
 
-/// Left or right, as pressed on the arrow keys: which half of a screen a
-/// window goes to, and which neighboring screen a second press hops to.
 enum HorizontalDirection {
     case left
     case right
@@ -78,11 +76,7 @@ struct TilingRestoreState {
     let achievedFrame: CGRect
 }
 
-/// Pure window-tiling layout math: computes target frames for half-screen,
-/// maximize, and center actions, and makes the per-action decisions —
-/// whether a maximize should move the window or toggle it back to its
-/// pre-maximize frame, whether a second half-press should hop to the
-/// adjacent screen, and whether a center press should do nothing.
+/// Pure, stateless window-tiling layout math and per-action decisions.
 struct TilingLayoutEngine {
     /// Fraction of `visibleFrame.width` reserved on the left for the Stage
     /// Manager strip when maximizing with Stage Manager active.
@@ -93,20 +87,15 @@ struct TilingLayoutEngine {
     /// in points.
     private static let stageManagerEdgeInsetFraction: CGFloat = 0.02
 
-    /// Tolerance, in points, used to decide whether a window's current frame
-    /// "is" some target frame — the maximize target for the maximize toggle,
-    /// a half target for the screen hop, the maximize size for center's
-    /// no-op check. The Accessibility API doesn't position windows with
+    /// Tolerance, in points, for judging whether a window "is" at some
+    /// target frame. The Accessibility API doesn't position windows with
     /// exact precision, so an exact equality check would never match.
     private static let frameMatchTolerance: CGFloat = 2.0
 
-    /// The frame the given half of the screen's visible frame occupies.
     func halfFrame(_ direction: HorizontalDirection, in context: TilingContext) -> CGRect {
         Self.halfFrame(direction, of: context.visibleFrame)
     }
 
-    /// The frame a maximized window should occupy: the full visible frame,
-    /// or the Stage Manager-inset version of it when the strip takes space.
     func maximizeFrame(in context: TilingContext) -> CGRect {
         guard context.stageStripTakesSpace else { return context.visibleFrame }
         let leftInset = Self.stageManagerLeftInsetFraction * context.visibleFrame.width
@@ -119,31 +108,15 @@ struct TilingLayoutEngine {
         )
     }
 
-    /// Decides what a tiling action should do to a window. Returns nil when
-    /// the action should do nothing at all (center on an already
-    /// maximize-sized window).
+    /// Decides what a tiling action should do to a window. Nil means do
+    /// nothing (center on an already maximize-sized window).
     ///
-    /// For `.leftHalf`/`.rightHalf`, a window already sitting at the half
-    /// target (within tolerance) hops to the same half of
-    /// `context.adjacentVisibleFrame` instead, when one is available — the
-    /// "press twice to send to the other monitor" rule. This is judged
-    /// against the ideal target, not an achieved frame: halves don't record
-    /// restore state, so an app that snaps its size by more than the
-    /// tolerance (Terminal) just gets the same half re-applied and never
-    /// hops. Accepted — maximize needed achieved-frame bookkeeping for
-    /// restore correctness; a missed hop only costs an extra keypress.
-    ///
-    /// For `.maximize`, the current frame is judged against
-    /// `restoreState.achievedFrame` — the frame the window actually landed
-    /// on after the previous maximize — not against the freshly computed
-    /// target. See `TilingRestoreState` for why the two can differ. Pass
-    /// `nil` when no maximize has been recorded for the window; a maximize
-    /// then always moves.
-    ///
-    /// For `.center`, the window keeps its size and moves to the middle of
-    /// the visible frame — unless its size already matches the maximize
-    /// target's size (within tolerance), in which case nothing happens.
-    /// Size alone decides; position is ignored.
+    /// The hop check ("already at the half target → move to the adjacent
+    /// screen") runs against the ideal target: an app that snaps its size by
+    /// more than the tolerance (Terminal) never hops and just gets the half
+    /// re-applied — accepted, a missed hop costs one extra keypress. A
+    /// maximize press is instead judged against `restoreState.achievedFrame`;
+    /// see `TilingRestoreState` for why.
     func resolve(
         action: TilingAction,
         currentFrame: CGRect,

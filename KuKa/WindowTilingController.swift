@@ -77,9 +77,8 @@ final class WindowTilingController {
     }
 
     /// Index (into `screens`) of the screen `windowFrame` overlaps the most,
-    /// falling back to the main screen and then the first screen when the
-    /// window doesn't intersect any screen at all (e.g. it's slightly
-    /// off-screen). Nil only when there are no screens.
+    /// with main-screen and first-screen fallbacks. Nil only when there are
+    /// no screens.
     private func targetScreenIndex(for windowFrame: CGRect, screens: [NSScreen]) -> Int? {
         if let index = TilingScreenRules.bestScreenIndex(for: windowFrame, screenFrames: screens.map(\.frame)) {
             return index
