@@ -30,44 +30,23 @@ final class TilingLayoutEngineTests: XCTestCase {
     // MARK: - Left / right half math
 
     func testLeftHalfMath() {
-        let context = makeContext(windows: 1, stageManager: false)
-        let frame = engine.halfFrame(.left, in: context)
+        let frame = TilingLayoutEngine.halfFrame(.left, of: screen)
         XCTAssertEqual(frame, CGRect(x: 1920, y: 25, width: 800, height: 975))
     }
 
     func testRightHalfMath() {
-        let context = makeContext(windows: 1, stageManager: false)
-        let frame = engine.halfFrame(.right, in: context)
+        let frame = TilingLayoutEngine.halfFrame(.right, of: screen)
         XCTAssertEqual(frame, CGRect(x: 2720, y: 25, width: 800, height: 975))
     }
 
     func testHalvesOnOddWidthScreenLandOnHalfPoints() {
         let oddScreen = CGRect(x: 0, y: 0, width: 1511, height: 982)
-        let context = makeContext(windows: 1, stageManager: false, visibleFrame: oddScreen)
 
-        let left = engine.halfFrame(.left, in: context)
-        let right = engine.halfFrame(.right, in: context)
+        let left = TilingLayoutEngine.halfFrame(.left, of: oddScreen)
+        let right = TilingLayoutEngine.halfFrame(.right, of: oddScreen)
 
         XCTAssertEqual(left, CGRect(x: 0, y: 0, width: 755.5, height: 982))
         XCTAssertEqual(right, CGRect(x: 755.5, y: 0, width: 755.5, height: 982))
-    }
-
-    func testLeftHalfIgnoresStageManagerAndWindowCount() {
-        let smOff = makeContext(windows: 1, stageManager: false)
-        let smOn = makeContext(windows: 3, stageManager: true)
-        XCTAssertEqual(
-            engine.halfFrame(.left, in: smOff),
-            engine.halfFrame(.left, in: smOn)
-        )
-    }
-
-    func testRightHalfIgnoresStageManagerAndWindowCount() {
-        let smOff = makeContext(windows: 1, stageManager: false)
-        let smOn = makeContext(windows: 3, stageManager: true)
-        XCTAssertEqual(
-            engine.halfFrame(.right, in: smOff),
-            engine.halfFrame(.right, in: smOn)
-        )
     }
 
     // MARK: - Maximize math

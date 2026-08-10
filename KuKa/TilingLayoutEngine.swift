@@ -74,10 +74,6 @@ struct TilingLayoutEngine {
     /// exact precision, so an exact equality check would never match.
     private static let frameMatchTolerance: CGFloat = 2.0
 
-    func halfFrame(_ direction: HorizontalDirection, in context: TilingContext) -> CGRect {
-        Self.halfFrame(direction, of: context.visibleFrame)
-    }
-
     func maximizeFrame(in context: TilingContext) -> CGRect {
         guard context.stageStripTakesSpace else { return context.visibleFrame }
         let leftInset = Self.stageManagerLeftInsetFraction * context.visibleFrame.width
@@ -134,7 +130,7 @@ struct TilingLayoutEngine {
         return .move(to: target, savePrevious: false)
     }
 
-    private static func halfFrame(_ direction: HorizontalDirection, of visibleFrame: CGRect) -> CGRect {
+    static func halfFrame(_ direction: HorizontalDirection, of visibleFrame: CGRect) -> CGRect {
         CGRect(
             x: direction == .left ? visibleFrame.minX : visibleFrame.midX,
             y: visibleFrame.minY,
