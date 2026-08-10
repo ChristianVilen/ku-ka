@@ -31,12 +31,10 @@ protocol OverlayPresenting {
 final class SelectionSession {
     private let presenter: OverlayPresenting
     private var continuation: CheckedContinuation<SelectionResult, Never>?
-    private var currentScreens: [NSScreen] = []
     private var isActive = false
 
-    init(windowListProvider: WindowListProvider = CGWindowListProvider(),
-         presenter: OverlayPresenting? = nil) {
-        self.presenter = presenter ?? OverlayPresenter(windowListProvider: windowListProvider)
+    init(presenter: OverlayPresenting = OverlayPresenter(windowListProvider: CGWindowListProvider())) {
+        self.presenter = presenter
     }
 
     func run(on screens: [NSScreen], mouseLocation: CGPoint) async -> SelectionResult {
@@ -44,33 +42,32 @@ final class SelectionSession {
         isActive = true
         defer { isActive = false }
 
-        currentScreens = screens
         let keyScreen = screens.first { $0.frame.contains(mouseLocation) }
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
             presenter.present(on: screens, keyScreen: keyScreen) { [weak self] event in
-                self?.handle(event)
+                self?.handle(event, screens: screens)
             }
         }
     }
 
-    private func handle(_ event: OverlayEvent) {
+    private func handle(_ event: OverlayEvent, screens: [NSScreen]) {
         // Overlays can emit more than one event (e.g. Esc from a second
         // screen while the first is resolving); only the first one counts.
         guard let continuation else { return }
         self.continuation = nil
         presenter.dismissAll()
-        continuation.resume(returning: result(for: event))
+        continuation.resume(returning: result(for: event, screens: screens))
     }
 
-    private func result(for event: OverlayEvent) -> SelectionResult {
+    private func result(for event: OverlayEvent, screens: [NSScreen]) -> SelectionResult {
         switch event {
         case .rectSelected(let rect, let screen):
             return .rect(rect, on: screen)
         case .windowSelected(let info, let overlayScreen):
-            let owner = Self.owningScreenIndex(windowFrame: info.frame, screenFrames: currentScreens.map(\.frame))
-                .map { currentScreens[$0] }
+            let owner = Self.owningScreenIndex(windowFrame: info.frame, screenFrames: screens.map(\.frame))
+                .map { screens[$0] }
             return .window(info.windowID, on: owner ?? overlayScreen)
         case .cancelled:
             return .cancelled

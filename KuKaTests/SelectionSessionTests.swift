@@ -35,7 +35,7 @@ final class SelectionSessionTests: XCTestCase {
         try XCTSkipIf(NSScreen.screens.isEmpty, "No screen available in this environment")
         screen = NSScreen.screens[0]
         presenter = FakeOverlayPresenter()
-        session = SelectionSession(windowListProvider: MockWindowListProvider(), presenter: presenter)
+        session = SelectionSession(presenter: presenter)
     }
 
     /// Starts run() in a child task and yields until the presenter has been
