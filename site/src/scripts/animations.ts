@@ -139,8 +139,10 @@ if (hero) {
 		const i = thumbs.indexOf(t);
 		if (i > -1) thumbs.splice(i, 1);
 		if (motionOK) {
-			t.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: "ease-out" })
-				.onfinish = () => layout();
+			t.el.animate([{ opacity: 1 }, { opacity: 0 }], {
+				duration: 180,
+				easing: "ease-out",
+			}).onfinish = () => layout();
 		} else {
 			layout();
 		}
@@ -201,7 +203,7 @@ if (hero) {
 		if (motionOK) {
 			flashEl.animate([{ opacity: 0.45 }, { opacity: 0 }], { duration: 300, easing: "ease-out" });
 		}
-		const heroRect = hero!.getBoundingClientRect();
+		const heroRect = hero.getBoundingClientRect();
 		// Fixed 200px width like the app; height follows the capture's aspect.
 		const s = THUMB_W / rect.w;
 		const h = rect.h * s;
@@ -211,7 +213,7 @@ if (hero) {
 		img.className = "capture-thumb-img";
 		img.style.width = `${THUMB_W}px`;
 		img.style.height = `${h}px`;
-		const clone = hero!.cloneNode(true) as HTMLElement;
+		const clone = hero.cloneNode(true) as HTMLElement;
 		clone.removeAttribute("id");
 		clone.style.cssText =
 			`width:${heroRect.width}px;height:${heroRect.height}px;min-height:0;margin:0;` +
@@ -221,7 +223,7 @@ if (hero) {
 
 		const t = makeThumbShell(THUMB_W, h, img);
 		thumbs.unshift(t); // newest on top
-		if (thumbs.length > 5) thumbs.pop()!.el.remove();
+		if (thumbs.length > 5) thumbs.pop()?.el.remove();
 		layout();
 		flyIn(t, rect);
 	}
