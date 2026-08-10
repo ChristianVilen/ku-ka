@@ -18,24 +18,9 @@ Reviewed 2026-08-10, replacing the earlier version. Since then, window tiling la
 
 ---
 
-## 3. ImageStore — persistence out of CaptureManager
+## 3. ImageStore — persistence out of CaptureManager — ✅ DONE (2026-08-10)
 
-**Strength**: Strong
-
-**Files**: `CaptureManager.swift:215-287`, `ThumbnailStackManager.swift:6`, `AppDelegate.swift:222-235, 252-266`
-
-**Problem**: `saveAnnotated` (`CaptureManager.swift:215`), `saveCombined` (`:260`), and `deleteScreenshot` (`:284`) sit behind a capture interface they never use — the tests prove it: ~140 lines of `CaptureManagerTests` exercise these paths through a `MockScreenCapture` that is never called. Worse, `ThumbnailStackManager` needs these operations but gets them as a function-valued callback routed through AppDelegate:
-
-```swift
-// ThumbnailStackManager.swift:6
-var onCombine: ((NSImage, NSImage) -> CaptureResult?)?
-```
-
-A callback with a non-Void return type is a dependency wearing a callback's clothes. Five of the seven closures AppDelegate wires on `ThumbnailStackManager` and `EditorWindow` are one-line forwards into `captureManager`. `MemoryReclaim.schedule()` is called from 4 places across 2 files, every one a persistence/teardown moment.
-
-**Solution**: Extract an `ImageStore` module — `save`, `saveAnnotated`, `saveCombined`, `delete` — and inject it into `ThumbnailStackManager` and `EditorWindow` directly. It becomes the one owner of the `MemoryReclaim` policy. `CaptureManager`'s interface sharpens to capture operations only (11 methods → ~5).
-
-**Benefits**: The seam is real from day one — two production callers (`ThumbnailStackManager`, `EditorWindow`), not a hypothetical. Deletes five pass-through closures and the function-valued `onCombine`. Tests for annotate/combine/delete drop the unused mock. Locality: memory-reclaim policy in one place.
+**Implemented**: `ImageStore.swift` owns everything that happens to a produced image behind the `ImageStoring` seam: `store(cgImage:)` (the old `finalize`), `storeCombined(top:bottom:)`, `saveAnnotated(image:to:)`, `delete(at:)` — plus disk writes, clipboard policy, file naming, the Screenshots directory, and `MemoryReclaim`. The split went deep: `CaptureManager` is now pure capture (`init(screenCapture:store:)`, three methods, 141 lines — was 304) and hands every fresh CGImage to the store. `ThumbnailStackManager(store:)` and `EditorWindow(image:fileURL:store:)` receive the store directly — the function-valued `onCombine`, `onDelete`, `onStackEmptied`, `onSave`, and editor `onDelete` callbacks are all deleted; `onEdit` and `onClose` (genuine UI events) survive. The ~140 lines of persistence tests moved to `ImageStoreTests` with only construction changes; the seam is covered by delegation tests, stack tests through a `FakeImageStore`, and new `EditorWindowTests`.
 
 ---
 
@@ -43,12 +28,12 @@ A callback with a non-Void return type is a dependency wearing a callback's clot
 
 **Strength**: Strong
 
-**Files**: `CaptureManager.swift:163`, `ThumbnailStackManager.swift:89`, `WindowTilingController.swift:32, 76`, `EditorWindow.swift:13`, `AccessibilityWindowControl.swift:213`, `WindowListProvider.swift:18`, `ScreenCoordinates.swift`
+**Files**: `CaptureManager.swift:101`, `ThumbnailStackManager.swift:94`, `WindowTilingController.swift:32, 76`, `EditorWindow.swift:15`, `AccessibilityWindowControl.swift:213`, `WindowListProvider.swift:18`, `ScreenCoordinates.swift`
 
 **Problem**: Six modules read `NSScreen.screens` / `NSScreen.main` ambiently instead of receiving screens as a dependency. Standouts:
 
-- `CaptureManager.captureFullScreen(screen:)` takes a screen argument and *still* reads `NSScreen.screens[0]` (`CaptureManager.swift:163`).
-- `ThumbnailStackManager.swift:89` force-unwraps `NSScreen.main!` — crashes headless.
+- `CaptureManager.captureFullScreen(screen:)` takes a screen argument and *still* reads `NSScreen.screens[0]` (`CaptureManager.swift:101`).
+- `ThumbnailStackManager.swift:94` force-unwraps `NSScreen.main!` — crashes headless.
 - The cost shows up in the tests: `WindowTilingControllerTests.swift:14` opens with `XCTSkipIf(NSScreen.screens.isEmpty)`.
 
 Related: coordinate flipping is hand-rolled four different ways in three files (`CaptureManager.swift:164-169` flips against the primary screen, `:189-194` against the local screen — different rules in adjacent methods; `:74-79` subtracts the display origin again in the adapter; `SelectionView.swift:155-160` has a fourth). `ScreenCoordinates.flipVertical` — the module built exactly for this — is used only by the tiling side.
@@ -63,9 +48,9 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 **Strength**: Worth exploring
 
-**Files**: `AppDelegate.swift:40-121` (menu build), `AppDelegate.swift:256-287` (badge drawing)
+**Files**: `AppDelegate.swift:40-121` (menu build), `AppDelegate.swift:239-270` (badge drawing)
 
-**Problem**: The single largest block in AppDelegate (82 lines) builds the status-bar menu with imperative `NSMenuItem` calls; 31 more lines compose the status-item icon badge with Core Graphics. Neither is orchestration nor wiring — it is UI construction living in the app delegate. With the capture flow extracted, this is most of the 287 lines AppDelegate has left.
+**Problem**: The single largest block in AppDelegate (82 lines) builds the status-bar menu with imperative `NSMenuItem` calls; 31 more lines compose the status-item icon badge with Core Graphics. Neither is orchestration nor wiring — it is UI construction living in the app delegate. With the capture flow and persistence wiring extracted, this is most of the 270 lines AppDelegate has left.
 
 **Solution**: Extract a `StatusMenu` module that builds the menu and renders the icon from passed-in state — state in, `NSMenu`/`NSImage` out. Returns results, no side effects.
 
@@ -77,7 +62,7 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 **Strength**: Worth exploring
 
-**Files**: `AppDelegate.swift:53, 67, 204, 230-235, 243-254`, `CaptureFlow.swift:43-45`; pattern to copy: `KeepAwakeController.swift:40`
+**Files**: `AppDelegate.swift:53, 67, 187, 213-218, 226-237`, `CaptureFlow.swift:43-45`; pattern to copy: `KeepAwakeController.swift:40`
 
 **Problem**: Three preference keys are read/written ambiently: `"thumbnailDuration"` (string key ×3 — two in AppDelegate, one as CaptureFlow's injected default — default `5.0` ×2), `"windowTilingEnabled"` (`?? true` duplicated), and launch-at-login against the `SMAppService.mainApp` singleton (read ×3, untestable). A `Settings` module replaces CaptureFlow's duration default in one line. The good pattern already exists in this codebase — `KeepAwakeController` takes `defaults: UserDefaults = .standard` as an injected dependency, which is what lets its tests use a scratch suite. AppDelegate doesn't use it.
 
@@ -103,4 +88,4 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 ## Top recommendation
 
-~~SelectionSession~~ and ~~CaptureFlow~~ — both done 2026-08-10. Next up: **ImageStore** (candidate 3) — deletes five pass-through closures and un-warps a callback that returns a value. After that, **Screens seam** (candidate 4) mops up the ambient `NSScreen` reads that the two finished refactors deliberately left in AppDelegate.
+~~SelectionSession~~, ~~CaptureFlow~~, and ~~ImageStore~~ — all done 2026-08-10. Next up: **Screens seam** (candidate 4) — mops up the ambient `NSScreen` reads the finished refactors deliberately left behind, deletes the test-suite `XCTSkipIf`, and kills the headless `NSScreen.main!` crash. **StatusMenu** (candidate 5) and **Settings** (candidate 6) remain as smaller follow-ups.

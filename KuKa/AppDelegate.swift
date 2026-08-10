@@ -5,13 +5,13 @@ import ServiceManagement
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
-    private let captureManager = CaptureManager()
+    private let imageStore = ImageStore()
     private lazy var captureFlow = CaptureFlow(
         selection: SelectionSession(),
-        capture: captureManager,
+        capture: CaptureManager(store: imageStore),
         thumbnails: thumbnailStack
     )
-    private let thumbnailStack = ThumbnailStackManager()
+    private lazy var thumbnailStack = ThumbnailStackManager(store: imageStore)
     private var editorWindow: EditorWindow?
     private var launchAtLoginItem: NSMenuItem!
     private var windowTilingItem: NSMenuItem!
@@ -158,15 +158,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         thumbnailStack.onEdit = { [weak self] result in
             self?.openEditor(result: result)
         }
-        thumbnailStack.onCombine = { [weak self] topImage, bottomImage in
-            self?.captureManager.saveCombined(topImage: topImage, bottomImage: bottomImage)
-        }
-        thumbnailStack.onDelete = { [weak self] result in
-            self?.captureManager.deleteScreenshot(at: result.fileURL)
-        }
-        // The stack holds the full-resolution captures; once the last panel
-        // closes they deallocate, so hand the freed pages back to the OS.
-        thumbnailStack.onStackEmptied = { MemoryReclaim.schedule() }
     }
 
     private func setupKeepAwake() {
@@ -176,16 +167,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func openEditor(result: CaptureResult) {
         NSApp.activate(ignoringOtherApps: true)
 
-        let editor = EditorWindow(image: result.image)
+        let editor = EditorWindow(image: result.image, fileURL: result.fileURL, store: imageStore)
         editorWindow = editor
-
-        editor.onSave = { [weak self] annotatedImage in
-            self?.captureManager.saveAnnotated(image: annotatedImage, to: result.fileURL)
-        }
-
-        editor.onDelete = { [weak self] in
-            self?.captureManager.deleteScreenshot(at: result.fileURL)
-        }
 
         // Drop our reference once the window closes (Done/Delete/close button/Escape)
         // so the editor and its full-resolution image deallocate. Closing only

@@ -1,13 +1,15 @@
 import Cocoa
 
 class EditorWindow: NSPanel, NSWindowDelegate {
-    var onSave: ((NSImage) -> Void)?
-    var onDelete: (() -> Void)?
     var onClose: (() -> Void)?
     private let drawingView: DrawingView
+    private let fileURL: URL
+    private let store: ImageStoring
 
-    init(image: NSImage) {
+    init(image: NSImage, fileURL: URL, store: ImageStoring) {
         drawingView = DrawingView(image: image)
+        self.fileURL = fileURL
+        self.store = store
 
         // Size to fit image, capped at 80% of screen
         let screen = NSScreen.main ?? NSScreen.screens[0]
@@ -65,14 +67,13 @@ class EditorWindow: NSPanel, NSWindowDelegate {
         drawingView.undo()
     }
 
-    @objc private func doneTapped() {
-        let composited = drawingView.compositeImage()
-        onSave?(composited)
+    @objc func doneTapped() {
+        store.saveAnnotated(image: drawingView.compositeImage(), to: fileURL)
         close()
     }
 
-    @objc private func deleteTapped() {
-        onDelete?()
+    @objc func deleteTapped() {
+        store.delete(at: fileURL)
         close()
     }
 

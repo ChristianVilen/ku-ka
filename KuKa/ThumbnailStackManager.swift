@@ -3,13 +3,15 @@ import Cocoa
 class ThumbnailStackManager {
     private(set) var entries: [(panel: ThumbnailPanel, result: CaptureResult)] = []
     var onEdit: ((CaptureResult) -> Void)?
-    var onCombine: ((NSImage, NSImage) -> CaptureResult?)?
-    var onDelete: ((CaptureResult) -> Void)?
-    var onStackEmptied: (() -> Void)?
+    private let store: ImageStoring
     private var combineButtons: [CombineButton] = []
     private var currentDuration: TimeInterval = 5.0
     private var currentScreen: NSScreen?
     private static let maxCount = 5
+
+    init(store: ImageStoring) {
+        self.store = store
+    }
 
     func add(image: NSImage, result: CaptureResult, screen: NSScreen, duration: TimeInterval) {
         currentDuration = duration
@@ -47,7 +49,10 @@ class ThumbnailStackManager {
         }
 
         if entries.isEmpty {
-            onStackEmptied?()
+            // The stack holds the full-resolution captures; once the last
+            // panel closes they deallocate, so hand the freed pages back
+            // to the OS.
+            MemoryReclaim.schedule()
         }
 
         repositionAll(animated: true)
@@ -61,7 +66,7 @@ class ThumbnailStackManager {
         let olderEntry = entries[max(upperIndex, lowerIndex)]
         let newerEntry = entries[min(upperIndex, lowerIndex)]
 
-        guard let combinedResult = onCombine?(olderEntry.result.image, newerEntry.result.image) else { return }
+        guard let combinedResult = store.storeCombined(top: olderEntry.result.image, bottom: newerEntry.result.image) else { return }
 
         // Remove both source panels
         for p in [olderEntry.panel, newerEntry.panel] {
@@ -112,7 +117,7 @@ class ThumbnailStackManager {
             guard let self, let panel else { return }
             let result = self.entries.first(where: { $0.panel === panel })?.result
             self.remove(panel: panel)
-            if let result { self.onDelete?(result) }
+            if let result { self.store.delete(at: result.fileURL) }
         }
 
         return panel

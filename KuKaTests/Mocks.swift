@@ -137,3 +137,32 @@ class FakeSleepPreventer: SleepPreventing {
         endCount += 1
     }
 }
+
+// MARK: - Fake ImageStore
+
+class FakeImageStore: ImageStoring {
+    private(set) var storedImages: [CGImage] = []
+    private(set) var combinedCalls: [(top: NSImage, bottom: NSImage)] = []
+    private(set) var annotatedCalls: [(image: NSImage, url: URL)] = []
+    private(set) var deletedURLs: [URL] = []
+    var combinedResultToReturn: CaptureResult?
+
+    func store(cgImage: CGImage) -> CaptureResult {
+        storedImages.append(cgImage)
+        let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        return CaptureResult(image: image, fileURL: URL(fileURLWithPath: "/tmp/kuka-test/stored-\(storedImages.count).png"))
+    }
+
+    func storeCombined(top: NSImage, bottom: NSImage) -> CaptureResult? {
+        combinedCalls.append((top, bottom))
+        return combinedResultToReturn
+    }
+
+    func saveAnnotated(image: NSImage, to url: URL) {
+        annotatedCalls.append((image, url))
+    }
+
+    func delete(at url: URL) {
+        deletedURLs.append(url)
+    }
+}
