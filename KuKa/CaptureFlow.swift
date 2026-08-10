@@ -40,9 +40,7 @@ final class CaptureFlow {
     init(selection: SelectionRunning,
          capture: CaptureProviding,
          thumbnails: ThumbnailPresenting,
-         thumbnailDuration: @escaping () -> TimeInterval = {
-             UserDefaults.standard.object(forKey: "thumbnailDuration") as? Double ?? 5.0
-         },
+         thumbnailDuration: @escaping () -> TimeInterval = { Settings().thumbnailDuration },
          flash: @escaping (NSScreen) -> Void = { FlashView.flash(on: $0) },
          settleDelay: TimeInterval = 0.05) {
         self.selection = selection

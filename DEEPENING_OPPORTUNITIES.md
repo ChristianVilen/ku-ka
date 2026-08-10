@@ -44,33 +44,15 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 ---
 
-## 5. StatusMenu — UI construction out of AppDelegate
+## 5. StatusMenu — UI construction out of AppDelegate — ✅ DONE (2026-08-10)
 
-**Strength**: Worth exploring
-
-**Files**: `AppDelegate.swift:40-121` (menu build), `AppDelegate.swift:239-270` (badge drawing)
-
-**Problem**: The single largest block in AppDelegate (82 lines) builds the status-bar menu with imperative `NSMenuItem` calls; 31 more lines compose the status-item icon badge with Core Graphics. Neither is orchestration nor wiring — it is UI construction living in the app delegate. With the capture flow and persistence wiring extracted, this is most of the 270 lines AppDelegate has left.
-
-**Solution**: Extract a `StatusMenu` module that builds the menu and renders the icon from passed-in state — state in, `NSMenu`/`NSImage` out. Returns results, no side effects.
-
-**Benefits**: AppDelegate drops to roughly 240 lines before the other candidates land. Menu structure becomes assertable without a running app. Mechanical: low risk, no seam decisions to make.
+**Implemented**: `StatusMenu.swift` (170 lines) owns the menu-bar menu end to end: it builds the structure, owns the five action handlers (writing through `Settings`), keeps checkmarks in step, embeds the keep-awake section, serves as the menu's delegate (forwarding open/close to `KeepAwakeController`), and renders the status-item icon via `icon(keepAwakeActive:)`. The split went deeper than the original state-in/menu-out sketch — owning the handlers deleted them from AppDelegate entirely. `StatusMenuTests` (5 tests) asserts structure, toggle behaviour through a scratch-defaults `Settings`, exclusive duration selection, the login seam, and the badge.
 
 ---
 
-## 6. Settings — typed preferences, injected defaults
+## 6. Settings — typed preferences, injected defaults — ✅ DONE (2026-08-10)
 
-**Strength**: Worth exploring
-
-**Files**: `AppDelegate.swift:53, 67, 187, 213-218, 226-237`, `CaptureFlow.swift:43-45`; pattern to copy: `KeepAwakeController.swift:40`
-
-**Problem**: Three preference keys are read/written ambiently: `"thumbnailDuration"` (string key ×3 — two in AppDelegate, one as CaptureFlow's injected default — default `5.0` ×2), `"windowTilingEnabled"` (`?? true` duplicated), and launch-at-login against the `SMAppService.mainApp` singleton (read ×3, untestable). A `Settings` module replaces CaptureFlow's duration default in one line. The good pattern already exists in this codebase — `KeepAwakeController` takes `defaults: UserDefaults = .standard` as an injected dependency, which is what lets its tests use a scratch suite. AppDelegate doesn't use it.
-
-**Solution**: A `Settings` module with typed properties (`thumbnailDuration`, `windowTilingEnabled`, `launchAtLogin`), keys and defaults defined once, `UserDefaults` and `SMAppService` as implementation.
-
-**Benefits**: Keys and defaults defined once. Launch-at-login gets a test surface. Small change; the injection pattern is already proven in-repo.
-
-**Note**: the earlier version of this candidate claimed `ThumbnailStackManager` reads `UserDefaults` directly. That was wrong — it already takes `duration:` as a parameter, and its timer behaviour is already tested. The candidate survives on the evidence above instead.
+**Implemented**: `Settings.swift` (52 lines) holds `thumbnailDuration`, `windowTilingEnabled`, and launch-at-login as typed properties — every key and default defined once. Launch-at-login sits behind a `LoginItemManaging` seam (`SystemLoginItem` wraps `SMAppService`), so it finally has a test surface. `CaptureFlow`'s duration default now reads `Settings()` — the `"thumbnailDuration"` string exists in exactly one production file. `SettingsTests` (4 tests) uses a scratch `UserDefaults` suite and a fake login item, including the registration-failure path.
 
 ---
 
@@ -88,4 +70,4 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 ## Top recommendation
 
-~~SelectionSession~~, ~~CaptureFlow~~, and ~~ImageStore~~ — all done 2026-08-10. Next up: **Screens seam** (candidate 4) — mops up the ambient `NSScreen` reads the finished refactors deliberately left behind, deletes the test-suite `XCTSkipIf`, and kills the headless `NSScreen.main!` crash. **StatusMenu** (candidate 5) and **Settings** (candidate 6) remain as smaller follow-ups.
+Candidates 1, 2, 3, 5, and 6 are all done (2026-08-10). AppDelegate is 110 lines of construction and wiring — down from 357 when this review started. The one remaining refactor is the **Screens seam** (candidate 4): mop up the ambient `NSScreen` reads the finished refactors deliberately left behind, delete the test-suite `XCTSkipIf`, and kill the headless `NSScreen.main!` crash. Candidate 7 (StageManagerDetector) stays an awareness item.

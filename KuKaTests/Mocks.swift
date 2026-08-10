@@ -166,3 +166,17 @@ class FakeImageStore: ImageStoring {
         deletedURLs.append(url)
     }
 }
+
+// MARK: - Fake LoginItem
+
+class FakeLoginItem: LoginItemManaging {
+    var isEnabled = false
+    var errorToThrow: Error?
+    private(set) var setCalls: [Bool] = []
+
+    func setEnabled(_ enabled: Bool) throws {
+        if let errorToThrow { throw errorToThrow }
+        setCalls.append(enabled)
+        isEnabled = enabled
+    }
+}

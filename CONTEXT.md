@@ -7,3 +7,5 @@
 - **Thumbnail stack** — the pile of floating capture previews in the screen corner; entries can be edited, combined, deleted, or left to expire. Owned by `ThumbnailStackManager`.
 - **Tiling** — moving the focused window to half/maximized/centered positions across screens via hotkeys. Owned by `WindowTilingController`.
 - **Keep awake** — a timed session preventing system/display sleep. Owned by `WakeManager` / `KeepAwakeController`.
+- **Settings** — the user's preferences (thumbnail duration, window tiling on/off, launch at login), with every key and default defined once. Owned by `Settings`.
+- **Status menu** — the menu-bar menu and status-item icon: structure, action handling, checkmark state, and the keep-awake badge. Owned by `StatusMenu`.
