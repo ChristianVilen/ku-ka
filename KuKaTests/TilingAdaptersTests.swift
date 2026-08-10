@@ -129,35 +129,4 @@ final class TilingAdaptersTests: XCTestCase {
         XCTAssertEqual(TilingScreenRules.bestScreenIndex(for: window, screenFrames: screens), 0)
     }
 
-    // MARK: - AccessibilityWindowControl coordinate conversion
-
-    func testNSToAXHandComputed() {
-        // primaryScreenHeight 1200, NS frame (x:50, y:100, w:400, h:300):
-        // y_ax = 1200 - 100 - 300 = 800
-        let ns = CGRect(x: 50, y: 100, width: 400, height: 300)
-        let ax = AccessibilityWindowControl.nsToAX(ns, primaryScreenHeight: 1200)
-        XCTAssertEqual(ax, CGRect(x: 50, y: 800, width: 400, height: 300))
-    }
-
-    func testAXToNSHandComputed() {
-        // primaryScreenHeight 1000, AX frame (x:20, y:50, w:200, h:150):
-        // y_ns = 1000 - 50 - 150 = 800
-        let ax = CGRect(x: 20, y: 50, width: 200, height: 150)
-        let ns = AccessibilityWindowControl.axToNS(ax, primaryScreenHeight: 1000)
-        XCTAssertEqual(ns, CGRect(x: 20, y: 800, width: 200, height: 150))
-    }
-
-    func testNSToAXToNSRoundTrips() {
-        let ns = CGRect(x: 123, y: 456, width: 789, height: 321)
-        let ax = AccessibilityWindowControl.nsToAX(ns, primaryScreenHeight: 1600)
-        let roundTripped = AccessibilityWindowControl.axToNS(ax, primaryScreenHeight: 1600)
-        XCTAssertEqual(roundTripped, ns)
-    }
-
-    func testAXToNSToAXRoundTrips() {
-        let ax = CGRect(x: 10, y: 20, width: 640, height: 480)
-        let ns = AccessibilityWindowControl.axToNS(ax, primaryScreenHeight: 1440)
-        let roundTripped = AccessibilityWindowControl.nsToAX(ns, primaryScreenHeight: 1440)
-        XCTAssertEqual(roundTripped, ax)
-    }
 }

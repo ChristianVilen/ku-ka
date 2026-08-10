@@ -118,7 +118,7 @@ final class TilingLayoutEngineTests: XCTestCase {
         let context = makeContext(windows: 2, stageManager: false)
         let current = CGRect(x: 0, y: 0, width: 100, height: 100)
 
-        let result = engine.resolve(action: .leftHalf, currentFrame: current, savedFrame: nil, context: context)
+        let result = engine.resolve(action: .leftHalf, currentFrame: current, restoreState: nil, context: context)
 
         XCTAssertEqual(result, .move(to: CGRect(x: 1920, y: 25, width: 800, height: 975), savePrevious: false))
     }
@@ -130,7 +130,10 @@ final class TilingLayoutEngineTests: XCTestCase {
         let result = engine.resolve(
             action: .rightHalf,
             currentFrame: current,
-            savedFrame: CGRect(x: 1, y: 1, width: 1, height: 1),
+            restoreState: TilingRestoreState(
+                previousFrame: CGRect(x: 1, y: 1, width: 1, height: 1),
+                achievedFrame: current
+            ),
             context: context
         )
 
@@ -141,7 +144,7 @@ final class TilingLayoutEngineTests: XCTestCase {
         let context = makeContext(windows: 1, stageManager: false)
         let current = CGRect(x: 100, y: 100, width: 300, height: 300)
 
-        let result = engine.resolve(action: .maximize, currentFrame: current, savedFrame: nil, context: context)
+        let result = engine.resolve(action: .maximize, currentFrame: current, restoreState: nil, context: context)
 
         XCTAssertEqual(result, .move(to: screen, savePrevious: true))
     }
@@ -157,17 +160,22 @@ final class TilingLayoutEngineTests: XCTestCase {
         )
         let saved = CGRect(x: 500, y: 500, width: 400, height: 400)
 
-        let result = engine.resolve(action: .maximize, currentFrame: current, savedFrame: saved, context: context)
+        let result = engine.resolve(
+            action: .maximize,
+            currentFrame: current,
+            restoreState: TilingRestoreState(previousFrame: saved, achievedFrame: target),
+            context: context
+        )
 
         XCTAssertEqual(result, .restore(to: saved))
     }
 
-    func testResolveMaximizeWithinToleranceButNoSavedFrameReappliesAndSaves() {
+    func testResolveMaximizeWithinToleranceButNoRestoreStateReappliesAndSaves() {
         let context = makeContext(windows: 1, stageManager: false)
         let target = screen
         let current = CGRect(x: target.minX + 1, y: target.minY, width: target.width, height: target.height)
 
-        let result = engine.resolve(action: .maximize, currentFrame: current, savedFrame: nil, context: context)
+        let result = engine.resolve(action: .maximize, currentFrame: current, restoreState: nil, context: context)
 
         XCTAssertEqual(result, .move(to: target, savePrevious: true))
     }
@@ -178,7 +186,12 @@ final class TilingLayoutEngineTests: XCTestCase {
         let current = CGRect(x: target.minX + 2.0, y: target.minY, width: target.width, height: target.height)
         let saved = CGRect(x: 10, y: 10, width: 10, height: 10)
 
-        let result = engine.resolve(action: .maximize, currentFrame: current, savedFrame: saved, context: context)
+        let result = engine.resolve(
+            action: .maximize,
+            currentFrame: current,
+            restoreState: TilingRestoreState(previousFrame: saved, achievedFrame: target),
+            context: context
+        )
 
         XCTAssertEqual(result, .restore(to: saved))
     }
@@ -189,12 +202,17 @@ final class TilingLayoutEngineTests: XCTestCase {
         let current = CGRect(x: target.minX + 2.1, y: target.minY, width: target.width, height: target.height)
         let saved = CGRect(x: 10, y: 10, width: 10, height: 10)
 
-        let result = engine.resolve(action: .maximize, currentFrame: current, savedFrame: saved, context: context)
+        let result = engine.resolve(
+            action: .maximize,
+            currentFrame: current,
+            restoreState: TilingRestoreState(previousFrame: saved, achievedFrame: target),
+            context: context
+        )
 
         XCTAssertEqual(result, .move(to: target, savePrevious: true))
     }
 
-    // MARK: - resolve() with achievedTargetFrame (apps that snap sizes, e.g. Terminal)
+    // MARK: - resolve() with a snapped achieved frame (apps that snap sizes, e.g. Terminal)
 
     func testResolveMaximizeWithinToleranceOfAchievedFrameButFarFromIdealTargetRestores() {
         let context = makeContext(windows: 1, stageManager: false)
@@ -210,15 +228,14 @@ final class TilingLayoutEngineTests: XCTestCase {
         let result = engine.resolve(
             action: .maximize,
             currentFrame: current,
-            savedFrame: saved,
-            achievedTargetFrame: achieved,
+            restoreState: TilingRestoreState(previousFrame: saved, achievedFrame: achieved),
             context: context
         )
 
         XCTAssertEqual(result, .restore(to: saved))
     }
 
-    func testResolveMaximizeIgnoresIdealTargetWhenAchievedFrameProvidedAndDiffers() {
+    func testResolveMaximizeIgnoresIdealTargetWhenAchievedFrameDiffers() {
         let context = makeContext(windows: 1, stageManager: false)
         let idealTarget = screen
         let achieved = CGRect(x: idealTarget.minX + 50, y: idealTarget.minY, width: idealTarget.width - 50, height: idealTarget.height)
@@ -231,28 +248,10 @@ final class TilingLayoutEngineTests: XCTestCase {
         let result = engine.resolve(
             action: .maximize,
             currentFrame: current,
-            savedFrame: saved,
-            achievedTargetFrame: achieved,
+            restoreState: TilingRestoreState(previousFrame: saved, achievedFrame: achieved),
             context: context
         )
 
         XCTAssertEqual(result, .move(to: idealTarget, savePrevious: true))
-    }
-
-    func testResolveMaximizeWithNilAchievedFrameFallsBackToIdealTarget() {
-        let context = makeContext(windows: 1, stageManager: false)
-        let target = screen
-        let current = CGRect(x: target.minX + 1, y: target.minY, width: target.width, height: target.height)
-        let saved = CGRect(x: 500, y: 500, width: 400, height: 400)
-
-        let result = engine.resolve(
-            action: .maximize,
-            currentFrame: current,
-            savedFrame: saved,
-            achievedTargetFrame: nil,
-            context: context
-        )
-
-        XCTAssertEqual(result, .restore(to: saved))
     }
 }

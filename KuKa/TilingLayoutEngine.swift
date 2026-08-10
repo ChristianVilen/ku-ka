@@ -42,6 +42,19 @@ enum TilingResolution: Equatable {
     case restore(to: CGRect)
 }
 
+/// Per-window state kept between a maximize press and whatever press
+/// restores it: the frame the window had right before maximizing
+/// (`previousFrame`), and the frame it actually landed on (`achievedFrame`).
+/// The two can differ — some apps (Terminal, snapping to a character-cell
+/// grid, is the standing example) don't honor the exact frame Ku-Ka asks
+/// for, so recognizing "the user pressed maximize again on an
+/// already-maximized window" has to be judged against what's really on
+/// screen, not the frame Ku-Ka originally requested.
+struct TilingRestoreState {
+    let previousFrame: CGRect
+    let achievedFrame: CGRect
+}
+
 /// Pure window-tiling layout math: computes target frames for half-screen
 /// and maximize actions, and decides whether a maximize should move the
 /// window or toggle it back to its pre-maximize frame.
@@ -94,22 +107,16 @@ struct TilingLayoutEngine {
 
     /// Decides what a tiling action should do to a window.
     ///
-    /// For `.maximize`, `achievedTargetFrame` — the frame the window actually
-    /// landed on after a previous maximize, if any — takes priority over the
-    /// freshly computed target when deciding whether the window "is" already
-    /// maximized. Some apps (e.g. Terminal, which snaps windows to a
-    /// character-cell grid) never land exactly on the ideal target, so
-    /// comparing against the ideal target on every press would never
-    /// recognize a second press as "already maximized" and would silently
-    /// clobber the saved pre-maximize frame every time. Pass `nil` (the
-    /// default) when there's no prior achieved frame to compare against —
-    /// the freshly computed target is used instead, same as before this
-    /// parameter existed.
+    /// For `.maximize`, the current frame is judged against
+    /// `restoreState.achievedFrame` — the frame the window actually landed
+    /// on after the previous maximize — not against the freshly computed
+    /// target. See `TilingRestoreState` for why the two can differ. Pass
+    /// `nil` when no maximize has been recorded for the window; a maximize
+    /// then always moves.
     func resolve(
         action: TilingAction,
         currentFrame: CGRect,
-        savedFrame: CGRect?,
-        achievedTargetFrame: CGRect? = nil,
+        restoreState: TilingRestoreState?,
         context: TilingContext
     ) -> TilingResolution {
         let target = targetFrame(for: action, in: context)
@@ -118,9 +125,8 @@ struct TilingLayoutEngine {
         case .leftHalf, .rightHalf:
             return .move(to: target, savePrevious: false)
         case .maximize:
-            let comparisonTarget = achievedTargetFrame ?? target
-            if let savedFrame, Self.isWithinTolerance(currentFrame, comparisonTarget) {
-                return .restore(to: savedFrame)
+            if let restoreState, Self.isWithinTolerance(currentFrame, restoreState.achievedFrame) {
+                return .restore(to: restoreState.previousFrame)
             }
             return .move(to: target, savePrevious: true)
         }

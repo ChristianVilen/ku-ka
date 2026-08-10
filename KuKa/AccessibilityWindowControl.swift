@@ -83,8 +83,9 @@ struct AccessibilityWindowControl: WindowControlling {
             return nil
         }
 
+        // AX (top-left origin) -> NS (bottom-left origin)
         let axFrame = CGRect(origin: position, size: size)
-        let nsFrame = Self.axToNS(axFrame, primaryScreenHeight: primaryScreenHeight)
+        let nsFrame = ScreenCoordinates.flipVertical(axFrame, primaryScreenHeight: primaryScreenHeight)
         return FocusedWindow(element: window, frame: nsFrame)
     }
 
@@ -108,7 +109,9 @@ struct AccessibilityWindowControl: WindowControlling {
             return nil
         }
 
-        let axFrame = Self.nsToAX(frame, primaryScreenHeight: primaryScreenHeight)
+        // NS (bottom-left origin) -> AX (top-left origin); the flip is its
+        // own inverse, so both directions are the same transform.
+        let axFrame = ScreenCoordinates.flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
         var position = axFrame.origin
         var size = axFrame.size
         guard let positionValue = AXValueCreate(.cgPoint, &position),
@@ -141,7 +144,7 @@ struct AccessibilityWindowControl: WindowControlling {
         }
 
         let achievedAXFrame = CGRect(origin: achievedPosition, size: achievedSize)
-        return Self.axToNS(achievedAXFrame, primaryScreenHeight: primaryScreenHeight)
+        return ScreenCoordinates.flipVertical(achievedAXFrame, primaryScreenHeight: primaryScreenHeight)
     }
 
     // MARK: - AX read helpers
@@ -208,23 +211,5 @@ struct AccessibilityWindowControl: WindowControlling {
     /// callers bail out instead of silently flipping coordinates around 0).
     private static func primaryScreenHeight() -> CGFloat? {
         NSScreen.screens.first?.frame.height
-    }
-
-    // MARK: - Coordinate conversion
-    //
-    // Thin wrappers over ScreenCoordinates' shared flip — pure math,
-    // independent of any actor/thread, so they're marked `nonisolated` and
-    // stay callable from plain synchronous code (tests) without hopping onto
-    // the main actor.
-
-    /// NS (bottom-left origin) -> AX (top-left origin) global coordinates.
-    nonisolated static func nsToAX(_ frame: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        ScreenCoordinates.flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
-    }
-
-    /// AX (top-left origin) -> NS (bottom-left origin) global coordinates.
-    /// The flip is self-inverse, so this is the same transform as `nsToAX`.
-    nonisolated static func axToNS(_ frame: CGRect, primaryScreenHeight: CGFloat) -> CGRect {
-        ScreenCoordinates.flipVertical(frame, primaryScreenHeight: primaryScreenHeight)
     }
 }

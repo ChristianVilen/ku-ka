@@ -4,7 +4,8 @@ import XCTest
 /// Tests feed synthetic key events straight into `HotkeyManager.handleEvent`
 /// — no event tap, no Accessibility permission needed. What's under test is
 /// the routing decision: which key combos get swallowed (returning nil tells
-/// the tap to drop the event) and which pass through to other apps.
+/// the tap to drop the event) and which pass through to other apps, and
+/// which `HotkeyAction` each swallowed combo turns into.
 final class HotkeyManagerTests: XCTestCase {
     private var manager: HotkeyManager!
 
@@ -26,20 +27,21 @@ final class HotkeyManagerTests: XCTestCase {
         }
     }
 
-    private let tilingKeys: [(code: CGKeyCode, name: String)] = [
-        (0x7B, "left arrow"), (0x7C, "right arrow"), (0x24, "return"),
+    private let tilingKeys: [(code: CGKeyCode, action: HotkeyAction, name: String)] = [
+        (0x7B, .tile(.leftHalf), "left arrow"),
+        (0x7C, .tile(.rightHalf), "right arrow"),
+        (0x24, .tile(.maximize), "return"),
     ]
     private let ctrlOption: CGEventFlags = [.maskControl, .maskAlternate]
 
     // MARK: - Tiling enabled (default)
 
-    func testTilingKeysAreSwallowedAndFireCallbacksByDefault() {
-        for (code, name) in tilingKeys {
-            let fired = expectation(description: "callback fired for \(name)")
-            switch code {
-            case 0x7B: manager.onTileLeft = { fired.fulfill() }
-            case 0x7C: manager.onTileRight = { fired.fulfill() }
-            default: manager.onTileMaximize = { fired.fulfill() }
+    func testTilingKeysAreSwallowedAndDeliverTheirActionsByDefault() {
+        for (code, expected, name) in tilingKeys {
+            let fired = expectation(description: "action delivered for \(name)")
+            manager.onAction = { action in
+                XCTAssertEqual(action, expected)
+                fired.fulfill()
             }
 
             XCTAssertTrue(
@@ -52,17 +54,13 @@ final class HotkeyManagerTests: XCTestCase {
 
     // MARK: - Tiling disabled
 
-    func testTilingKeysPassThroughWithoutFiringCallbacksWhenDisabled() {
+    func testTilingKeysPassThroughWithoutDeliveringActionsWhenDisabled() {
         manager.tilingEnabled = false
 
-        for (code, name) in tilingKeys {
-            let notFired = expectation(description: "no callback for \(name)")
+        for (code, _, name) in tilingKeys {
+            let notFired = expectation(description: "no action for \(name)")
             notFired.isInverted = true
-            switch code {
-            case 0x7B: manager.onTileLeft = { notFired.fulfill() }
-            case 0x7C: manager.onTileRight = { notFired.fulfill() }
-            default: manager.onTileMaximize = { notFired.fulfill() }
-            }
+            manager.onAction = { _ in notFired.fulfill() }
 
             XCTAssertFalse(
                 isSwallowed(code, flags: ctrlOption),
@@ -75,8 +73,11 @@ final class HotkeyManagerTests: XCTestCase {
     func testScreenshotHotkeysStillWorkWhenTilingIsDisabled() {
         manager.tilingEnabled = false
 
-        let fired = expectation(description: "screenshot callback fired")
-        manager.onHotkey = { fired.fulfill() }
+        let fired = expectation(description: "screenshot action delivered")
+        manager.onAction = { action in
+            XCTAssertEqual(action, .captureArea)
+            fired.fulfill()
+        }
 
         XCTAssertTrue(
             isSwallowed(0x15, flags: [.maskShift, .maskCommand]),
@@ -89,8 +90,11 @@ final class HotkeyManagerTests: XCTestCase {
         manager.tilingEnabled = false
         manager.tilingEnabled = true
 
-        let fired = expectation(description: "callback fired after re-enable")
-        manager.onTileLeft = { fired.fulfill() }
+        let fired = expectation(description: "action delivered after re-enable")
+        manager.onAction = { action in
+            XCTAssertEqual(action, .tile(.leftHalf))
+            fired.fulfill()
+        }
 
         XCTAssertTrue(isSwallowed(0x7B, flags: ctrlOption))
         waitForExpectations(timeout: 1)

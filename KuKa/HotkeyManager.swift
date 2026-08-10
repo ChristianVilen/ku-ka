@@ -1,14 +1,19 @@
 import Cocoa
 
+/// A key combo the event tap recognized. The combo-to-action mapping lives
+/// entirely in `HotkeyManager.action(for:)`; everyone else deals in actions.
+enum HotkeyAction: Equatable {
+    case captureArea
+    case captureFullScreen
+    case tile(TilingAction)
+}
+
 class HotkeyManager {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var watchdogTimer: Timer?
-    var onHotkey: (() -> Void)?
-    var onFullScreenHotkey: (() -> Void)?
-    var onTileLeft: (() -> Void)?
-    var onTileRight: (() -> Void)?
-    var onTileMaximize: (() -> Void)?
+    /// Called on the main queue for every recognized (and swallowed) combo.
+    var onAction: ((HotkeyAction) -> Void)?
     /// When false, the tiling key combos pass through to other apps instead
     /// of being swallowed. Screenshot hotkeys are unaffected. Read from the
     /// tap callback and written from the menu — both on the main thread.
@@ -84,19 +89,23 @@ class HotkeyManager {
     // Internal (not private) so tests can feed synthetic events through the
     // same routing the event tap uses.
     func handleEvent(_ event: CGEvent) -> Unmanaged<CGEvent>? {
+        guard let action = action(for: event) else {
+            return Unmanaged.passUnretained(event)
+        }
+        DispatchQueue.main.async { [weak self] in self?.onAction?(action) }
+        return nil
+    }
+
+    /// The single place that knows which key combo means what. Returns nil
+    /// for anything Ku-Ka shouldn't swallow.
+    private func action(for event: CGEvent) -> HotkeyAction? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
         // Screenshot shortcuts: Shift+Command+3/4.
         if flags.contains(.maskShift), flags.contains(.maskCommand) {
-            if keyCode == 0x14 {
-                DispatchQueue.main.async { [weak self] in self?.onFullScreenHotkey?() }
-                return nil
-            }
-            if keyCode == 0x15 {
-                DispatchQueue.main.async { [weak self] in self?.onHotkey?() }
-                return nil
-            }
+            if keyCode == 0x14 { return .captureFullScreen }
+            if keyCode == 0x15 { return .captureArea }
         }
 
         // Tiling shortcuts: Ctrl+Option+Left/Right/Return. Arrow key events
@@ -107,21 +116,12 @@ class HotkeyManager {
         if tilingEnabled,
             flags.contains(.maskControl), flags.contains(.maskAlternate),
             !flags.contains(.maskCommand), !flags.contains(.maskShift) {
-            if keyCode == 0x7B {
-                DispatchQueue.main.async { [weak self] in self?.onTileLeft?() }
-                return nil
-            }
-            if keyCode == 0x7C {
-                DispatchQueue.main.async { [weak self] in self?.onTileRight?() }
-                return nil
-            }
-            if keyCode == 0x24 {
-                DispatchQueue.main.async { [weak self] in self?.onTileMaximize?() }
-                return nil
-            }
+            if keyCode == 0x7B { return .tile(.leftHalf) }
+            if keyCode == 0x7C { return .tile(.rightHalf) }
+            if keyCode == 0x24 { return .tile(.maximize) }
         }
 
-        return Unmanaged.passUnretained(event)
+        return nil
     }
 
     private func promptAccessibility() {

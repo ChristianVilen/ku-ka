@@ -1,6 +1,7 @@
 import Cocoa
 import ServiceManagement
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
@@ -13,14 +14,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private static let windowTilingEnabledKey = "windowTilingEnabled"
     private var durationItems: [NSMenuItem] = []
     private let keepAwake = KeepAwakeController()
-    private var windowTiling: WindowTilingController!
+    private let windowTiling = WindowTilingController()
 
     func applicationWillTerminate(_ notification: Notification) {
         keepAwake.deactivate()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        windowTiling = WindowTilingController()
         let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
             || CommandLine.arguments.contains("--uitesting")
         if !isTesting {
@@ -119,15 +119,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Hotkey
 
     private func setupHotkey() {
-        hotkeyManager.onHotkey = { [weak self] in self?.startCapture() }
-        hotkeyManager.onFullScreenHotkey = { [weak self] in self?.startFullScreenCapture() }
-        // HotkeyManager always invokes these via DispatchQueue.main.async, so
-        // we're already on the main thread here — assumeIsolated documents
-        // that instead of hopping through a Task, which would run the tile
+        // HotkeyManager always delivers actions via DispatchQueue.main.async,
+        // so we're already on the main thread here — assumeIsolated documents
+        // that instead of hopping through a Task, which would run the action
         // one runloop turn late and could reorder rapid key presses.
-        hotkeyManager.onTileLeft = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.leftHalf) } }
-        hotkeyManager.onTileRight = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.rightHalf) } }
-        hotkeyManager.onTileMaximize = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.maximize) } }
+        hotkeyManager.onAction = { [weak self] action in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                switch action {
+                case .captureArea: self.startCapture()
+                case .captureFullScreen: self.startFullScreenCapture()
+                case .tile(let tilingAction): self.windowTiling.tile(tilingAction)
+                }
+            }
+        }
         hotkeyManager.tilingEnabled = Self.isWindowTilingEnabled
         hotkeyManager.start()
     }

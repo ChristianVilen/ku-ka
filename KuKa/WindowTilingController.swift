@@ -1,18 +1,5 @@
 import Cocoa
 
-/// Per-window state kept between a maximize press and whatever press
-/// restores it: the frame the window had right before maximizing
-/// (`previousFrame`), and the frame it actually landed on (`achievedFrame`).
-/// The two can differ — some apps (Terminal, snapping to a character-cell
-/// grid, is the standing example) don't honor the exact frame Ku-Ka asks
-/// for, so recognizing "the user pressed maximize again on an
-/// already-maximized window" has to be judged against what's really on
-/// screen, not the frame Ku-Ka originally requested.
-private struct TilingRestoreState {
-    let previousFrame: CGRect
-    let achievedFrame: CGRect
-}
-
 /// Ties the tiling feature together: reads the focused window, picks its
 /// screen, asks `TilingLayoutEngine` what to do, and carries that out through
 /// `WindowControlling`. Owns the one piece of state the engine itself is
@@ -59,12 +46,10 @@ final class WindowTilingController {
         )
 
         let handle = focused.handle
-        let restoreState = savedFrames[handle]
         let resolution = engine.resolve(
             action: action,
             currentFrame: focused.frame,
-            savedFrame: restoreState?.previousFrame,
-            achievedTargetFrame: restoreState?.achievedFrame,
+            restoreState: savedFrames[handle],
             context: context
         )
 
