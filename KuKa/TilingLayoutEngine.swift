@@ -1,14 +1,11 @@
 import CoreGraphics
 
-/// The hotkey-driven tiling actions the user can trigger.
 enum TilingAction {
     case leftHalf
     case rightHalf
     case maximize
     case center
 
-    /// The direction a half action pushes toward, and a second press hops
-    /// screens in.
     var horizontalDirection: HorizontalDirection? {
         switch self {
         case .leftHalf: return .left
@@ -23,54 +20,40 @@ enum HorizontalDirection {
     case right
 }
 
-/// Everything the layout engine needs to compute a target frame, gathered
-/// from the screen the window currently lives on. All rectangles this engine
-/// takes and returns are in the same coordinate space as
-/// `NSScreen.visibleFrame` (global screen coordinates, bottom-left origin).
-/// Converting to/from Accessibility (top-left origin) coordinates is the
-/// caller's job.
+/// All rectangles the engine takes and returns are in the same coordinate
+/// space as `NSScreen.visibleFrame` (global, bottom-left origin). Converting
+/// to/from Accessibility (top-left origin) coordinates is the caller's job.
 struct TilingContext {
-    /// The screen's visible frame (excludes menu bar and Dock).
     let visibleFrame: CGRect
     /// Visible normal windows on that screen, including the window being tiled.
     let windowCount: Int
     let stageManagerEnabled: Bool
-    /// Visible frame of the screen a second half-press should hop to: the
-    /// next screen in the action's direction, wrapping around at the edges.
-    /// Nil when there is no other screen, or the action has no direction
-    /// (maximize, center).
+    /// Visible frame of the screen a second half-press hops to: the next
+    /// screen in the pressed direction, wrapping. Nil when there is no other
+    /// screen or the action has no direction.
     let adjacentVisibleFrame: CGRect?
 
-    /// Whether the Stage Manager strip is actually reserving screen space.
-    /// With only a single window, Stage Manager hides its strip, so a
-    /// maximized window can use the full visible frame even when Stage
-    /// Manager is turned on.
+    /// With a single window Stage Manager hides its strip, so maximize can
+    /// use the full visible frame even when Stage Manager is on.
     var stageStripTakesSpace: Bool {
         stageManagerEnabled && windowCount >= 2
     }
 }
 
 /// What the caller should do to a window in response to a tiling action.
-/// The engine is stateless: it decides, but the caller owns saved-frame
-/// bookkeeping.
+/// The engine decides; the caller owns saved-frame bookkeeping.
 enum TilingResolution: Equatable {
-    /// Move the window to `to`. When `savePrevious` is true, the caller
-    /// should remember the window's current frame before moving it.
+    /// When `savePrevious` is true, the caller should remember the window's
+    /// current frame before moving it.
     case move(to: CGRect, savePrevious: Bool)
-    /// Restore the window to a previously saved frame. What the caller does
-    /// with the saved entry afterward — evict it or keep it around — is the
-    /// caller's call; the engine itself doesn't track eviction.
     case restore(to: CGRect)
 }
 
 /// Per-window state kept between a maximize press and whatever press
-/// restores it: the frame the window had right before maximizing
-/// (`previousFrame`), and the frame it actually landed on (`achievedFrame`).
-/// The two can differ — some apps (Terminal, snapping to a character-cell
-/// grid, is the standing example) don't honor the exact frame Ku-Ka asks
-/// for, so recognizing "the user pressed maximize again on an
-/// already-maximized window" has to be judged against what's really on
-/// screen, not the frame Ku-Ka originally requested.
+/// restores it: the frame the window had right before maximizing, and the
+/// frame it actually landed on. The two can differ — some apps snap sizes
+/// (Terminal's character grid) — so "already maximized" has to be judged
+/// against what's really on screen, not the frame Ku-Ka requested.
 struct TilingRestoreState {
     let previousFrame: CGRect
     let achievedFrame: CGRect
@@ -81,10 +64,9 @@ struct TilingLayoutEngine {
     /// Fraction of `visibleFrame.width` reserved on the left for the Stage
     /// Manager strip when maximizing with Stage Manager active.
     private static let stageManagerLeftInsetFraction: CGFloat = 0.07
-    /// Fraction of `visibleFrame.height` reserved as breathing room at the
-    /// top, bottom, and right (each) when maximizing with Stage Manager
-    /// active. Height-based for all three edges so the gaps come out equal
-    /// in points.
+    /// Fraction of `visibleFrame.height` reserved at the top, bottom, and
+    /// right (each) when maximizing with Stage Manager active. Height-based
+    /// for all three so the gaps come out equal in points.
     private static let stageManagerEdgeInsetFraction: CGFloat = 0.02
 
     /// Tolerance, in points, for judging whether a window "is" at some
@@ -108,15 +90,12 @@ struct TilingLayoutEngine {
         )
     }
 
-    /// Decides what a tiling action should do to a window. Nil means do
-    /// nothing (center on an already maximize-sized window).
+    /// Nil means do nothing (center on an already maximize-sized window).
     ///
-    /// The hop check ("already at the half target → move to the adjacent
-    /// screen") runs against the ideal target: an app that snaps its size by
-    /// more than the tolerance (Terminal) never hops and just gets the half
-    /// re-applied — accepted, a missed hop costs one extra keypress. A
-    /// maximize press is instead judged against `restoreState.achievedFrame`;
-    /// see `TilingRestoreState` for why.
+    /// The hop check runs against the ideal half target: an app that snaps
+    /// its size by more than the tolerance (Terminal) never hops, just gets
+    /// the half re-applied. Maximize is judged against
+    /// `restoreState.achievedFrame` instead; see `TilingRestoreState`.
     func resolve(
         action: TilingAction,
         currentFrame: CGRect,
