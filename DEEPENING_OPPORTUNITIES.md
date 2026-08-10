@@ -12,19 +12,9 @@ Reviewed 2026-08-10, replacing the earlier version. Since then, window tiling la
 
 ---
 
-## 2. CaptureFlow — collapse the 11-hop capture pipeline
+## 2. CaptureFlow — collapse the capture pipeline — ✅ DONE (2026-08-10)
 
-**Strength**: Strong (SelectionSession is done, so this is now mostly mechanical)
-
-**Files**: `AppDelegate.swift:142-174, 197-199`
-
-**Problem**: With SelectionSession extracted, the remaining orchestration in AppDelegate is `startCapture` (result dispatch, `:142-157`), `startFullScreenCapture` (`:159-167`), `captureAndShow` (the 50 ms delay, `:169-174`), and `showThumbnail` (`:197-199`). Much smaller than before, but still zero test surface — AppDelegate is guarded out of test runs (`AppDelegate.swift:24-28`) — and there is still no named module representing "a capture flow".
-
-**Solution**: Extract a `CaptureFlow` module: takes `SelectionSession`, `CaptureManager`, and `ThumbnailStackManager` as dependencies, exposes `start(mode: .area | .window | .fullscreen)`. AppDelegate keeps one line per hotkey case — exactly what it already does for tiling at `AppDelegate.swift:132`.
-
-**Benefits**: The whole pipeline gets a test surface through one interface — a `FakeSelectionSession` at the now-existing seam makes the tests cheap. Locality: sequencing bugs concentrate in one module. Leverage: a future flow (screen recording, say) reuses the same seam.
-
-**Note**: the screen-attribution bug this card used to carry was fixed inside SelectionSession (candidate 1).
+**Implemented**: `CaptureFlow.swift` owns the pipeline behind `start(_ mode: .interactive | .fullScreen, screens:mouseLocation:)`. The fullscreen path moved in too. Dependencies sit at three test-seam protocols (`SelectionRunning`, `CaptureProviding`, `ThumbnailPresenting`) satisfied by the concrete classes via empty extensions; the thumbnail-duration read, flash, and 50 ms settle delay are injected with production defaults. `CaptureFlowTests` (8 tests) covers both paths, failed captures, flash-only-on-fullscreen, and the duration seam. AppDelegate's hotkey dispatch is one line per case and the old `startCapture`/`startFullScreenCapture`/`captureAndShow`/`showThumbnail` are deleted (313 → 287 lines). Known edge accepted: fullscreen with the mouse on no screen now falls back to the first screen instead of `NSScreen.main`.
 
 ---
 
@@ -73,9 +63,9 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 **Strength**: Worth exploring
 
-**Files**: `AppDelegate.swift:36-117` (menu build), `AppDelegate.swift:282-313` (badge drawing)
+**Files**: `AppDelegate.swift:40-121` (menu build), `AppDelegate.swift:256-287` (badge drawing)
 
-**Problem**: The single largest block in AppDelegate (82 lines) builds the status-bar menu with imperative `NSMenuItem` calls; 31 more lines compose the status-item icon badge with Core Graphics. Neither is orchestration nor wiring — it is UI construction living in the app delegate. Together with the capture flow this is why AppDelegate is 313 lines.
+**Problem**: The single largest block in AppDelegate (82 lines) builds the status-bar menu with imperative `NSMenuItem` calls; 31 more lines compose the status-item icon badge with Core Graphics. Neither is orchestration nor wiring — it is UI construction living in the app delegate. With the capture flow extracted, this is most of the 287 lines AppDelegate has left.
 
 **Solution**: Extract a `StatusMenu` module that builds the menu and renders the icon from passed-in state — state in, `NSMenu`/`NSImage` out. Returns results, no side effects.
 
@@ -87,9 +77,9 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 **Strength**: Worth exploring
 
-**Files**: `AppDelegate.swift:49, 63, 198, 230, 256-261, 268-280`; pattern to copy: `KeepAwakeController.swift:40`
+**Files**: `AppDelegate.swift:53, 67, 204, 230-235, 243-254`, `CaptureFlow.swift:43-45`; pattern to copy: `KeepAwakeController.swift:40`
 
-**Problem**: Three preference keys are read/written ambiently: `"thumbnailDuration"` (string key ×3, default `5.0` ×2), `"windowTilingEnabled"` (`?? true` duplicated), and launch-at-login against the `SMAppService.mainApp` singleton (read ×3, untestable). The good pattern already exists in this codebase — `KeepAwakeController` takes `defaults: UserDefaults = .standard` as an injected dependency, which is what lets its tests use a scratch suite. AppDelegate doesn't use it.
+**Problem**: Three preference keys are read/written ambiently: `"thumbnailDuration"` (string key ×3 — two in AppDelegate, one as CaptureFlow's injected default — default `5.0` ×2), `"windowTilingEnabled"` (`?? true` duplicated), and launch-at-login against the `SMAppService.mainApp` singleton (read ×3, untestable). A `Settings` module replaces CaptureFlow's duration default in one line. The good pattern already exists in this codebase — `KeepAwakeController` takes `defaults: UserDefaults = .standard` as an injected dependency, which is what lets its tests use a scratch suite. AppDelegate doesn't use it.
 
 **Solution**: A `Settings` module with typed properties (`thumbnailDuration`, `windowTilingEnabled`, `launchAtLogin`), keys and defaults defined once, `UserDefaults` and `SMAppService` as implementation.
 
@@ -113,4 +103,4 @@ Related: coordinate flipping is hand-rolled four different ways in three files (
 
 ## Top recommendation
 
-~~SelectionSession first~~ — done 2026-08-10. Next up: **CaptureFlow** (candidate 2, now mostly mechanical with the SelectionSession seam in place) or **ImageStore** (candidate 3, deletes five pass-through closures and un-warps a callback that returns a value). Either order works; CaptureFlow finishes what candidate 1 started, ImageStore is independent of it.
+~~SelectionSession~~ and ~~CaptureFlow~~ — both done 2026-08-10. Next up: **ImageStore** (candidate 3) — deletes five pass-through closures and un-warps a callback that returns a value. After that, **Screens seam** (candidate 4) mops up the ambient `NSScreen` reads that the two finished refactors deliberately left in AppDelegate.

@@ -6,7 +6,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
     private let captureManager = CaptureManager()
-    private let selectionSession = SelectionSession()
+    private lazy var captureFlow = CaptureFlow(
+        selection: SelectionSession(),
+        capture: captureManager,
+        thumbnails: thumbnailStack
+    )
     private let thumbnailStack = ThumbnailStackManager()
     private var editorWindow: EditorWindow?
     private var launchAtLoginItem: NSMenuItem!
@@ -127,8 +131,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             MainActor.assumeIsolated {
                 switch action {
-                case .captureArea: self.startCapture()
-                case .captureFullScreen: self.startFullScreenCapture()
+                case .captureArea: self.startCapture(.interactive)
+                case .captureFullScreen: self.startCapture(.fullScreen)
                 case .tile(let tilingAction): self.windowTiling.tile(tilingAction)
                 }
             }
@@ -139,38 +143,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Capture Flow
 
-    private func startCapture() {
-        Task { @MainActor in
-            switch await selectionSession.run(on: NSScreen.screens, mouseLocation: NSEvent.mouseLocation) {
-            case .rect(let rect, let screen):
-                await self.captureAndShow(screen: screen) {
-                    await self.captureManager.capture(rect: rect, screen: screen)
-                }
-            case .window(let windowID, let screen):
-                await self.captureAndShow(screen: screen) {
-                    await self.captureManager.captureWindow(windowID: windowID)
-                }
-            case .cancelled:
-                break
-            }
-        }
-    }
-
-    private func startFullScreenCapture() {
+    private func startCapture(_ mode: CaptureFlow.Mode) {
+        // Read the ambient state at press time, before the Task hop
+        let screens = NSScreen.screens
         let mouseLocation = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main else { return }
         Task { @MainActor in
-            guard let result = await self.captureManager.captureFullScreen(screen: screen) else { return }
-            FlashView.flash(on: screen)
-            self.showThumbnail(result: result, screen: screen)
+            await self.captureFlow.start(mode, screens: screens, mouseLocation: mouseLocation)
         }
-    }
-
-    private func captureAndShow(screen: NSScreen, _ capture: () async -> CaptureResult?) async {
-        // The overlay has just closed; give it a moment to disappear before capturing
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        guard let result = await capture() else { return }
-        showThumbnail(result: result, screen: screen)
     }
 
     // MARK: - Thumbnail & Editor
@@ -192,11 +171,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setupKeepAwake() {
         keepAwake.onStateChange = { [weak self] in self?.updateStatusItemIcon() }
-    }
-
-    private func showThumbnail(result: CaptureResult, screen: NSScreen) {
-        let duration = UserDefaults.standard.object(forKey: "thumbnailDuration") as? Double ?? 5.0
-        thumbnailStack.add(image: result.image, result: result, screen: screen, duration: duration)
     }
 
     private func openEditor(result: CaptureResult) {
