@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let thumbnailStack = ThumbnailStackManager()
     private var editorWindow: EditorWindow?
     private var launchAtLoginItem: NSMenuItem!
+    private var windowTilingItem: NSMenuItem!
+    private static let windowTilingEnabledKey = "windowTilingEnabled"
     private var durationItems: [NSMenuItem] = []
     private let keepAwake = KeepAwakeController()
     private var windowTiling: WindowTilingController!
@@ -46,6 +48,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         launchAtLoginItem.target = self
         launchAtLoginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(launchAtLoginItem)
+
+        windowTilingItem = NSMenuItem(title: "Window Tiling", action: #selector(toggleWindowTiling), keyEquivalent: "")
+        windowTilingItem.target = self
+        windowTilingItem.state = Self.isWindowTilingEnabled ? .on : .off
+        menu.addItem(windowTilingItem)
 
         menu.addItem(.separator())
 
@@ -121,6 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotkeyManager.onTileLeft = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.leftHalf) } }
         hotkeyManager.onTileRight = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.rightHalf) } }
         hotkeyManager.onTileMaximize = { [weak self] in MainActor.assumeIsolated { self?.windowTiling.tile(.maximize) } }
+        hotkeyManager.tilingEnabled = Self.isWindowTilingEnabled
         hotkeyManager.start()
     }
 
@@ -279,6 +287,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openSuggestFeature() {
         NSWorkspace.shared.open(URL(string: "https://github.com/ChristianVilen/ku-ka/issues/new?labels=enhancement")!)
+    }
+
+    // MARK: - Window Tiling
+
+    private static var isWindowTilingEnabled: Bool {
+        UserDefaults.standard.object(forKey: windowTilingEnabledKey) as? Bool ?? true
+    }
+
+    @objc private func toggleWindowTiling() {
+        let enabled = !Self.isWindowTilingEnabled
+        UserDefaults.standard.set(enabled, forKey: Self.windowTilingEnabledKey)
+        hotkeyManager.tilingEnabled = enabled
+        windowTilingItem.state = enabled ? .on : .off
     }
 
     // MARK: - Launch at Login

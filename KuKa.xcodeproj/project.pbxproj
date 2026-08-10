@@ -42,6 +42,7 @@
 		B2000000A /* TilingLayoutEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001A /* TilingLayoutEngineTests.swift */; };
 		B2000000B /* TilingAdaptersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001B /* TilingAdaptersTests.swift */; };
 		B2000000C /* WindowTilingControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001C /* WindowTilingControllerTests.swift */; };
+		B2000000D /* HotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2000001D /* HotkeyManagerTests.swift */; };
 		E227F2EA2F51CF630032905B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -95,6 +96,7 @@
 		B2000001A /* TilingLayoutEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingLayoutEngineTests.swift; sourceTree = "<group>"; };
 		B2000001B /* TilingAdaptersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TilingAdaptersTests.swift; sourceTree = "<group>"; };
 		B2000001C /* WindowTilingControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowTilingControllerTests.swift; sourceTree = "<group>"; };
+		B2000001D /* HotkeyManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManagerTests.swift; sourceTree = "<group>"; };
 		E28DFEF72F4C8D93001B8D91 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -181,6 +183,7 @@
 				B2000001A /* TilingLayoutEngineTests.swift */,
 				B2000001B /* TilingAdaptersTests.swift */,
 				B2000001C /* WindowTilingControllerTests.swift */,
+				B2000001D /* HotkeyManagerTests.swift */,
 				B20000012 /* Mocks.swift */,
 			);
 			path = KuKaTests;
@@ -309,6 +312,7 @@
 				B2000000A /* TilingLayoutEngineTests.swift in Sources */,
 				B2000000B /* TilingAdaptersTests.swift in Sources */,
 				B2000000C /* WindowTilingControllerTests.swift in Sources */,
+				B2000000D /* HotkeyManagerTests.swift in Sources */,
 				B20000002 /* Mocks.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

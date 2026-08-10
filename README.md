@@ -35,7 +35,7 @@ Three hotkeys move the active window around its display:
 
 If you use Stage Manager (the macOS feature that shows recent apps as small thumbnails down the side of the screen), maximize leaves room for its strip on the left, plus a small gap at the top, bottom, and right. This only happens when Stage Manager is turned on **and** there are two or more windows visible on that screen — with just one window, or with Stage Manager off, maximize fills the whole screen.
 
-These hotkeys aren't configurable — there's no menu or settings screen for them.
+The whole feature can be turned on and off with the **Window Tiling** checkbox in the menu bar menu (under Settings); the choice is remembered across restarts. While it's off, the hotkeys pass through to other apps. The keys themselves aren't configurable.
 
 ## Requirements
 
@@ -155,7 +155,7 @@ KuKa/
 ## Known Limitations
 
 - You must disable or accept that the system `Shift+Command+3` and `Shift+Command+4` are intercepted (the app suppresses the system shortcuts when running)
-- `Ctrl+Option+Left/Right/Return` are intercepted globally while Ku-Ka is running, even inside apps that use those same keys for something else. There's no off switch for this short of quitting Ku-Ka.
+- `Ctrl+Option+Left/Right/Return` are intercepted globally while window tiling is enabled, even inside apps that use those same keys for something else. Turn off **Window Tiling** in the menu to give the keys back to other apps.
 - Requires macOS 14+ for ScreenCaptureKit screenshot capture
 - No preferences UI for changing the shortcut keys, including the window tiling hotkeys
 

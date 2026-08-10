@@ -9,6 +9,10 @@ class HotkeyManager {
     var onTileLeft: (() -> Void)?
     var onTileRight: (() -> Void)?
     var onTileMaximize: (() -> Void)?
+    /// When false, the tiling key combos pass through to other apps instead
+    /// of being swallowed. Screenshot hotkeys are unaffected. Read from the
+    /// tap callback and written from the menu — both on the main thread.
+    var tilingEnabled = true
 
     func start() {
         let trusted = AXIsProcessTrustedWithOptions(
@@ -77,7 +81,9 @@ class HotkeyManager {
         }
     }
 
-    private func handleEvent(_ event: CGEvent) -> Unmanaged<CGEvent>? {
+    // Internal (not private) so tests can feed synthetic events through the
+    // same routing the event tap uses.
+    func handleEvent(_ event: CGEvent) -> Unmanaged<CGEvent>? {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
@@ -98,7 +104,8 @@ class HotkeyManager {
         // requires the two modifiers it cares about rather than matching the
         // full flag set, and explicitly rules out Command/Shift so it can't
         // collide with the screenshot shortcuts above.
-        if flags.contains(.maskControl), flags.contains(.maskAlternate),
+        if tilingEnabled,
+            flags.contains(.maskControl), flags.contains(.maskAlternate),
             !flags.contains(.maskCommand), !flags.contains(.maskShift) {
             if keyCode == 0x7B {
                 DispatchQueue.main.async { [weak self] in self?.onTileLeft?() }

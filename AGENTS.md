@@ -90,7 +90,8 @@ Shift+Cmd+4 → HotkeyManager (suppresses event) → AppDelegate.startCapture()
 → ThumbnailPanel shown (bottom-right, 5s timeout) → Click thumbnail → EditorWindow opens
 → Freehand drawing → Done → Overwrite PNG + Update clipboard
 
-Ctrl+Opt+Left/Right/Return → HotkeyManager (suppresses event) → WindowTilingController.tile(action)
+Ctrl+Opt+Left/Right/Return → HotkeyManager (suppresses event; skipped entirely when the
+"Window Tiling" menu toggle is off — keys pass through) → WindowTilingController.tile(action)
 → TilingLayoutEngine.resolve(action, ...) decides move-and-save or restore
 → AccessibilityWindowControl.setFrame(...) moves the window
 ```
