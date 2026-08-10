@@ -4,9 +4,10 @@ import IOKit.pwr_mgt
 /// Seam over the IOKit power assertion so the orchestration logic can be
 /// tested without touching real system sleep state.
 protocol SleepPreventing: AnyObject {
-    /// Create the assertion if not already held. Idempotent.
+    /// Create the assertion if not already held. Idempotent — returns true
+    /// when the assertion is held afterwards, false when creation failed.
     /// `keepDisplayAwake` chooses whether the display is kept on too.
-    func begin(reason: String, keepDisplayAwake: Bool)
+    func begin(reason: String, keepDisplayAwake: Bool) -> Bool
     /// Release the assertion if held. Idempotent.
     func end()
     var isPreventing: Bool { get }
@@ -21,8 +22,8 @@ final class IOKitSleepPreventer: SleepPreventing {
     private var assertionID: IOPMAssertionID = 0
     private(set) var isPreventing = false
 
-    func begin(reason: String, keepDisplayAwake: Bool) {
-        guard !isPreventing else { return }
+    func begin(reason: String, keepDisplayAwake: Bool) -> Bool {
+        guard !isPreventing else { return true }
         let type = keepDisplayAwake
             ? kIOPMAssertionTypePreventUserIdleDisplaySleep
             : kIOPMAssertionTypePreventUserIdleSystemSleep
@@ -33,12 +34,13 @@ final class IOKitSleepPreventer: SleepPreventing {
             reason as CFString,
             &id
         )
-        if result == kIOReturnSuccess {
-            assertionID = id
-            isPreventing = true
-        } else {
+        guard result == kIOReturnSuccess else {
             NSLog("Ku-Ka: failed to create power assertion (code \(result))")
+            return false
         }
+        assertionID = id
+        isPreventing = true
+        return true
     }
 
     func end() {
@@ -70,7 +72,11 @@ final class WakeManager {
         didSet {
             guard oldValue != keepDisplayAwake, isActive else { return }
             preventer.end()
-            preventer.begin(reason: Self.assertionReason, keepDisplayAwake: keepDisplayAwake)
+            if !preventer.begin(reason: Self.assertionReason, keepDisplayAwake: keepDisplayAwake) {
+                // The replacement assertion failed; end the session rather
+                // than report one that protects nothing.
+                deactivate()
+            }
         }
     }
 
@@ -90,9 +96,12 @@ final class WakeManager {
         timer?.invalidate()
         timer = nil
 
+        // If this fails we were not preventing, so no session existed either —
+        // returning leaves the manager honestly inactive.
+        guard preventer.begin(reason: Self.assertionReason, keepDisplayAwake: keepDisplayAwake) else { return }
+
         let session = WakeSession(startedAt: now(), duration: duration)
         self.session = session
-        preventer.begin(reason: Self.assertionReason, keepDisplayAwake: keepDisplayAwake)
 
         if let expiresAt = session.expiresAt {
             let interval = max(0, expiresAt.timeIntervalSince(now()))

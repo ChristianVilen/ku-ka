@@ -25,7 +25,7 @@ final class KeepAwakeControllerTests: XCTestCase {
 
     // MARK: - Panel lookups
 
-    private var panel: KeepAwakePanelView { controller.panelView! }
+    private var panel: KeepAwakePanelView { controller.panelView }
 
     private var turnOffItem: NSMenuItem {
         menu.items.first { $0.title == "Turn Off" }!

@@ -107,6 +107,29 @@ final class WakeManagerTests: XCTestCase {
         XCTAssertEqual(preventer.endCount, 0)
     }
 
+    func testFailedActivationDoesNotStartSession() {
+        preventer.failNextBegin = true
+        var stateChanges = 0
+        manager.onStateChange = { stateChanges += 1 }
+
+        manager.activate(.indefinite)
+
+        XCTAssertFalse(manager.isActive)
+        XCTAssertEqual(preventer.beginCount, 0)
+        XCTAssertEqual(stateChanges, 0)
+    }
+
+    func testFailedMidSessionSwapDeactivates() {
+        manager.activate(.indefinite)
+        preventer.failNextBegin = true
+
+        manager.keepDisplayAwake = true
+
+        XCTAssertFalse(manager.isActive)
+        XCTAssertEqual(preventer.endCount, 1)
+        XCTAssertNil(manager.session)
+    }
+
     func testSettingSameDisplayAwakeValueMidSessionDoesNothing() {
         manager.activate(.indefinite)
         manager.keepDisplayAwake = false

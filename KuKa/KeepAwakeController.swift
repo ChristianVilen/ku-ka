@@ -24,8 +24,8 @@ final class KeepAwakeController: NSObject {
     private let now: () -> Date
     private let defaults: UserDefaults
 
-    private(set) var panelView: KeepAwakePanelView?
-    private var turnOffItem: NSMenuItem?
+    let panelView: KeepAwakePanelView
+    private let turnOffItem: NSMenuItem
     private var countdownTimer: Timer?
     private var hasRequestedNotificationAuth = false
 
@@ -41,7 +41,13 @@ final class KeepAwakeController: NSObject {
         self.wakeManager = wakeManager
         self.now = now
         self.defaults = defaults
+        panelView = KeepAwakePanelView(presets: Self.presets)
+        turnOffItem = NSMenuItem(title: "Turn Off", action: #selector(turnOff(_:)), keyEquivalent: "")
         super.init()
+        turnOffItem.target = self
+        turnOffItem.isHidden = true
+        panelView.onSelectDuration = { [weak self] duration in self?.select(duration) }
+        panelView.onToggleDisplayAwake = { [weak self] isOn in self?.setDisplayAwake(isOn) }
         // Defaults to on: a dark, locked screen reads as "the feature didn't
         // work", so keeping the display awake is the least surprising default.
         wakeManager.keepDisplayAwake = defaults.object(forKey: Self.displayAwakeDefaultsKey) as? Bool ?? true
@@ -65,19 +71,10 @@ final class KeepAwakeController: NSObject {
     /// Appends the full "Keep Awake" section (inline panel, Turn Off, lid
     /// hint, and a trailing separator) to `menu`.
     func buildMenuSection(into menu: NSMenu) {
-        let panel = KeepAwakePanelView(chipTitles: Self.presets.map(\.chip))
-        panel.onSelectDuration = { [weak self] index in self?.selectPreset(at: index) }
-        panel.onToggleDisplayAwake = { [weak self] isOn in self?.setDisplayAwake(isOn) }
         let panelItem = NSMenuItem()
-        panelItem.view = panel
+        panelItem.view = panelView
         menu.addItem(panelItem)
-        panelView = panel
-
-        let turnOff = NSMenuItem(title: "Turn Off", action: #selector(turnOff(_:)), keyEquivalent: "")
-        turnOff.target = self
-        turnOff.isHidden = true
-        menu.addItem(turnOff)
-        turnOffItem = turnOff
+        menu.addItem(turnOffItem)
 
         let hint = NSMenuItem(title: "Closing the lid still sleeps your Mac", action: nil, keyEquivalent: "")
         hint.isEnabled = false
@@ -113,9 +110,7 @@ final class KeepAwakeController: NSObject {
 
     // MARK: - Actions
 
-    private func selectPreset(at index: Int) {
-        guard Self.presets.indices.contains(index) else { return }
-        let duration = Self.presets[index].duration
+    private func select(_ duration: WakeDuration) {
         // Only timed sessions post an expiry notification, so request
         // permission (once) only for them.
         if case .timed = duration {
@@ -142,21 +137,20 @@ final class KeepAwakeController: NSObject {
 
     private func updateMenu() {
         let session = wakeManager.session
-        turnOffItem?.isHidden = session == nil
+        turnOffItem.isHidden = session == nil
 
         if let session {
             if let remaining = session.remaining(now: now()) {
-                panelView?.titleLabel.stringValue = "☕ Awake · \(Self.formatRemaining(remaining))"
+                panelView.titleLabel.stringValue = "☕ Awake · \(Self.formatRemaining(remaining))"
             } else {
-                panelView?.titleLabel.stringValue = "☕ Awake · On"
+                panelView.titleLabel.stringValue = "☕ Awake · On"
             }
         } else {
-            panelView?.titleLabel.stringValue = "Keep Awake"
+            panelView.titleLabel.stringValue = "Keep Awake"
         }
 
-        let selected = Self.presets.firstIndex { $0.duration == session?.duration }
-        panelView?.durationControl.selectedSegment = selected ?? -1
-        panelView?.displayAwakeCheckbox.state = wakeManager.keepDisplayAwake ? .on : .off
+        panelView.showSelection(session?.duration)
+        panelView.displayAwakeCheckbox.state = wakeManager.keepDisplayAwake ? .on : .off
     }
 
     private func requestNotificationAuthIfNeeded() {

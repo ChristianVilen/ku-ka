@@ -9,14 +9,16 @@ final class KeepAwakePanelView: NSView {
     let titleLabel = NSTextField(labelWithString: "Keep Awake")
     let durationControl: NSSegmentedControl
     let displayAwakeCheckbox: NSButton
+    private let durations: [WakeDuration]
 
-    /// Fired with the index of the clicked duration chip.
-    var onSelectDuration: ((Int) -> Void)?
+    /// Fired with the duration of the clicked chip.
+    var onSelectDuration: ((WakeDuration) -> Void)?
     /// Fired with the checkbox's new on/off state.
     var onToggleDisplayAwake: ((Bool) -> Void)?
 
-    init(chipTitles: [String]) {
-        durationControl = NSSegmentedControl(labels: chipTitles, trackingMode: .selectOne, target: nil, action: nil)
+    init(presets: [(chip: String, duration: WakeDuration)]) {
+        durations = presets.map(\.duration)
+        durationControl = NSSegmentedControl(labels: presets.map(\.chip), trackingMode: .selectOne, target: nil, action: nil)
         displayAwakeCheckbox = NSButton(checkboxWithTitle: "Keep display awake", target: nil, action: nil)
         super.init(frame: .zero)
 
@@ -50,10 +52,15 @@ final class KeepAwakePanelView: NSView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    /// Reflects a session's duration in the chips; nil clears the selection.
+    func showSelection(_ duration: WakeDuration?) {
+        durationControl.selectedSegment = durations.firstIndex { $0 == duration } ?? -1
+    }
+
     /// Menu custom views don't auto-close the menu, so a chip click closes it
     /// explicitly — matching how a normal menu item click behaves.
     @objc func durationClicked(_ sender: NSSegmentedControl) {
-        onSelectDuration?(sender.selectedSegment)
+        onSelectDuration?(durations[sender.selectedSegment])
         enclosingMenuItem?.menu?.cancelTracking()
     }
 
