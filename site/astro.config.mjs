@@ -4,5 +4,5 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
 	site: "https://christianvilen.github.io",
 	base: "/ku-ka",
-	integrations: [tailwind()],
+	integrations: [tailwind({ applyBaseStyles: false })],
 });
