@@ -2,11 +2,15 @@
  * enrichment: Tier-A interactive capture demo · nav: N9 edge-aligned · footer: Ft2 inline line
  * accent: electric cobalt oklch(58% 0.20 256), <5% of any viewport
  * pre-emit critique: P4 H4 E4 S4 R5 V4 */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
+/* Tailwind v4 theme — these become both utilities (bg-paper, text-ink, …)
+   and plain CSS variables on :root. */
+@theme {
+	--font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+	--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
 	/* Cobalt palette — cool engineered near-white, charcoal ink, one signal */
 	--color-paper: oklch(98.5% 0.004 250);
 	--color-paper-2: oklch(96.5% 0.005 252);
@@ -35,7 +39,9 @@
 	--color-selection: oklch(58% 0.2 256 / 0.18);
 	--color-thumb-btn: oklch(28% 0.015 255 / 0.7); /* HUD-style circular controls */
 	--color-thumb-btn-hover: oklch(20% 0.015 255 / 0.8);
+}
 
+:root {
 	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 	--ease-in: cubic-bezier(0.7, 0, 0.84, 0);
 	--dur-micro: 120ms;
@@ -88,7 +94,7 @@ h3 {
 
 /* Machine-readout labels — JetBrains Mono, uppercase, tracked */
 .mono-label {
-	font-family: theme("fontFamily.mono");
+	font-family: var(--font-mono);
 	font-size: 0.75rem;
 	font-weight: 500;
 	text-transform: uppercase;
@@ -97,7 +103,7 @@ h3 {
 }
 
 kbd {
-	font-family: theme("fontFamily.mono");
+	font-family: var(--font-mono);
 	font-size: 0.8em;
 	border: 1px solid var(--color-rule-2);
 	border-radius: 4px;
@@ -149,7 +155,7 @@ kbd {
 
 /* Copy affordance — bordered mono chip, quiet */
 .btn-copy {
-	font-family: theme("fontFamily.mono");
+	font-family: var(--font-mono);
 	font-size: 0.75rem;
 	border: 1px solid var(--color-rule-2);
 	border-radius: 6px;
@@ -185,7 +191,7 @@ kbd {
 	border: 1px solid var(--color-graphite-rule);
 	border-radius: 10px;
 	box-shadow: 0 1px 2px oklch(24% 0.02 258 / 0.05);
-	font-family: theme("fontFamily.mono");
+	font-family: var(--font-mono);
 	color: var(--color-graphite-ink);
 }
 
@@ -217,7 +223,7 @@ kbd {
 .capture-dims {
 	position: fixed;
 	z-index: 210;
-	font-family: theme("fontFamily.mono");
+	font-family: var(--font-mono);
 	font-size: 0.75rem;
 	font-variant-numeric: tabular-nums;
 	color: var(--color-ink);
