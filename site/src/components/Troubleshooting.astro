@@ -1,7 +1,54 @@
-<!--
 ---
--->
-
+// Card text is HTML (inline <code>/<strong>), rendered with set:html.
+const issues = [
+	{
+		title: `🔒 App won't open / blocked by macOS`,
+		intro: `Ku-Ka is unsigned, so macOS blocks it by default.`,
+		code: [`sudo xattr -d com.apple.quarantine /Applications/Ku-Ka.app`],
+		footer: `Or go to <strong>System Settings → Privacy & Security</strong> and click <strong>"Open Anyway"</strong>.`,
+	},
+	{
+		title: `🚫 Shortcut doesn't work`,
+		intro: `Ku-Ka needs Accessibility permission to intercept <code class="bg-surface-200 px-1 rounded">Shift+Command+4</code>. The same permission also powers window tiling — nothing extra to grant.`,
+		steps: [
+			`1. Go to <strong>System Settings → Privacy & Security → Accessibility</strong>`,
+			`2. Enable Ku-Ka in the list`,
+			`3. Restart Ku-Ka from the menu bar`,
+		],
+	},
+	{
+		title: `📸 Black screenshot or capture fails`,
+		intro: `Screen Recording permission is required.`,
+		steps: [
+			`1. Go to <strong>System Settings → Privacy & Security → Screen Recording</strong>`,
+			`2. Enable Ku-Ka`,
+			`3. Try capturing again`,
+		],
+	},
+	{
+		title: `🖼️ Screenshots not saving`,
+		intro: `Check if the Screenshots folder exists and is writable.`,
+		code: [`mkdir -p ~/Screenshots`, `chmod 755 ~/Screenshots`],
+		footer: `Files are saved as <code class="bg-surface-200 px-1 rounded">Screenshot_YYYY-MM-DD_at_HH-MM-SS.png</code>`,
+	},
+	{
+		title: `⌨️ Ctrl+Opt keys stopped working in another app`,
+		intro: `While Window Tiling is on, Ku-Ka takes <code class="bg-surface-200 px-1 rounded">Ctrl+Opt+←/→/Return</code> globally — even in apps that use those keys themselves.`,
+		footer: `Untick <strong>Window Tiling</strong> in the menu bar menu to give the keys back. The choice is remembered across restarts.`,
+	},
+	{
+		title: `😴 Mac still sleeps with Keep Awake on`,
+		intro: `Closing a laptop's lid still sleeps the Mac unless it's plugged in with an external display attached — no app can get around that.`,
+		footer: `Keep the lid open or run docked. The display turning off is normal and by design — tick <strong>Keep display awake</strong> if you want the screen on too.`,
+	},
+	{
+		title: `🪟 A window won't tile`,
+		intro: `Some apps don't let their windows be moved or resized through the Accessibility API. The tiling hotkey then does nothing — there is no error message.`,
+		footer: `With more than one display, the window tiles on the screen it overlaps the most — check whether it moved on another display before assuming it didn't work.`,
+		wide: true,
+	},
+];
+---
 <section class="py-24 px-6 opacity-0" data-animate="troubleshooting">
   <div class="max-w-4xl mx-auto">
     <div class="text-center mb-12">
@@ -10,57 +57,25 @@
     </div>
 
     <div class="grid md:grid-cols-2 gap-8">
-      <div class="bg-surface-100 border border-surface-300 rounded-xl p-6">
-        <h3 class="font-semibold text-gray-200 mb-3">🔒 App won't open / blocked by macOS</h3>
-        <p class="text-gray-400 text-sm mb-4">
-          Ku-Ka is unsigned, so macOS blocks it by default.
-        </p>
-        <div class="bg-surface-50 border border-surface-200 rounded-lg p-3 font-mono text-sm mb-3">
-          <code class="text-accent-light">sudo xattr -d com.apple.quarantine /Applications/Ku-Ka.app</code>
+      {issues.map((c) => (
+        <div class={`bg-surface-100 border border-surface-300 rounded-xl p-6${c.wide ? " md:col-span-2" : ""}`}>
+          <h3 class="font-semibold text-gray-200 mb-3">{c.title}</h3>
+          <p class="text-gray-400 text-sm mb-4" set:html={c.intro} />
+          {c.code && (
+            <div class="bg-surface-50 border border-surface-200 rounded-lg p-3 font-mono text-sm mb-3">
+              {c.code.map((line) => <code class="text-accent-light" set:html={line} />)}
+            </div>
+          )}
+          {c.steps && (
+            <ol class="text-gray-500 text-sm space-y-2">
+              {c.steps.map((s) => <li set:html={s} />)}
+            </ol>
+          )}
+          {c.footer && <p class="text-gray-500 text-sm" set:html={c.footer} />}
         </div>
-        <p class="text-gray-500 text-sm">
-          Or go to <strong>System Settings → Privacy & Security</strong> and click <strong>"Open Anyway"</strong>.
-        </p>
-      </div>
+      ))}
 
-      <div class="bg-surface-100 border border-surface-300 rounded-xl p-6">
-        <h3 class="font-semibold text-gray-200 mb-3">🚫 Shortcut doesn't work</h3>
-        <p class="text-gray-400 text-sm mb-4">
-          Ku-Ka needs Accessibility permission to intercept <code class="bg-surface-200 px-1 rounded">Shift+Command+4</code>.
-        </p>
-        <ol class="text-gray-500 text-sm space-y-2">
-          <li>1. Go to <strong>System Settings → Privacy & Security → Accessibility</strong></li>
-          <li>2. Enable Ku-Ka in the list</li>
-          <li>3. Restart Ku-Ka from the menu bar</li>
-        </ol>
-      </div>
-
-      <div class="bg-surface-100 border border-surface-300 rounded-xl p-6">
-        <h3 class="font-semibold text-gray-200 mb-3">📸 Black screenshot or capture fails</h3>
-        <p class="text-gray-400 text-sm mb-4">
-          Screen Recording permission is required.
-        </p>
-        <ol class="text-gray-500 text-sm space-y-2">
-          <li>1. Go to <strong>System Settings → Privacy & Security → Screen Recording</strong></li>
-          <li>2. Enable Ku-Ka</li>
-          <li>3. Try capturing again</li>
-        </ol>
-      </div>
-
-      <div class="bg-surface-100 border border-surface-300 rounded-xl p-6">
-        <h3 class="font-semibold text-gray-200 mb-3">🖼️ Screenshots not saving</h3>
-        <p class="text-gray-400 text-sm mb-4">
-          Check if the Screenshots folder exists and is writable.
-        </p>
-        <div class="bg-surface-50 border border-surface-200 rounded-lg p-3 font-mono text-sm mb-3">
-          <code class="text-accent-light">mkdir -p ~/Screenshots</code>
-          <code class="text-accent-light">chmod 755 ~/Screenshots</code>
-        </div>
-        <p class="text-gray-500 text-sm">
-          Files are saved as <code class="bg-surface-200 px-1 rounded">Screenshot_YYYY-MM-DD_at_HH-MM-SS.png</code>
-        </p>
-      </div>
-
+      <!-- Kept out of the issues array: this card has its own two-column layout -->
       <div class="bg-surface-100 border border-surface-300 rounded-xl p-6 md:col-span-2">
         <h3 class="font-semibold text-gray-200 mb-3">🔧 Both Accessibility AND Screen Recording Required</h3>
         <p class="text-gray-400 text-sm mb-4">
@@ -70,7 +85,7 @@
         <div class="grid md:grid-cols-2 gap-4 mb-4">
           <div class="bg-surface-50 border border-surface-200 rounded-lg p-3">
             <h4 class="font-medium text-gray-200 mb-2">✅ Accessibility Permission</h4>
-            <p class="text-gray-500 text-sm mb-2">Required for keyboard shortcut interception</p>
+            <p class="text-gray-500 text-sm mb-2">Required for keyboard shortcut interception and window tiling</p>
             <ol class="text-gray-500 text-sm space-y-1">
               <li>1. <strong>System Settings → Privacy & Security</strong></li>
               <li>2. Click <strong>Accessibility</strong></li>
