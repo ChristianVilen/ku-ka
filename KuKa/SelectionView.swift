@@ -22,11 +22,6 @@ class SelectionView: NSView {
         addCursorRect(bounds, cursor: mode == .selection ? .crosshair : Self.cameraCursor)
     }
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window != nil { NSCursor.crosshair.push() }
-    }
-
     // MARK: - Keyboard
 
     override func keyDown(with event: NSEvent) {
@@ -94,7 +89,13 @@ class SelectionView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         if mode == .windowCapture {
-            if let win = highlightedWindow { onWindowSelection?(win) }
+            if let win = highlightedWindow {
+                onWindowSelection?(win)
+            } else {
+                // Clicking empty space in window mode ends the session, the
+                // same way Esc does.
+                onCancel?()
+            }
             return
         }
         isDragging = false
