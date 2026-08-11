@@ -73,7 +73,7 @@ final class WindowTilingController {
     /// with main-screen and first-screen fallbacks. Nil only when there are
     /// no screens.
     private func targetScreenIndex(for windowFrame: CGRect, screens: [ScreenGeometry]) -> Int? {
-        if let index = TilingScreenRules.bestScreenIndex(for: windowFrame, screenFrames: screens.map(\.frame)) {
+        if let index = ScreenCoordinates.bestScreenIndex(for: windowFrame, screenFrames: screens.map(\.frame)) {
             return index
         }
         if let mainIndex = self.screens.mainIndex, screens.indices.contains(mainIndex) {

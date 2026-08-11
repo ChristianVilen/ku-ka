@@ -24,7 +24,9 @@ final class ThumbnailStackManagerTests: XCTestCase {
     }
 
     private func add(_ result: CaptureResult) {
-        sut.add(image: result.image, result: result, screen: NSScreen.main!, duration: 0)
+        let screen = ScreenGeometry(frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                                    visibleFrame: CGRect(x: 0, y: 25, width: 1440, height: 875))
+        sut.add(image: result.image, result: result, screen: screen, duration: 0)
     }
 
     // MARK: - add()

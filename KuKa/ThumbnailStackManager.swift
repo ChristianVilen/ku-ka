@@ -15,7 +15,7 @@ class ThumbnailStackManager {
         self.screens = screens
     }
 
-    func add(image: NSImage, result: CaptureResult, screen: NSScreen, duration: TimeInterval) {
+    func add(image: NSImage, result: CaptureResult, screen: ScreenGeometry, duration: TimeInterval) {
         currentDuration = duration
         currentVisibleFrame = screen.visibleFrame
 
@@ -93,7 +93,7 @@ class ThumbnailStackManager {
     // MARK: - Private
 
     private func makePanel(image: NSImage) -> ThumbnailPanel {
-        let visible = currentVisibleFrame ?? screens.main?.visibleFrame ?? .zero
+        let visible = currentVisibleFrame ?? screens.mainOrPrimary?.visibleFrame ?? .zero
         let size = ThumbnailPanel.thumbSize(for: image)
         let frame = NSRect(
             x: visible.maxX - size.width - ThumbnailPanel.padding,

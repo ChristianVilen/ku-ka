@@ -24,23 +24,25 @@ final class CaptureManagerTests: XCTestCase {
         sut = CaptureManager(screenCapture: mockScreenCapture, store: fakeStore)
     }
 
+    private let screenFrame = CGRect(x: 0, y: 0, width: 1440, height: 900)
+
     // MARK: - captureFullScreen()
 
     func testCaptureFullScreenReturnsResultOnSuccess() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        let result = await sut.captureFullScreen(screen: NSScreen.main!)
+        let result = await sut.captureFullScreen(screenFrame: screenFrame, primaryHeight: 900)
         XCTAssertNotNil(result)
     }
 
     func testCaptureFullScreenReturnsNilOnFailure() async {
         mockScreenCapture.imageToReturn = nil
-        let result = await sut.captureFullScreen(screen: NSScreen.main!)
+        let result = await sut.captureFullScreen(screenFrame: screenFrame, primaryHeight: 900)
         XCTAssertNil(result)
     }
 
     func testCaptureFullScreenStoresCapturedImage() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        _ = await sut.captureFullScreen(screen: NSScreen.main!)
+        _ = await sut.captureFullScreen(screenFrame: screenFrame, primaryHeight: 900)
         XCTAssertEqual(fakeStore.storedImages.count, 1)
     }
 
@@ -68,15 +70,13 @@ final class CaptureManagerTests: XCTestCase {
 
     func testCaptureReturnsNilWhenScreenCaptureReturnsNil() async {
         mockScreenCapture.imageToReturn = nil
-        let screen = NSScreen.main!
-        let result = await sut.capture(rect: CGRect(x: 0, y: 0, width: 100, height: 100), screen: screen)
+        let result = await sut.capture(rect: CGRect(x: 0, y: 0, width: 100, height: 100), screenFrame: screenFrame, primaryHeight: 900)
         XCTAssertNil(result)
     }
 
     func testCaptureReturnsResultOnSuccess() async {
         mockScreenCapture.imageToReturn = MockScreenCapture.make1x1Image()
-        let screen = NSScreen.main!
-        let result = await sut.capture(rect: CGRect(x: 10, y: 20, width: 100, height: 50), screen: screen)
+        let result = await sut.capture(rect: CGRect(x: 10, y: 20, width: 100, height: 50), screenFrame: screenFrame, primaryHeight: 900)
         XCTAssertNotNil(result)
         XCTAssertNotNil(result?.image)
         XCTAssertNotNil(result?.fileURL)
@@ -84,54 +84,34 @@ final class CaptureManagerTests: XCTestCase {
 
     func testCaptureDoesNotStoreOnFailure() async {
         mockScreenCapture.imageToReturn = nil
-        let screen = NSScreen.main!
-        _ = await sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screen: screen)
-        XCTAssertTrue(fakeStore.storedImages.isEmpty)
-    }
-
-    // MARK: - Screens seam
-
-    func testCaptureFullScreenFlipsAgainstInjectedPrimaryHeight() async {
-        // The flip must use the injected layout's primary height, not the
-        // real display's. Synthetic primary: 2000pt tall.
-        var capturedRect: CGRect?
-        let spy = SpyScreenCapture()
-        spy.onCapture = { capturedRect = $0 }
-        let fakeScreens = FakeScreens(
-            all: [ScreenGeometry(frame: CGRect(x: 0, y: 0, width: 1000, height: 2000),
-                                 visibleFrame: CGRect(x: 0, y: 0, width: 1000, height: 1975))],
-            mainIndex: 0
-        )
-        let manager = CaptureManager(screenCapture: spy, store: fakeStore, screens: fakeScreens)
-
-        let screen = NSScreen.main!
-        _ = await manager.captureFullScreen(screen: screen)
-
-        XCTAssertNotNil(capturedRect)
-        let expectedY = 2000 - screen.frame.origin.y - screen.frame.height
-        XCTAssertEqual(capturedRect!.origin.y, expectedY, accuracy: 0.01)
-    }
-
-    func testCaptureFullScreenWithNoScreensReturnsNilInsteadOfCrashing() async {
-        let spy = SpyScreenCapture()
-        spy.onCapture = { _ in XCTFail("must not capture without a screen layout") }
-        let manager = CaptureManager(screenCapture: spy, store: fakeStore, screens: FakeScreens())
-
-        let result = await manager.captureFullScreen(screen: NSScreen.main!)
-
-        XCTAssertNil(result)
+        _ = await sut.capture(rect: CGRect(x: 0, y: 0, width: 10, height: 10), screenFrame: screenFrame, primaryHeight: 900)
         XCTAssertTrue(fakeStore.storedImages.isEmpty)
     }
 
     // MARK: - Coordinate Conversion
 
+    func testCaptureFullScreenFlipsAgainstPrimaryHeight() async {
+        // A 1000x800 secondary at NS (2000, 0) beside a 2000pt-tall primary:
+        // CG y = 2000 - 0 - 800 = 1200, x unchanged.
+        var capturedRect: CGRect?
+        let spy = SpyScreenCapture()
+        spy.onCapture = { capturedRect = $0 }
+        let manager = CaptureManager(screenCapture: spy, store: fakeStore)
+
+        _ = await manager.captureFullScreen(screenFrame: CGRect(x: 2000, y: 0, width: 1000, height: 800),
+                                            primaryHeight: 2000)
+
+        XCTAssertNotNil(capturedRect)
+        XCTAssertEqual(capturedRect!.origin.x, 2000, accuracy: 0.01)
+        XCTAssertEqual(capturedRect!.origin.y, 1200, accuracy: 0.01)
+    }
+
     func testCoordinateConversion() async {
         // The capture method converts from NSView (bottom-left origin) to CG (top-left origin)
         // For a screen of height 1000, a rect at y=200 with height=100 should become y=700 in CG coords
         // y_cg = screenHeight - rect.y - rect.height = 1000 - 200 - 100 = 700
-        let screenFrame = NSScreen.main!.frame
+        let frame = CGRect(x: 100, y: 0, width: 1440, height: 1000)
         let rect = CGRect(x: 50, y: 200, width: 100, height: 100)
-        let expectedY = screenFrame.height - rect.origin.y - rect.height
 
         // We can verify by checking what rect the screen capture receives
         var capturedRect: CGRect?
@@ -139,12 +119,11 @@ final class CaptureManagerTests: XCTestCase {
         spy.onCapture = { capturedRect = $0 }
         let manager = CaptureManager(screenCapture: spy, store: fakeStore)
 
-        let screen = NSScreen.main!
-        _ = await manager.capture(rect: rect, screen: screen)
+        _ = await manager.capture(rect: rect, screenFrame: frame, primaryHeight: 1000)
 
         XCTAssertNotNil(capturedRect)
-        XCTAssertEqual(capturedRect!.origin.x, screenFrame.origin.x + 50, accuracy: 0.01)
-        XCTAssertEqual(capturedRect!.origin.y, expectedY, accuracy: 0.01)
+        XCTAssertEqual(capturedRect!.origin.x, 150, accuracy: 0.01)
+        XCTAssertEqual(capturedRect!.origin.y, 700, accuracy: 0.01)
         XCTAssertEqual(capturedRect!.width, 100, accuracy: 0.01)
         XCTAssertEqual(capturedRect!.height, 100, accuracy: 0.01)
     }

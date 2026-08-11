@@ -3,16 +3,16 @@ import Cocoa
 /// Result of one selection session: what the user picked, and the screen
 /// the capture belongs on.
 enum SelectionResult: Equatable {
-    case rect(CGRect, on: NSScreen)
-    case window(CGWindowID, on: NSScreen)
+    case rect(CGRect, on: ScreenGeometry)
+    case window(CGWindowID, on: ScreenGeometry)
     case cancelled
 }
 
 /// Event emitted by the overlay layer while a session is active.
 /// `screen` is the screen whose overlay emitted the event.
 enum OverlayEvent {
-    case rectSelected(CGRect, screen: NSScreen)
-    case windowSelected(WindowInfo, screen: NSScreen)
+    case rectSelected(CGRect, screen: ScreenGeometry)
+    case windowSelected(WindowInfo, screen: ScreenGeometry)
     case cancelled
 }
 
@@ -20,7 +20,7 @@ enum OverlayEvent {
 /// The production adapter drives real OverlayWindows; tests drive a fake.
 @MainActor
 protocol OverlayPresenting {
-    func present(on screens: [NSScreen], keyScreen: NSScreen?, handler: @escaping (OverlayEvent) -> Void)
+    func present(on layout: [ScreenGeometry], keyScreen: ScreenGeometry?, handler: @escaping (OverlayEvent) -> Void)
     func dismissAll()
 }
 
@@ -37,58 +37,49 @@ final class SelectionSession {
         self.presenter = presenter
     }
 
-    func run(on screens: [NSScreen], mouseLocation: CGPoint) async -> SelectionResult {
-        guard !isActive, !screens.isEmpty else { return .cancelled }
+    func run(on layout: [ScreenGeometry], mouseLocation: CGPoint) async -> SelectionResult {
+        guard !isActive, !layout.isEmpty else { return .cancelled }
         isActive = true
         defer { isActive = false }
 
-        let keyScreen = screens.first { $0.frame.contains(mouseLocation) }
+        let keyScreen = layout.first { $0.frame.contains(mouseLocation) }
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
-            presenter.present(on: screens, keyScreen: keyScreen) { [weak self] event in
-                self?.handle(event, screens: screens)
+            presenter.present(on: layout, keyScreen: keyScreen) { [weak self] event in
+                self?.handle(event, layout: layout)
             }
         }
     }
 
-    private func handle(_ event: OverlayEvent, screens: [NSScreen]) {
+    private func handle(_ event: OverlayEvent, layout: [ScreenGeometry]) {
         // Overlays can emit more than one event (e.g. Esc from a second
         // screen while the first is resolving); only the first one counts.
         guard let continuation else { return }
         self.continuation = nil
         presenter.dismissAll()
-        continuation.resume(returning: result(for: event, screens: screens))
+        continuation.resume(returning: result(for: event, layout: layout))
     }
 
-    private func result(for event: OverlayEvent, screens: [NSScreen]) -> SelectionResult {
+    private func result(for event: OverlayEvent, layout: [ScreenGeometry]) -> SelectionResult {
         switch event {
         case .rectSelected(let rect, let screen):
             return .rect(rect, on: screen)
         case .windowSelected(let info, let overlayScreen):
-            let owner = Self.owningScreenIndex(windowFrame: info.frame, screenFrames: screens.map(\.frame))
-                .map { screens[$0] }
+            let owner = ScreenCoordinates.bestScreenIndex(for: info.frame, screenFrames: layout.map(\.frame))
+                .map { layout[$0] }
             return .window(info.windowID, on: owner ?? overlayScreen)
         case .cancelled:
             return .cancelled
         }
     }
-
-    /// Index of the screen owning the largest share of `windowFrame`,
-    /// or nil when no screen overlaps it. Frames in NS coordinates.
-    static func owningScreenIndex(windowFrame: CGRect, screenFrames: [CGRect]) -> Int? {
-        let overlaps = screenFrames.map { frame -> CGFloat in
-            let intersection = frame.intersection(windowFrame)
-            return intersection.isNull ? 0 : intersection.width * intersection.height
-        }
-        guard let best = overlaps.indices.max(by: { overlaps[$0] < overlaps[$1] }),
-              overlaps[best] > 0 else { return nil }
-        return best
-    }
 }
 
 /// Production adapter at the OverlayPresenting seam: real OverlayWindows,
-/// app activation, cursor teardown.
+/// app activation, cursor teardown. The only place the selection feature
+/// touches NSScreen — each layout entry is matched back to its live screen
+/// by frame; entries whose screen has vanished since the layout snapshot
+/// get no overlay.
 @MainActor
 final class OverlayPresenter: OverlayPresenting {
     private let windowListProvider: WindowListProvider
@@ -98,23 +89,30 @@ final class OverlayPresenter: OverlayPresenting {
         self.windowListProvider = windowListProvider
     }
 
-    func present(on screens: [NSScreen], keyScreen: NSScreen?, handler: @escaping (OverlayEvent) -> Void) {
+    func present(on layout: [ScreenGeometry], keyScreen: ScreenGeometry?, handler: @escaping (OverlayEvent) -> Void) {
+        // Pushed once per session; dismissAll pops the matching once. The
+        // cursor is app-global, so per-overlay pushes would leak stack
+        // entries on multi-display layouts.
+        NSCursor.crosshair.push()
+
+        let screens = NSScreen.screens
         var keyOverlay: OverlayWindow?
 
-        for screen in screens {
+        for geometry in layout {
+            guard let screen = screens.first(where: { $0.frame == geometry.frame }) else { continue }
             let overlay = OverlayWindow(screen: screen)
             overlay.selectionView.windowListProvider = windowListProvider
             overlay.selectionView.onSelection = { rect in
-                handler(.rectSelected(rect, screen: screen))
+                handler(.rectSelected(rect, screen: geometry))
             }
             overlay.selectionView.onWindowSelection = { info in
-                handler(.windowSelected(info, screen: screen))
+                handler(.windowSelected(info, screen: geometry))
             }
             overlay.selectionView.onCancel = {
                 handler(.cancelled)
             }
             overlayWindows.append(overlay)
-            if screen == keyScreen {
+            if geometry == keyScreen {
                 keyOverlay = overlay
             }
         }

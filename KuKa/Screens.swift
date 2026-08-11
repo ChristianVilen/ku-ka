@@ -24,9 +24,10 @@ extension Screens {
         return all[mainIndex]
     }
 
-    /// The primary screen's height, or nil when no screens are available (so
-    /// callers bail out instead of silently flipping coordinates around 0).
-    var primaryHeight: CGFloat? { all.first?.frame.height }
+    /// The screen with the key window, falling back to the primary screen.
+    /// Nil only when no screens are available — the one shared answer to
+    /// "which screen, when the capture didn't say".
+    var mainOrPrimary: ScreenGeometry? { main ?? all.first }
 }
 
 struct SystemScreens: Screens {

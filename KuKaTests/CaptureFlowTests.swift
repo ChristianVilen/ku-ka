@@ -6,7 +6,7 @@ final class FakeSelection: SelectionRunning {
     var result: SelectionResult = .cancelled
     private(set) var runCount = 0
 
-    func run(on screens: [NSScreen], mouseLocation: CGPoint) async -> SelectionResult {
+    func run(on layout: [ScreenGeometry], mouseLocation: CGPoint) async -> SelectionResult {
         runCount += 1
         return result
     }
@@ -17,7 +17,7 @@ final class FakeCapture: CaptureProviding {
     var result: CaptureResult?
     private(set) var calls: [String] = []
 
-    func capture(rect: CGRect, screen: NSScreen) async -> CaptureResult? {
+    func capture(rect: CGRect, screenFrame: CGRect, primaryHeight: CGFloat) async -> CaptureResult? {
         calls.append("rect")
         return result
     }
@@ -27,7 +27,7 @@ final class FakeCapture: CaptureProviding {
         return result
     }
 
-    func captureFullScreen(screen: NSScreen) async -> CaptureResult? {
+    func captureFullScreen(screenFrame: CGRect, primaryHeight: CGFloat) async -> CaptureResult? {
         calls.append("fullscreen")
         return result
     }
@@ -35,25 +35,24 @@ final class FakeCapture: CaptureProviding {
 
 @MainActor
 final class FakeThumbnails: ThumbnailPresenting {
-    private(set) var added: [(screen: NSScreen, duration: TimeInterval)] = []
+    private(set) var added: [(screen: ScreenGeometry, duration: TimeInterval)] = []
 
-    func add(image: NSImage, result: CaptureResult, screen: NSScreen, duration: TimeInterval) {
+    func add(image: NSImage, result: CaptureResult, screen: ScreenGeometry, duration: TimeInterval) {
         added.append((screen, duration))
     }
 }
 
 @MainActor
 final class CaptureFlowTests: XCTestCase {
-    private var screen: NSScreen!
+    private let screen = ScreenGeometry(frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                                        visibleFrame: CGRect(x: 0, y: 25, width: 1440, height: 875))
     private var selection: FakeSelection!
     private var capture: FakeCapture!
     private var thumbnails: FakeThumbnails!
-    private var flashedScreens: [NSScreen] = []
+    private var flashedScreens: [ScreenGeometry] = []
     private var flow: CaptureFlow!
 
     override func setUp() async throws {
-        try XCTSkipIf(NSScreen.screens.isEmpty, "No screen available in this environment")
-        screen = NSScreen.screens[0]
         selection = FakeSelection()
         capture = FakeCapture()
         capture.result = CaptureResult(image: NSImage(), fileURL: URL(fileURLWithPath: "/tmp/kuka-test.png"))
@@ -77,7 +76,7 @@ final class CaptureFlowTests: XCTestCase {
 
     func testRectSelectionCapturesRectAndShowsThumbnailOnItsScreen() async {
         selection.result = .rect(CGRect(x: 1, y: 2, width: 300, height: 200), on: screen)
-        await flow.start(.interactive, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.interactive, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertEqual(capture.calls, ["rect"])
         XCTAssertEqual(thumbnails.added.count, 1)
         XCTAssertEqual(thumbnails.added.first?.screen, screen)
@@ -86,7 +85,7 @@ final class CaptureFlowTests: XCTestCase {
 
     func testWindowSelectionCapturesThatWindow() async {
         selection.result = .window(42, on: screen)
-        await flow.start(.interactive, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.interactive, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertEqual(capture.calls, ["window:42"])
         XCTAssertEqual(thumbnails.added.count, 1)
         XCTAssertEqual(thumbnails.added.first?.screen, screen)
@@ -95,7 +94,7 @@ final class CaptureFlowTests: XCTestCase {
 
     func testCancelledSelectionCapturesNothing() async {
         selection.result = .cancelled
-        await flow.start(.interactive, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.interactive, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertEqual(selection.runCount, 1)
         XCTAssertTrue(capture.calls.isEmpty)
         XCTAssertTrue(thumbnails.added.isEmpty)
@@ -104,7 +103,7 @@ final class CaptureFlowTests: XCTestCase {
     func testFailedCaptureShowsNoThumbnail() async {
         selection.result = .rect(CGRect(x: 0, y: 0, width: 10, height: 10), on: screen)
         capture.result = nil
-        await flow.start(.interactive, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.interactive, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertEqual(capture.calls, ["rect"])
         XCTAssertTrue(thumbnails.added.isEmpty)
     }
@@ -112,7 +111,7 @@ final class CaptureFlowTests: XCTestCase {
     // MARK: - Fullscreen
 
     func testFullScreenCapturesScreenUnderMouseAndFlashes() async {
-        await flow.start(.fullScreen, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.fullScreen, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertEqual(capture.calls, ["fullscreen"])
         XCTAssertEqual(flashedScreens, [screen])
         XCTAssertEqual(thumbnails.added.count, 1)
@@ -121,14 +120,21 @@ final class CaptureFlowTests: XCTestCase {
     }
 
     func testFullScreenFallsBackToFirstScreenWhenMouseIsNowhere() async {
-        await flow.start(.fullScreen, screens: [screen], mouseLocation: CGPoint(x: -100000, y: -100000))
+        await flow.start(.fullScreen, layout: [screen], mouseLocation: CGPoint(x: -100000, y: -100000))
         XCTAssertEqual(capture.calls, ["fullscreen"])
         XCTAssertEqual(thumbnails.added.first?.screen, screen)
     }
 
+    func testFullScreenWithNoScreensCapturesNothing() async {
+        await flow.start(.fullScreen, layout: [], mouseLocation: .zero)
+        XCTAssertTrue(capture.calls.isEmpty)
+        XCTAssertTrue(flashedScreens.isEmpty)
+        XCTAssertTrue(thumbnails.added.isEmpty)
+    }
+
     func testFullScreenFailedCaptureNeitherFlashesNorShowsThumbnail() async {
         capture.result = nil
-        await flow.start(.fullScreen, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.fullScreen, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertTrue(flashedScreens.isEmpty)
         XCTAssertTrue(thumbnails.added.isEmpty)
     }
@@ -145,7 +151,7 @@ final class CaptureFlowTests: XCTestCase {
             settleDelay: 0
         )
         selection.result = .rect(CGRect(x: 0, y: 0, width: 10, height: 10), on: screen)
-        await flow.start(.interactive, screens: [screen], mouseLocation: mouseOnScreen)
+        await flow.start(.interactive, layout: [screen], mouseLocation: mouseOnScreen)
         XCTAssertEqual(thumbnails.added.first?.duration, 3.25)
     }
 }

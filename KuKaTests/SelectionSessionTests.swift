@@ -5,13 +5,13 @@ import XCTest
 final class FakeOverlayPresenter: OverlayPresenting {
     private(set) var presentCount = 0
     private(set) var dismissCount = 0
-    private(set) var lastScreens: [NSScreen] = []
-    private(set) var lastKeyScreen: NSScreen?
+    private(set) var lastLayout: [ScreenGeometry] = []
+    private(set) var lastKeyScreen: ScreenGeometry?
     private var handler: ((OverlayEvent) -> Void)?
 
-    func present(on screens: [NSScreen], keyScreen: NSScreen?, handler: @escaping (OverlayEvent) -> Void) {
+    func present(on layout: [ScreenGeometry], keyScreen: ScreenGeometry?, handler: @escaping (OverlayEvent) -> Void) {
         presentCount += 1
-        lastScreens = screens
+        lastLayout = layout
         lastKeyScreen = keyScreen
         self.handler = handler
     }
@@ -27,13 +27,12 @@ final class FakeOverlayPresenter: OverlayPresenting {
 
 @MainActor
 final class SelectionSessionTests: XCTestCase {
-    private var screen: NSScreen!
+    private let screen = ScreenGeometry(frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+                                        visibleFrame: CGRect(x: 0, y: 25, width: 1440, height: 875))
     private var presenter: FakeOverlayPresenter!
     private var session: SelectionSession!
 
     override func setUp() async throws {
-        try XCTSkipIf(NSScreen.screens.isEmpty, "No screen available in this environment")
-        screen = NSScreen.screens[0]
         presenter = FakeOverlayPresenter()
         session = SelectionSession(presenter: presenter)
     }
@@ -41,7 +40,7 @@ final class SelectionSessionTests: XCTestCase {
     /// Starts run() in a child task and yields until the presenter has been
     /// asked to present, so the test can emit overlay events.
     private func startRun(mouseLocation: CGPoint) async -> Task<SelectionResult, Never> {
-        let task = Task { await self.session.run(on: [self.screen!], mouseLocation: mouseLocation) }
+        let task = Task { await self.session.run(on: [self.screen], mouseLocation: mouseLocation) }
         for _ in 0..<100 where presenter.presentCount == 0 { await Task.yield() }
         return task
     }
@@ -76,22 +75,6 @@ final class SelectionSessionTests: XCTestCase {
         presenter.emit(.windowSelected(info, screen: screen))
         let result = await task.value
         XCTAssertEqual(result, .window(7, on: screen))
-    }
-
-    // MARK: - Screen attribution (pure)
-
-    func testOwningScreenPrefersLargestOverlap() {
-        let left = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let right = CGRect(x: 1000, y: 0, width: 1000, height: 800)
-        // straddles both: 300pt wide on the left screen, 500pt on the right
-        let window = CGRect(x: 700, y: 100, width: 800, height: 400)
-        XCTAssertEqual(SelectionSession.owningScreenIndex(windowFrame: window, screenFrames: [left, right]), 1)
-    }
-
-    func testOwningScreenIsNilWithoutOverlap() {
-        let screenFrame = CGRect(x: 0, y: 0, width: 1000, height: 800)
-        let window = CGRect(x: 5000, y: 5000, width: 10, height: 10)
-        XCTAssertNil(SelectionSession.owningScreenIndex(windowFrame: window, screenFrames: [screenFrame]))
     }
 
     // MARK: - Lifecycle

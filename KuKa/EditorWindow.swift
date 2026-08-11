@@ -14,7 +14,7 @@ class EditorWindow: NSPanel, NSWindowDelegate {
         // Size to fit image, capped at 80% of screen (uncapped without screens)
         var w = image.size.width
         var h = image.size.height
-        if let visible = screens.main?.visibleFrame ?? screens.all.first?.visibleFrame {
+        if let visible = screens.mainOrPrimary?.visibleFrame {
             let maxW = visible.width * 0.8
             let maxH = visible.height * 0.8
             let aspect = image.size.width / image.size.height

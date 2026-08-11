@@ -89,19 +89,15 @@ struct CaptureResult {
 class CaptureManager {
     let screenCapture: ScreenCapturing
     let store: ImageStoring
-    let screens: Screens
 
     init(screenCapture: ScreenCapturing = SystemScreenCapture(),
-         store: ImageStoring = ImageStore(),
-         screens: Screens = SystemScreens()) {
+         store: ImageStoring = ImageStore()) {
         self.screenCapture = screenCapture
         self.store = store
-        self.screens = screens
     }
 
-    func captureFullScreen(screen: NSScreen) async -> CaptureResult? {
-        guard let primaryHeight = screens.primaryHeight else { return nil }
-        let cgRect = ScreenCoordinates.flipVertical(screen.frame, primaryScreenHeight: primaryHeight)
+    func captureFullScreen(screenFrame: CGRect, primaryHeight: CGFloat) async -> CaptureResult? {
+        let cgRect = ScreenCoordinates.flipVertical(screenFrame, primaryScreenHeight: primaryHeight)
 
         guard let cgImage = await screenCapture.captureScreen(rect: cgRect) else {
             NSLog("Ku-Ka: Full screen capture returned nil")
@@ -119,8 +115,8 @@ class CaptureManager {
         return store.store(cgImage: cgImage)
     }
 
-    func capture(rect: CGRect, screen: NSScreen) async -> CaptureResult? {
-        let cgRect = ScreenCoordinates.cgRect(forSelection: rect, inScreenFrame: screen.frame)
+    func capture(rect: CGRect, screenFrame: CGRect, primaryHeight: CGFloat) async -> CaptureResult? {
+        let cgRect = ScreenCoordinates.cgRect(forSelection: rect, inScreenFrame: screenFrame, primaryHeight: primaryHeight)
 
         guard let cgImage = await screenCapture.captureScreen(rect: cgRect) else {
             NSLog("Ku-Ka: Screen capture returned nil")

@@ -9,7 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var captureFlow = CaptureFlow(
         selection: SelectionSession(),
         capture: CaptureManager(store: imageStore),
-        thumbnails: thumbnailStack
+        thumbnails: thumbnailStack,
+        thumbnailDuration: { [settings] in settings.thumbnailDuration }
     )
     private lazy var thumbnailStack = ThumbnailStackManager(store: imageStore)
     private var editorWindow: EditorWindow?
@@ -67,11 +68,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Capture Flow
 
     private func startCapture(_ mode: CaptureFlow.Mode) {
+        guard ScreenRecordingPermission.ensureGranted() else { return }
         // Read the ambient state at press time, before the Task hop
-        let screens = NSScreen.screens
+        let layout = SystemScreens().all
         let mouseLocation = NSEvent.mouseLocation
         Task { @MainActor in
-            await self.captureFlow.start(mode, screens: screens, mouseLocation: mouseLocation)
+            await self.captureFlow.start(mode, layout: layout, mouseLocation: mouseLocation)
         }
     }
 
@@ -94,10 +96,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         editorWindow = editor
 
         // Drop our reference once the window closes (Done/Delete/close button/Escape)
-        // so the editor and its full-resolution image deallocate. Closing only
-        // ever replaces this one editor, so clear it unconditionally.
-        editor.onClose = { [weak self] in
-            self?.editorWindow = nil
+        // so the editor and its full-resolution image deallocate. A second
+        // editor can be opened while one is up, so only clear the reference
+        // if it still points at the editor that closed. `editor` must be
+        // weak here: a strong capture in its own stored closure would be a
+        // retain cycle.
+        editor.onClose = { [weak self, weak editor] in
+            if let editor, self?.editorWindow === editor {
+                self?.editorWindow = nil
+            }
             MemoryReclaim.schedule()
         }
 
