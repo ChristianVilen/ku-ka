@@ -4,18 +4,20 @@ class ThumbnailStackManager {
     private(set) var entries: [(panel: ThumbnailPanel, result: CaptureResult)] = []
     var onEdit: ((CaptureResult) -> Void)?
     private let store: ImageStoring
+    private let screens: Screens
     private var combineButtons: [CombineButton] = []
     private var currentDuration: TimeInterval = 5.0
-    private var currentScreen: NSScreen?
+    private var currentVisibleFrame: CGRect?
     private static let maxCount = 5
 
-    init(store: ImageStoring) {
+    init(store: ImageStoring, screens: Screens = SystemScreens()) {
         self.store = store
+        self.screens = screens
     }
 
     func add(image: NSImage, result: CaptureResult, screen: NSScreen, duration: TimeInterval) {
         currentDuration = duration
-        currentScreen = screen
+        currentVisibleFrame = screen.visibleFrame
 
         let panel = makePanel(image: image)
         entries.insert((panel: panel, result: result), at: 0)
@@ -91,11 +93,11 @@ class ThumbnailStackManager {
     // MARK: - Private
 
     private func makePanel(image: NSImage) -> ThumbnailPanel {
-        let screen = currentScreen ?? NSScreen.main!
+        let visible = currentVisibleFrame ?? screens.main?.visibleFrame ?? .zero
         let size = ThumbnailPanel.thumbSize(for: image)
         let frame = NSRect(
-            x: screen.visibleFrame.maxX - size.width - ThumbnailPanel.padding,
-            y: screen.visibleFrame.minY + ThumbnailPanel.padding,
+            x: visible.maxX - size.width - ThumbnailPanel.padding,
+            y: visible.minY + ThumbnailPanel.padding,
             width: size.width,
             height: size.height
         )
@@ -124,14 +126,14 @@ class ThumbnailStackManager {
     }
 
     private func repositionAll(animated: Bool) {
-        guard let screen = currentScreen else { return }
+        guard let visible = currentVisibleFrame else { return }
 
         // Remove old combine buttons
         for btn in combineButtons { btn.close() }
         combineButtons.removeAll()
 
-        let baseX = screen.visibleFrame.maxX - ThumbnailPanel.thumbWidth - ThumbnailPanel.padding
-        var y = screen.visibleFrame.minY + ThumbnailPanel.padding
+        let baseX = visible.maxX - ThumbnailPanel.thumbWidth - ThumbnailPanel.padding
+        var y = visible.minY + ThumbnailPanel.padding
 
         // Stack from bottom: oldest (last) at bottom, newest (first) at top
         let reversed = Array(entries.enumerated()).reversed()

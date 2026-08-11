@@ -1,6 +1,17 @@
 import XCTest
 @testable import KuKa
 
+final class SpyScreenCapture: ScreenCapturing {
+    var onCapture: ((CGRect) -> Void)?
+
+    func captureScreen(rect: CGRect) async -> CGImage? {
+        onCapture?(rect)
+        return MockScreenCapture.make1x1Image()
+    }
+
+    func captureWindow(windowID: CGWindowID) async -> CGImage? { nil }
+}
+
 final class CaptureManagerTests: XCTestCase {
     var mockScreenCapture: MockScreenCapture!
     var fakeStore: FakeImageStore!
@@ -78,6 +89,40 @@ final class CaptureManagerTests: XCTestCase {
         XCTAssertTrue(fakeStore.storedImages.isEmpty)
     }
 
+    // MARK: - Screens seam
+
+    func testCaptureFullScreenFlipsAgainstInjectedPrimaryHeight() async {
+        // The flip must use the injected layout's primary height, not the
+        // real display's. Synthetic primary: 2000pt tall.
+        var capturedRect: CGRect?
+        let spy = SpyScreenCapture()
+        spy.onCapture = { capturedRect = $0 }
+        let fakeScreens = FakeScreens(
+            all: [ScreenGeometry(frame: CGRect(x: 0, y: 0, width: 1000, height: 2000),
+                                 visibleFrame: CGRect(x: 0, y: 0, width: 1000, height: 1975))],
+            mainIndex: 0
+        )
+        let manager = CaptureManager(screenCapture: spy, store: fakeStore, screens: fakeScreens)
+
+        let screen = NSScreen.main!
+        _ = await manager.captureFullScreen(screen: screen)
+
+        XCTAssertNotNil(capturedRect)
+        let expectedY = 2000 - screen.frame.origin.y - screen.frame.height
+        XCTAssertEqual(capturedRect!.origin.y, expectedY, accuracy: 0.01)
+    }
+
+    func testCaptureFullScreenWithNoScreensReturnsNilInsteadOfCrashing() async {
+        let spy = SpyScreenCapture()
+        spy.onCapture = { _ in XCTFail("must not capture without a screen layout") }
+        let manager = CaptureManager(screenCapture: spy, store: fakeStore, screens: FakeScreens())
+
+        let result = await manager.captureFullScreen(screen: NSScreen.main!)
+
+        XCTAssertNil(result)
+        XCTAssertTrue(fakeStore.storedImages.isEmpty)
+    }
+
     // MARK: - Coordinate Conversion
 
     func testCoordinateConversion() async {
@@ -90,14 +135,6 @@ final class CaptureManagerTests: XCTestCase {
 
         // We can verify by checking what rect the screen capture receives
         var capturedRect: CGRect?
-        class SpyScreenCapture: ScreenCapturing {
-            var onCapture: ((CGRect) -> Void)?
-            func captureScreen(rect: CGRect) async -> CGImage? {
-                onCapture?(rect)
-                return MockScreenCapture.make1x1Image()
-            }
-            func captureWindow(windowID: CGWindowID) async -> CGImage? { nil }
-        }
         let spy = SpyScreenCapture()
         spy.onCapture = { capturedRect = $0 }
         let manager = CaptureManager(screenCapture: spy, store: fakeStore)

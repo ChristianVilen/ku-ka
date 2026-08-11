@@ -6,21 +6,24 @@ class EditorWindow: NSPanel, NSWindowDelegate {
     private let fileURL: URL
     private let store: ImageStoring
 
-    init(image: NSImage, fileURL: URL, store: ImageStoring) {
+    init(image: NSImage, fileURL: URL, store: ImageStoring, screens: Screens = SystemScreens()) {
         drawingView = DrawingView(image: image)
         self.fileURL = fileURL
         self.store = store
 
-        // Size to fit image, capped at 80% of screen
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        let maxW = screen.visibleFrame.width * 0.8
-        let maxH = screen.visibleFrame.height * 0.8
-        let aspect = image.size.width / image.size.height
-        var w = min(image.size.width, maxW)
-        var h = w / aspect
-        if h > maxH {
-            h = maxH
-            w = h * aspect
+        // Size to fit image, capped at 80% of screen (uncapped without screens)
+        var w = image.size.width
+        var h = image.size.height
+        if let visible = screens.main?.visibleFrame ?? screens.all.first?.visibleFrame {
+            let maxW = visible.width * 0.8
+            let maxH = visible.height * 0.8
+            let aspect = image.size.width / image.size.height
+            w = min(image.size.width, maxW)
+            h = w / aspect
+            if h > maxH {
+                h = maxH
+                w = h * aspect
+            }
         }
 
         let toolbarHeight: CGFloat = 44

@@ -1,23 +1,12 @@
 import XCTest
 @testable import KuKa
 
-final class WindowListProviderTests: XCTestCase {
+/// ScreenCoordinates owns the app's NS/CG coordinate conversions — the math
+/// shared by CG (window list), AX (window control), and screen capture is
+/// pinned here.
+final class ScreenCoordinatesTests: XCTestCase {
 
-    func testMockWindowListProviderReturnsExpectedWindows() {
-        let mock = MockWindowListProvider()
-        let window = WindowInfo(windowID: 42, frame: CGRect(x: 100, y: 200, width: 800, height: 600), ownerName: "TestApp", layer: 0)
-        mock.windows = [window]
-
-        let result = mock.windowsOnScreen()
-        XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].windowID, 42)
-        XCTAssertEqual(result[0].ownerName, "TestApp")
-        XCTAssertEqual(result[0].frame, CGRect(x: 100, y: 200, width: 800, height: 600))
-    }
-
-    // ScreenCoordinates.flipVertical is the one flip shared by CG (window
-    // list), AX (window control), and NS coordinate conversion — its math is
-    // pinned here.
+    // MARK: - flipVertical
 
     func testFlipVerticalHandComputed() {
         // Top-left origin -> bottom-left origin.
@@ -47,5 +36,28 @@ final class WindowListProviderTests: XCTestCase {
         let there = ScreenCoordinates.flipVertical(rect, primaryScreenHeight: 1600)
         let back = ScreenCoordinates.flipVertical(there, primaryScreenHeight: 1600)
         XCTAssertEqual(back, rect)
+    }
+
+    // MARK: - cgRect(forSelection:)
+
+    func testSelectionRectHandComputed() {
+        // Selection at (10, 20, 300, 200) on a 1000pt-high screen at the
+        // origin: x = 0 + 10, y = 1000 - 20 - 200 = 780.
+        let cg = ScreenCoordinates.cgRect(
+            forSelection: CGRect(x: 10, y: 20, width: 300, height: 200),
+            inScreenFrame: CGRect(x: 0, y: 0, width: 1600, height: 1000)
+        )
+        XCTAssertEqual(cg, CGRect(x: 10, y: 780, width: 300, height: 200))
+    }
+
+    func testSelectionRectOffsetsByScreenOriginX() {
+        // On a screen at x=1920 the selection's x is offset by the screen's
+        // origin; y still flips against the screen's own height (the
+        // long-standing formula this function preserves).
+        let cg = ScreenCoordinates.cgRect(
+            forSelection: CGRect(x: 100, y: 0, width: 200, height: 100),
+            inScreenFrame: CGRect(x: 1920, y: 0, width: 1600, height: 900)
+        )
+        XCTAssertEqual(cg, CGRect(x: 2020, y: 800, width: 200, height: 100))
     }
 }

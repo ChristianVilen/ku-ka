@@ -180,3 +180,10 @@ class FakeLoginItem: LoginItemManaging {
         isEnabled = enabled
     }
 }
+
+// MARK: - Fake Screens
+
+struct FakeScreens: Screens {
+    var all: [ScreenGeometry] = []
+    var mainIndex: Int?
+}
