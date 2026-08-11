@@ -46,6 +46,32 @@ final class ImageStoreTests: XCTestCase {
 
     // MARK: - File naming
 
+    func testStoreTwiceInSameSecondProducesDistinctFileNames() {
+        // File names have one-second resolution; a second capture in the
+        // same second must not overwrite the first on disk.
+        let frozen = Date(timeIntervalSince1970: 1_700_000_000)
+        let sut = ImageStore(fileManager: mockFileManager, clipboard: mockClipboard, now: { frozen })
+
+        let first = sut.store(cgImage: MockScreenCapture.make1x1Image())
+        let second = sut.store(cgImage: MockScreenCapture.make1x1Image())
+
+        XCTAssertNotEqual(first.fileURL, second.fileURL)
+        let firstBase = first.fileURL.deletingPathExtension().lastPathComponent
+        XCTAssertEqual(second.fileURL.lastPathComponent, "\(firstBase)-2.png")
+    }
+
+    func testThirdStoreInSameSecondCountsUp() {
+        let frozen = Date(timeIntervalSince1970: 1_700_000_000)
+        let sut = ImageStore(fileManager: mockFileManager, clipboard: mockClipboard, now: { frozen })
+
+        let first = sut.store(cgImage: MockScreenCapture.make1x1Image())
+        _ = sut.store(cgImage: MockScreenCapture.make1x1Image())
+        let third = sut.store(cgImage: MockScreenCapture.make1x1Image())
+
+        let firstBase = first.fileURL.deletingPathExtension().lastPathComponent
+        XCTAssertEqual(third.fileURL.lastPathComponent, "\(firstBase)-3.png")
+    }
+
     func testFileNameFormat() {
         let calendar = Calendar.current
         let components = DateComponents(year: 2026, month: 2, day: 25, hour: 14, minute: 30, second: 0)
@@ -171,8 +197,25 @@ final class ImageStoreTests: XCTestCase {
         XCTAssertEqual(mockFileManager.removedItems, [url])
     }
 
-    func testDeleteClearsClipboard() {
-        let url = URL(fileURLWithPath: "/tmp/kuka-test/Screenshots/test.png")
+    func testDeleteOfLastCopiedCaptureClearsClipboard() {
+        let result = sut.store(cgImage: MockScreenCapture.make1x1Image())
+        sut.delete(at: result.fileURL)
+        XCTAssertEqual(mockClipboard.clearedCount, 1)
+    }
+
+    func testDeleteOfOtherFileKeepsClipboard() {
+        // The clipboard holds the most recent capture; deleting an older
+        // screenshot must not wipe it.
+        _ = sut.store(cgImage: MockScreenCapture.make1x1Image())
+        sut.delete(at: URL(fileURLWithPath: "/tmp/kuka-test/Screenshots/older.png"))
+        XCTAssertEqual(mockClipboard.clearedCount, 0)
+    }
+
+    func testDeleteAfterSaveAnnotatedToSameURLClearsClipboard() {
+        // saveAnnotated re-copies the annotated image, so its URL becomes
+        // the one the clipboard tracks.
+        let url = URL(fileURLWithPath: "/tmp/kuka-test/Screenshots/annotated.png")
+        sut.saveAnnotated(image: makeCaptureImage(width: 4, height: 4), to: url)
         sut.delete(at: url)
         XCTAssertEqual(mockClipboard.clearedCount, 1)
     }

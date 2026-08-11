@@ -20,6 +20,10 @@ class MockFileManager: FileManaging {
     func removeItem(at url: URL) throws {
         removedItems.append(url)
     }
+
+    func fileExists(at url: URL) -> Bool {
+        writtenFiles.contains { $0.url == url } && !removedItems.contains(url)
+    }
 }
 
 // MARK: - Mock Clipboard

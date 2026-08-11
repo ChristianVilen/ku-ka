@@ -7,6 +7,7 @@ protocol FileManaging {
     func createDirectory(at url: URL, withIntermediateDirectories createIntermediates: Bool, attributes: [FileAttributeKey: Any]?) throws
     func writeImageData(_ data: Data, to url: URL) throws
     func removeItem(at url: URL) throws
+    func fileExists(at url: URL) -> Bool
 }
 
 protocol ClipboardManaging {
@@ -19,6 +20,10 @@ protocol ClipboardManaging {
 extension FileManager: FileManaging {
     func writeImageData(_ data: Data, to url: URL) throws {
         try data.write(to: url)
+    }
+
+    func fileExists(at url: URL) -> Bool {
+        fileExists(atPath: url.path)
     }
 }
 
@@ -75,13 +80,19 @@ final class ImageStore: ImageStoring {
     let fileManager: FileManaging
     let clipboard: ClipboardManaging
     let clipboardTIFFMaxPixels: Int
+    private let now: () -> Date
+    /// The stored file whose image was last copied to the clipboard. Deleting
+    /// any other file leaves the clipboard alone.
+    private var lastCopiedURL: URL?
 
     init(fileManager: FileManaging = FileManager.default,
          clipboard: ClipboardManaging = SystemClipboard(),
-         clipboardTIFFMaxPixels: Int = ImageStore.defaultClipboardTIFFMaxPixels) {
+         clipboardTIFFMaxPixels: Int = ImageStore.defaultClipboardTIFFMaxPixels,
+         now: @escaping () -> Date = { Date() }) {
         self.fileManager = fileManager
         self.clipboard = clipboard
         self.clipboardTIFFMaxPixels = clipboardTIFFMaxPixels
+        self.now = now
     }
 
     /// Persist a freshly captured CGImage: build the NSImage, write to disk,
@@ -89,7 +100,7 @@ final class ImageStore: ImageStoring {
     /// autorelease pool so the long-lived NSImage never caches an
     /// uncompressed TIFF rep.
     func store(cgImage: CGImage) -> CaptureResult {
-        store(cgImage: cgImage, fileName: generateFileName())
+        store(cgImage: cgImage, fileName: generateFileName(for: now()))
     }
 
     /// Stack two captures vertically, composited in a CGBitmapContext at the
@@ -117,7 +128,7 @@ final class ImageStore: ImageStoring {
         context.draw(topCG, in: CGRect(x: 0, y: bottomCG.height, width: topCG.width, height: topCG.height))
 
         guard let combined = context.makeImage() else { return nil }
-        return store(cgImage: combined, fileName: generateCombinedFileName())
+        return store(cgImage: combined, fileName: generateCombinedFileName(for: now()))
     }
 
     func saveAnnotated(image: NSImage, to url: URL) {
@@ -129,12 +140,16 @@ final class ImageStore: ImageStoring {
             }
         }
         copyToClipboard(cgImage: cgImage)
+        lastCopiedURL = url
         MemoryReclaim.schedule()
     }
 
     func delete(at url: URL) {
         try? fileManager.removeItem(at: url)
-        clipboard.clearClipboard()
+        if url == lastCopiedURL {
+            clipboard.clearClipboard()
+            lastCopiedURL = nil
+        }
     }
 
     func copyToClipboard(cgImage: CGImage) {
@@ -166,8 +181,25 @@ final class ImageStore: ImageStoring {
         let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         let fileURL = saveToDisk(cgImage: cgImage, fileName: fileName)
         copyToClipboard(cgImage: cgImage)
+        lastCopiedURL = fileURL
         MemoryReclaim.schedule()
         return CaptureResult(image: image, fileURL: fileURL)
+    }
+
+    /// File names have one-second resolution, so rapid captures can collide;
+    /// append -2, -3, … until the name is free instead of overwriting.
+    private func uniqueURL(for fileName: String, in dir: URL) -> URL {
+        var url = dir.appendingPathComponent(fileName)
+        guard fileManager.fileExists(at: url) else { return url }
+
+        let base = (fileName as NSString).deletingPathExtension
+        let ext = (fileName as NSString).pathExtension
+        var counter = 2
+        repeat {
+            url = dir.appendingPathComponent("\(base)-\(counter).\(ext)")
+            counter += 1
+        } while fileManager.fileExists(at: url)
+        return url
     }
 
     private func dateString(for date: Date) -> String {
@@ -180,7 +212,7 @@ final class ImageStore: ImageStoring {
         let dir = screenshotsDirectory()
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
 
-        let url = dir.appendingPathComponent(fileName)
+        let url = uniqueURL(for: fileName, in: dir)
 
         autoreleasepool {
             let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
