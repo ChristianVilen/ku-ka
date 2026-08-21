@@ -20,9 +20,10 @@ class DrawingView: NSView {
     }
 
     /// Flatten the strokes onto the screenshot in a CGBitmapContext at the
-    /// source's pixel dimensions. Compositing via NSImage.lockFocus would
+    /// source's pixel dimensions, then cut out `rect` (view points, origin
+    /// bottom-left) when one is given. Compositing via NSImage.lockFocus would
     /// re-render at the screen's backing scale, doubling the pixel size.
-    func compositeImage() -> NSImage {
+    func compositeImage(croppedTo rect: CGRect? = nil) -> NSImage {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
               let context = CGContext(
                 data: nil,
@@ -53,7 +54,18 @@ class DrawingView: NSView {
         NSGraphicsContext.restoreGraphicsState()
 
         guard let composited = context.makeImage() else { return image }
-        return NSImage(cgImage: composited, size: NSSize(width: composited.width, height: composited.height))
+        let output = rect.flatMap { composited.cropping(to: pixelRect(for: $0, scaleX: scaleX, scaleY: scaleY)) } ?? composited
+        return NSImage(cgImage: output, size: NSSize(width: output.width, height: output.height))
+    }
+
+    /// Map a rect in view points (origin bottom-left) to image pixels
+    /// (origin top-left, which is what CGImage.cropping expects).
+    private func pixelRect(for rect: CGRect, scaleX: CGFloat, scaleY: CGFloat) -> CGRect {
+        let left = (rect.minX * scaleX).rounded()
+        let right = (rect.maxX * scaleX).rounded()
+        let top = ((bounds.height - rect.maxY) * scaleY).rounded()
+        let bottom = ((bounds.height - rect.minY) * scaleY).rounded()
+        return CGRect(x: left, y: top, width: right - left, height: bottom - top)
     }
 
     override func draw(_ dirtyRect: NSRect) {
