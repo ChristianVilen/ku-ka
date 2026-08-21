@@ -139,8 +139,10 @@ An `NSView` laid over the `DrawingView` with the same frame. Owns one `CropBox`.
 - Mouse: `mouseDown` → `beginDrag`, `mouseDragged` → `drag`, `mouseUp` → `endDrag`; each
   marks the view for display.
 - Drawing: black at 40 % outside the box (even-odd path), 1.5 pt white border, eight 8×8
-  white handles with a dark outline while editing, and the size label in the same style
-  as `SelectionView`'s.
+  white handles with a dark outline while editing, and the size label in output pixels.
+  The label's style lives in a small shared `SizeLabel` enum that `SelectionView` uses too,
+  and its numbers come from the same `DrawingView.pixelRect(for:in:imagePixelSize:)`
+  mapping that Done uses, so the label never disagrees with the saved file.
 - Cursor rects are rebuilt when editing toggles, when the box changes, and after a drag.
 
 **`EditorWindow` — `KuKa/EditorWindow.swift`**
@@ -203,7 +205,10 @@ hand, like the rest of the editor UI.
 
 - `KuKa/CropBox.swift` (new) — pure crop box model.
 - `KuKa/CropOverlayView.swift` (new) — the overlay view.
-- `KuKa/DrawingView.swift` — `compositeImage(croppedTo:)`.
+- `KuKa/SizeLabel.swift` (new) — the shared "W × H" label style; `KuKa/SelectionView.swift`
+  switches to it (no behaviour change).
+- `KuKa/DrawingView.swift` — `compositeImage(croppedTo:)` and the static
+  `pixelRect(for:in:imagePixelSize:)` mapping.
 - `KuKa/EditorWindow.swift` — Crop toggle, overlay, minimum width, Done with crop.
 - `KuKa.xcodeproj/project.pbxproj` — register the two new source files and the new test
   file (the project lists files by hand).

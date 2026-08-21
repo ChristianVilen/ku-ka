@@ -16,6 +16,8 @@
 		A10000007 /* ThumbnailPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000019 /* ThumbnailPanel.swift */; };
 		A10000008 /* DrawingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001A /* DrawingView.swift */; };
 		A10000141 /* CropBox.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000140 /* CropBox.swift */; };
+		A10000143 /* CropOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000142 /* CropOverlayView.swift */; };
+		A10000145 /* SizeLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000144 /* SizeLabel.swift */; };
 		A10000009 /* EditorWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001B /* EditorWindow.swift */; };
 		A100000A /* ThumbnailStackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001C /* ThumbnailStackManager.swift */; };
 		A100000B /* CombineButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001D /* CombineButton.swift */; };
@@ -86,6 +88,8 @@
 		A10000019 /* ThumbnailPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailPanel.swift; sourceTree = "<group>"; };
 		A1000001A /* DrawingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawingView.swift; sourceTree = "<group>"; };
 		A10000140 /* CropBox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CropBox.swift; sourceTree = "<group>"; };
+		A10000142 /* CropOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CropOverlayView.swift; sourceTree = "<group>"; };
+		A10000144 /* SizeLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SizeLabel.swift; sourceTree = "<group>"; };
 		A1000001B /* EditorWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorWindow.swift; sourceTree = "<group>"; };
 		A1000001C /* ThumbnailStackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailStackManager.swift; sourceTree = "<group>"; };
 		A1000001D /* CombineButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombineButton.swift; sourceTree = "<group>"; };
@@ -196,6 +200,8 @@
 				A10000133 /* OnboardingWindowController.swift */,
 				A1000001A /* DrawingView.swift */,
 				A10000140 /* CropBox.swift */,
+				A10000142 /* CropOverlayView.swift */,
+				A10000144 /* SizeLabel.swift */,
 				A1000001B /* EditorWindow.swift */,
 				A10000017 /* Info.plist */,
 				A10000018 /* KuKa.entitlements */,
@@ -337,6 +343,8 @@
 				A10000007 /* ThumbnailPanel.swift in Sources */,
 				A10000008 /* DrawingView.swift in Sources */,
 				A10000141 /* CropBox.swift in Sources */,
+				A10000143 /* CropOverlayView.swift in Sources */,
+				A10000145 /* SizeLabel.swift in Sources */,
 				A10000009 /* EditorWindow.swift in Sources */,
 				A100000A /* ThumbnailStackManager.swift in Sources */,
 				A100000B /* CombineButton.swift in Sources */,

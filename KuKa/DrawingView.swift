@@ -54,13 +54,19 @@ class DrawingView: NSView {
         NSGraphicsContext.restoreGraphicsState()
 
         guard let composited = context.makeImage() else { return image }
-        let output = rect.flatMap { composited.cropping(to: pixelRect(for: $0, scaleX: scaleX, scaleY: scaleY)) } ?? composited
+        let output = rect.flatMap {
+            composited.cropping(to: Self.pixelRect(for: $0, in: bounds, imagePixelSize: CGSize(width: cgImage.width, height: cgImage.height)))
+        } ?? composited
         return NSImage(cgImage: output, size: NSSize(width: output.width, height: output.height))
     }
 
-    /// Map a rect in view points (origin bottom-left) to image pixels
-    /// (origin top-left, which is what CGImage.cropping expects).
-    private func pixelRect(for rect: CGRect, scaleX: CGFloat, scaleY: CGFloat) -> CGRect {
+    /// Map a rect in view points (origin bottom-left, inside `bounds`) to
+    /// image pixels (origin top-left, which is what CGImage.cropping expects).
+    /// Edges are rounded, not origin and size, so the far edge can't drift
+    /// a pixel. The crop overlay uses the same mapping for its size label.
+    static func pixelRect(for rect: CGRect, in bounds: CGRect, imagePixelSize: CGSize) -> CGRect {
+        let scaleX = imagePixelSize.width / bounds.width
+        let scaleY = imagePixelSize.height / bounds.height
         let left = (rect.minX * scaleX).rounded()
         let right = (rect.maxX * scaleX).rounded()
         let top = ((bounds.height - rect.maxY) * scaleY).rounded()
