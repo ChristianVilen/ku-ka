@@ -5,6 +5,13 @@ class DrawingView: NSView {
     private var strokes: [NSBezierPath] = []
     private var currentStroke: NSBezierPath?
 
+    /// Pixel size of the capture. Falls back to the point size when the
+    /// image has no bitmap, in which case nothing can be composited anyway.
+    var imagePixelSize: CGSize {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image.size }
+        return CGSize(width: cgImage.width, height: cgImage.height)
+    }
+
     init(image: NSImage) {
         self.image = image
         super.init(frame: .zero)

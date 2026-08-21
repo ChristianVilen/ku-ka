@@ -61,8 +61,9 @@ Editor toolbar, left to right:
   box. The result overwrites the same file and goes to the clipboard. Without a box, Done
   works as today.
 - **Delete**, the close button and **Escape** are unchanged.
-- The editor content is at least 360 points wide so the four toolbar buttons never
-  overlap. An image narrower than that is centered in the window.
+- The editor content is at least 460 points wide so the four toolbar buttons never
+  overlap (Undo 12–92, Crop 100–180, trash centred at 190–270, Done 368–448). An image
+  narrower than that is centered in the window.
 
 ## Architecture
 
@@ -150,7 +151,7 @@ An `NSView` laid over the `DrawingView` with the same frame. Owns one `CropBox`.
 - Adds the **Crop** toggle button (`NSButton`, push-on/push-off, title "Crop") after Undo.
 - Creates the `CropOverlayView` with the drawing view's frame and adds it above the
   drawing view. The toggle sets `isEditing`.
-- Content width is `max(imageWidth, 360)`; the image frame is centered horizontally.
+- Content width is `max(imageWidth, 460)`; the image frame is centered horizontally.
   Toolbar buttons are positioned from the content width.
 - `var cropRect: CGRect?` (internal) forwards to the overlay. Tests use it.
 - Done → `store.saveAnnotated(image: drawingView.compositeImage(croppedTo: cropRect), to: fileURL)`.
@@ -169,7 +170,7 @@ image store's vocabulary.
 - Done with a box but no strokes → only the crop is applied.
 - Retina: the window is capped at 80 % of the screen, so view points ≠ image pixels is the
   normal case. Strokes and crop use the same scale, so they stay in line.
-- Very small image (for example 20×20 test image) → content is still 360 wide; the image
+- Very small image (for example 20×20 test image) → content is still 460 wide; the image
   sits centered.
 
 ## Testing
@@ -194,7 +195,7 @@ XCTest in `KuKaTests`. TDD (red → green) at these seams, agreed with the user:
     at the top of the view → the top colour)
 - `EditorWindowTests` (extend):
   - Done with a crop rect hands the store an image of the cropped pixel size
-  - a narrow image still gets the 360-point minimum content width
+  - a narrow image still gets the 460-point minimum content width
   - the existing cap test moves to a larger fake screen so the cap stays above the
     minimum width (1000×800 visible → 640×684 content)
 
