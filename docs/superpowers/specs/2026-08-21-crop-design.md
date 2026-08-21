@@ -78,8 +78,8 @@ view's coordinate space (origin bottom-left, y up), so `top` means the maxY side
 AppKit import.
 
 ```
-struct CropBox: Equatable {
-    enum Handle: Equatable, CaseIterable {
+struct CropBox {
+    enum Handle: Equatable {
         case topLeft, top, topRight, left, right, bottomLeft, bottom, bottomRight
     }
     enum Action: Equatable { case draw, move, resize(Handle) }
@@ -89,7 +89,7 @@ struct CropBox: Equatable {
     let bounds: CGRect                           // the image area
     private(set) var rect: CGRect?               // nil = no crop box
 
-    init(bounds: CGRect, rect: CGRect? = nil)
+    init(bounds: CGRect, rect: CGRect? = nil)    // a given rect is cut to bounds; no overlap → nil
 
     func action(at point: CGPoint) -> Action     // what a drag from this point would do
     mutating func beginDrag(at point: CGPoint)
@@ -102,7 +102,9 @@ Rules:
 
 - `action(at:)`: a point within `handleHitRadius` of a corner → `.resize(corner)`; within
   the radius of an edge, along that edge → `.resize(edge)`; inside the box → `.move`;
-  anywhere else (or no box) → `.draw`. Corners win over edges.
+  anywhere else (or no box) → `.draw`. Corners win over edges. On a box thinner than
+  twice the radius a point can be within reach of both opposite sides; then the nearer
+  side wins, so a thin box can still be resized from either side.
 - `beginDrag`: stores the action and its anchor (drag origin, move offset, or the box as
   it was). A `.draw` start drops the existing box at once.
 - `drag(to:)`: the point is clamped to `bounds` first. Draw → box from the origin to the
@@ -178,6 +180,9 @@ XCTest in `KuKaTests`. TDD (red → green) at these seams, agreed with the user:
   - drag on a corner handle resizes both sides; on an edge handle resizes one side
   - the handle hit area extends `handleHitRadius` outside the box; inside is move;
     far away is draw
+  - on a thin box the nearer side wins (10 pt wide box: x = 18 hits right, x = 12 hits left)
+  - a rect given at init is cut to the bounds; drawing also stops at bounds with a
+    non-zero origin
   - dragging a handle past the opposite side flips the box
   - click outside the box removes it; a tiny drag leaves no box
 - `DrawingViewTests` (extend):
