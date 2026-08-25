@@ -99,6 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 case .captureArea: self.startCapture(.interactive)
                 case .captureFullScreen: self.startCapture(.fullScreen)
                 case .tile(let tilingAction): self.windowTiling.tile(tilingAction)
+                case .showClipboardHistory: break // Wired up in Task 9.
                 }
             }
         }

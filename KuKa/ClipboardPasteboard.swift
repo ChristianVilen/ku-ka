@@ -16,7 +16,13 @@ protocol PasteboardReading: AnyObject {
 }
 
 protocol PasteboardWriting: AnyObject {
-    func write(_ item: ClipboardItem, withFormatting: Bool)
+    /// Writes `item` to the pasteboard and returns the change count the
+    /// write itself produced, so the caller can adopt that value directly
+    /// as its new baseline instead of reading `changeCount` back out right
+    /// after — a gap in which a third-party copy could land and be
+    /// mistaken for our own write. Not `@discardableResult`: discarding it
+    /// silently is exactly the bug this return value exists to prevent.
+    func write(_ item: ClipboardItem, withFormatting: Bool) -> Int
 }
 
 protocol KeystrokeSending {
@@ -53,14 +59,20 @@ final class SystemPasteboard: PasteboardReading, PasteboardWriting {
         return readText(now: now)
     }
 
-    func write(_ item: ClipboardItem, withFormatting: Bool) {
-        pasteboard.clearContents()
+    /// `clearContents()` both establishes this pasteboard as the new owner
+    /// and returns the resulting change count; the `setString`/`setData`
+    /// calls below write flavors onto that same owner without bumping the
+    /// count any further, so that returned value is exactly what the next
+    /// `changeCount` read would report.
+    func write(_ item: ClipboardItem, withFormatting: Bool) -> Int {
+        let newChangeCount = pasteboard.clearContents()
         switch item.kind {
         case .text(let plain, let rtf, let html):
             writeText(plain: plain, rtf: rtf, html: html, withFormatting: withFormatting)
         case .image(let png, _):
             writeImage(png: png)
         }
+        return newChangeCount
     }
 
     // MARK: Reading

@@ -136,7 +136,7 @@ State the panel needs, exposed as read-only + a `onListChanged` closure: visible
   - `testPasteMovesItemToTopPreservingRichFlavors` (paste without formatting moves the item to the top and keeps its RTF/HTML)
   - `testOwnPasteWriteIsNotRecordedByNextPoll` (self-write suppression: the poll right after our own paste re-reads nothing)
 - [ ] Add files to targets; run class — red.
-- [ ] **Green:** implement. Paste hand-off order: notify panel to close → `writer.write(...)` → send keystroke after a ~50 ms `DispatchQueue.main.asyncAfter` so focus settles back on the target app (same trick as the capture flow's overlay delay).
+- [ ] **Green:** implement. Paste hand-off order: notify panel to close → `writer.write(...)` → send keystroke after a ~50 ms one-shot `Timer` on `RunLoop.main` (`.common` mode) so focus settles back on the target app (same trick as the capture flow's overlay delay).
 - [ ] Full suite green.
 
 ## Task 5: Hotkey routing (TDD)

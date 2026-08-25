@@ -211,14 +211,20 @@ class FakePasteboard: PasteboardReading, PasteboardWriting {
         return currentItem
     }
 
-    func write(_ item: ClipboardItem, withFormatting: Bool) {
+    func write(_ item: ClipboardItem, withFormatting: Bool) -> Int {
         writes.append((item, withFormatting))
         // Mimics the real pasteboard: a write becomes what's "currently"
         // there and bumps changeCount, so a subsequent poll reads it back
         // as new content.
         currentItem = item
         changeCount += 1
+        // Captured immediately, before onWrite fires — mirrors
+        // SystemPasteboard, where clearContents() hands back the change
+        // count before any later step (or, here, a test's onWrite hook
+        // simulating a racing third-party copy) can bump it further.
+        let newChangeCount = changeCount
         onWrite?()
+        return newChangeCount
     }
 }
 

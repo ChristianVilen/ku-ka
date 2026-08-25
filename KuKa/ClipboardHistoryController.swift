@@ -242,25 +242,26 @@ final class ClipboardHistoryController {
     /// waits an extra beat (`delay`) so that settling has time to finish
     /// before the synthetic Cmd+V lands.
     ///
-    /// The write bumps the pasteboard's change count synchronously (true
-    /// for both `SystemPasteboard` and the test fake), so right after it we
-    /// adopt that count as the new baseline — this is self-write
-    /// suppression, and it stops the very next poll from reading our own
-    /// write back. We still want the item to move to the top of the
-    /// history, though, and with its full flavors intact even when the
-    /// paste itself was plain-only — a real pasteboard write-without-
-    /// formatting only puts the plain string on the system pasteboard, so
-    /// letting a poll re-read it would silently downgrade the stored item
-    /// (and the chooser would never offer it again). Re-adding the
-    /// original `item` value directly sidesteps that: the existing
-    /// dedupe-to-top rule in `ClipboardHistory.add` moves it to the top
-    /// without touching what it's made of.
+    /// `writer.write` returns the change count the write itself produced,
+    /// and we adopt that value directly as the new baseline — this is
+    /// self-write suppression, and it stops the very next poll from
+    /// reading our own write back. Reading `reader.changeCount` back out
+    /// afterward instead would leave a gap in which a third-party copy
+    /// could land and get recorded under this baseline, silently swallowed
+    /// as if it were our own write. We still want the item to move to the
+    /// top of the history, though, and with its full flavors intact even
+    /// when the paste itself was plain-only — a real pasteboard write-
+    /// without-formatting only puts the plain string on the system
+    /// pasteboard, so letting a poll re-read it would silently downgrade
+    /// the stored item (and the chooser would never offer it again).
+    /// Re-adding the original `item` value directly sidesteps that: the
+    /// existing dedupe-to-top rule in `ClipboardHistory.add` moves it to
+    /// the top without touching what it's made of.
     private func paste(_ item: ClipboardItem, withFormatting: Bool) {
         resetToListMode()
         onPanelShouldClose?()
-        writer.write(item, withFormatting: withFormatting)
+        lastSeenChangeCount = writer.write(item, withFormatting: withFormatting)
 
-        lastSeenChangeCount = reader.changeCount
         history.add(item)
         refilter()
 

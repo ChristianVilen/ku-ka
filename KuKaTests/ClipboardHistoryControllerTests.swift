@@ -391,6 +391,23 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         XCTAssertTrue(fired)
     }
 
+    func testOnListChangedFiresOnChooserEnterAndExit() {
+        controller.enable()
+        let item = text("rich", rtf: Data([0x01]))
+        copyToPasteboard(item)
+        controller.pollNow()
+        var fireCount = 0
+        controller.onListChanged = { fireCount += 1 }
+
+        controller.enterPressed() // rich item -> enters chooser mode
+        XCTAssertEqual(controller.mode, .chooser)
+        XCTAssertEqual(fireCount, 1, "onListChanged must fire when entering chooser mode")
+
+        controller.escPressed() // chooser -> list
+        XCTAssertEqual(controller.mode, .list)
+        XCTAssertEqual(fireCount, 2, "onListChanged must fire when leaving chooser mode via Esc")
+    }
+
     // MARK: - Selection / filtering (pinning)
 
     func testMoveSelectionDownClampsAtListEnd() {
