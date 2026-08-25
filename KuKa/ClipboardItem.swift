@@ -18,6 +18,16 @@ struct ClipboardItem: Equatable {
     let contentHash: String
     let copiedAt: Date
 
+    /// Private: the `text`/`image` factories below are the only way to
+    /// build an item, so hash and `previewLabel` can never drift out of
+    /// sync with `kind`.
+    private init(kind: ClipboardItemKind, contentHash: String, copiedAt: Date, previewLabel: String) {
+        self.kind = kind
+        self.contentHash = contentHash
+        self.copiedAt = copiedAt
+        self.previewLabel = previewLabel
+    }
+
     /// One line for the panel row: the text collapsed to a single line and
     /// length-capped, or "Image WIDTH×HEIGHT" for images. Built once, up
     /// front, by the factory methods below — never recomputed on read,
@@ -60,6 +70,11 @@ extension ClipboardItem {
     /// paste are searchable — accepted v1 trade-off.
     private static let previewLabelMaxLength = 500
 
+    /// Stand-in label for text that is non-empty but collapses to nothing
+    /// printable (e.g. thousands of newlines before any visible text falls
+    /// outside `previewSourceBudget`).
+    private static let whitespaceOnlyLabel = "(whitespace)"
+
     /// Builds a text item, computing its content hash from the plain-text
     /// UTF-8 bytes and its preview label once, up front.
     static func text(plain: String, rtf: Data? = nil, html: Data? = nil, copiedAt: Date) -> ClipboardItem {
@@ -93,13 +108,19 @@ extension ClipboardItem {
 
     /// Takes a bounded prefix of `text` first (cheap even for a huge
     /// paste), then collapses whitespace/newlines to single spaces and
-    /// trims, then caps the result to `previewLabelMaxLength`.
+    /// trims, then caps the result to `previewLabelMaxLength`. Falls back
+    /// to a placeholder when that collapses to nothing but the source text
+    /// itself was non-empty (e.g. an all-whitespace prefix), so the row
+    /// never shows a blank label for real content.
     private static func oneLineLabel(_ text: String) -> String {
         let boundedPrefix = String(text.prefix(previewSourceBudget))
         let collapsed = boundedPrefix
             .components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+        guard !collapsed.isEmpty else {
+            return text.isEmpty ? "" : whitespaceOnlyLabel
+        }
         return String(collapsed.prefix(previewLabelMaxLength))
     }
 }

@@ -162,4 +162,12 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertTrue(withHTML.hasRichFlavors)
         XCTAssertFalse(picture.hasRichFlavors)
     }
+
+    // MARK: - Preview Label
+
+    func testWhitespaceOnlyPrefixGetsPlaceholderLabel() {
+        let whitespacePrefix = String(repeating: "\n", count: 3000)
+        let item = text(whitespacePrefix + "hello", at: 0)
+        XCTAssertEqual(item.previewLabel, "(whitespace)")
+    }
 }
