@@ -41,6 +41,13 @@ private enum Metrics {
     /// Gap under the separator in chooser mode: the list gap, plus the
     /// header line and the space below it.
     static let chooserTopGap = listTopGap + headerHeight + headerGap
+    /// Longest run of the copied text the chooser header shows. The header
+    /// only has to say *which* item is about to be pasted, and a copied
+    /// line can run to hundreds of characters — sometimes carrying things
+    /// the user would rather not have spread across the screen, such as a
+    /// password sitting in a copied note. A short prefix answers the
+    /// question and stops there.
+    static let headerPreviewMaxLength = 60
     static let selectionInset: CGFloat = 4
     static let selectionVerticalInset: CGFloat = 2
     static let selectionRadius: CGFloat = 8
@@ -265,11 +272,26 @@ final class ClipboardPanel: FloatingPanel {
     func reload() {
         let isChooser = controller.mode == .chooser
         headerLabel.isHidden = !isChooser
-        headerLabel.stringValue = isChooser ? "Paste “\(controller.chooserItem?.previewLabel ?? "")”" : ""
+        headerLabel.stringValue = isChooser ? Self.headerText(for: controller.chooserItem) : ""
         scrollTopConstraint.constant = isChooser ? Metrics.chooserTopGap : Metrics.listTopGap
 
         tableView.reloadData()
         syncSelection()
+    }
+
+    /// Names the item the chooser is deciding on, cut to a readable
+    /// prefix. The label truncates on its own once the width pin bites,
+    /// but capping the string as well keeps the header short on every
+    /// display width instead of only on narrow ones.
+    private static func headerText(for item: ClipboardItem?) -> String {
+        guard let item else { return "" }
+        let preview = item.previewLabel
+        guard preview.count > Metrics.headerPreviewMaxLength else {
+            return "Paste “\(preview)”"
+        }
+        let shortened = preview.prefix(Metrics.headerPreviewMaxLength)
+            .trimmingCharacters(in: .whitespaces)
+        return "Paste “\(shortened)…”"
     }
 
     private func syncSelection() {
@@ -343,6 +365,10 @@ final class ClipboardPanel: FloatingPanel {
 
         let separator = NSBox()
         separator.boxType = .separator
+        // A separator has no content to be wide about, but it is pinned to
+        // both container edges like the header is, so it gets the same
+        // treatment rather than being left as the one unchecked view.
+        separator.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         separator.translatesAutoresizingMaskIntoConstraints = false
 
         for view in [searchGlyph, searchField, separator, headerLabel, scrollView] {
@@ -388,11 +414,22 @@ final class ClipboardPanel: FloatingPanel {
         glass.contentView = container
         contentView = glass
 
+        // Size the content explicitly rather than letting it be inferred.
+        // The window is borderless, so AppKit takes its minimum content
+        // size from the content view's fitting size; with no width pin, the
+        // widest label's intrinsic width becomes that minimum. That is what
+        // once stretched the panel past the screen edge when a chooser
+        // header carried a 500-character preview.
+        //
+        // Position comes from leading/top, size from width/height. Pinning
+        // trailing and bottom as well would tie the container's width back
+        // to the glass's own and re-open the same argument from the other
+        // side, so those two are deliberately left out.
         NSLayoutConstraint.activate([
             container.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
-            container.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
             container.topAnchor.constraint(equalTo: glass.topAnchor),
-            container.bottomAnchor.constraint(equalTo: glass.bottomAnchor),
+            container.widthAnchor.constraint(equalToConstant: Metrics.size.width),
+            container.heightAnchor.constraint(equalToConstant: Metrics.size.height),
         ])
     }
 
@@ -415,6 +452,11 @@ final class ClipboardPanel: FloatingPanel {
         searchField.textColor = .labelColor
         searchField.maximumNumberOfLines = 1
         searchField.cell?.usesSingleLineMode = true
+        // Same rule as the header: a long filter string must scroll inside
+        // the field editor, not push the panel wider. No `lineBreakMode`
+        // here — the field is editable, and truncating tail would fight the
+        // caret once typing runs past the visible width.
+        searchField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         searchField.placeholderAttributedString = NSAttributedString(
             string: "Type to filter…",
             attributes: [.font: font, .foregroundColor: NSColor.secondaryLabelColor]
@@ -429,6 +471,11 @@ final class ClipboardPanel: FloatingPanel {
         headerLabel.textColor = .secondaryLabelColor
         headerLabel.maximumNumberOfLines = 1
         headerLabel.cell?.lineBreakMode = .byTruncatingTail
+        // Truncation is a drawing rule; it does nothing about the width the
+        // label *asks* for. Dropping compression resistance below the width
+        // pin above is what makes the label give way and actually truncate,
+        // rather than widening everything around it.
+        headerLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         headerLabel.isHidden = true
         headerLabel.translatesAutoresizingMaskIntoConstraints = false
     }
@@ -655,6 +702,10 @@ private final class ClipboardHistoryCellView: NSTableCellView {
         label.cell?.lineBreakMode = .byTruncatingTail
         label.cell?.usesSingleLineMode = true
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // A preview label can be 500 characters. Low compression resistance
+        // is what lets it truncate to the row's width; the scroll view
+        // already stops the table from pushing the window, but the row
+        // would otherwise scroll sideways within it.
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         thumbnailView.imageScaling = .scaleProportionallyDown
