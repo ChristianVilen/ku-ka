@@ -51,8 +51,9 @@ Editor toolbar, left to right:
   - Drag inside the box: moves it. It stops at the image edge.
   - Click outside the box without dragging: removes the box.
   - Cursor: crosshair over the image, open hand inside the box, resize arrows on the
-    left/right and top/bottom edges. Corners keep the crosshair (AppKit has no public
-    diagonal resize cursor).
+    left/right and top/bottom edges. The corner handle areas outside the box keep the
+    crosshair (AppKit has no public diagonal resize cursor); just inside a corner the
+    open hand wins, because inside the box always means move.
 - **Crop tool off:**
   - The box stays visible, with the dimming, so the user sees what will be saved. It
     cannot be changed. Strokes can be drawn anywhere, also in the dimmed area.

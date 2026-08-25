@@ -50,6 +50,9 @@ class CropOverlayView: NSView {
         guard isEditing else { return }
         box.beginDrag(at: convert(event.locationInWindow, from: nil))
         needsDisplay = true
+        // A draw press drops the old box at once, so the open-hand and edge
+        // cursor rects are stale from here until mouseUp rebuilds them.
+        window?.invalidateCursorRects(for: self)
     }
 
     override func mouseDragged(with event: NSEvent) {

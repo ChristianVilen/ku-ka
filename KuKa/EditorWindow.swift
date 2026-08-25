@@ -45,7 +45,7 @@ class EditorWindow: NSPanel, NSWindowDelegate {
         let contentRect = NSRect(x: 0, y: 0, width: contentWidth, height: h + toolbarHeight)
 
         super.init(contentRect: contentRect, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        title = "Annotate Screenshot"
+        title = "Edit Screenshot"
         isReleasedWhenClosed = false
         delegate = self
 
