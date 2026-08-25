@@ -165,6 +165,7 @@ final class ClipboardPanel: FloatingPanel {
     /// Opens the panel on the screen under the pointer, with an empty
     /// filter and the newest item selected.
     func show() {
+        assert(controller.onListChanged != nil, "call bindController() before show()")
         controller.prepareForPresentation()
         searchField.stringValue = ""
         reload()

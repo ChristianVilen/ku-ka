@@ -187,6 +187,7 @@ State the panel needs, exposed as read-only + a `onListChanged` closure: visible
 
 - [ ] `StatusMenu`: "Clipboard History" checkbox next to "Window Tiling" (state from `settings.clipboardHistoryEnabled`, `onClipboardHistoryToggled` closure) + a `⌘⇧C clipboard history` line in the Features section. Extend `StatusMenuTests` following the tiling-toggle tests.
 - [ ] `AppDelegate`: own `ClipboardHistoryController`; route `case .showClipboardHistory` in the hotkey switch; set `hotkeyManager.clipboardHistoryEnabled` from settings at startup and from the toggle callback; toggle-off calls `controller.disable()` (stops poll, clears); wire `imageStore.onDeletedHash` → `controller.removeItem(hash:)`.
+- [ ] Create the panel, call `bindController()` once (panel half-works without it).
 - [ ] Controller's poll only starts when enabled — and note: polling needs no permission, so it starts regardless of the Accessibility/Screen Recording state; only the *hotkey* depends on Accessibility (tap), and paste needs Accessibility too, which the tap already guarantees.
 - [ ] Full suite green. Manual smoke (see Task 11 checklist).
 
@@ -196,7 +197,12 @@ State the panel needs, exposed as read-only + a `onListChanged` closure: visible
 
 - [ ] README: feature bullet + a "Clipboard History" section (hotkey, chooser, in-memory + caps, toggle, privacy markers); requirements → macOS 26; drop the stale "macOS 14+ for ScreenCaptureKit" note.
 - [ ] AGENTS.md: file table + key-classes rows for the five new files, hotkey note (`Shift+Cmd+C`, gating flag), test coverage list, macOS 26 in the three version mentions.
+- [ ] AGENTS.md: add an `AppDelegate` key-classes row covering the clipboard-history toggle callback, `ClipboardHistoryController` ownership, and `ClipboardPanel` ownership (added in Task 9).
+- [ ] AGENTS.md: update the "Test-Mode Guard" paragraph — `isTesting` now also skips `clipboardHistory.enable()` at startup, not just `setupPermissions()`.
+- [ ] AGENTS.md: add CryptoKit to the Frameworks list (flagged in earlier reviews).
+- [ ] AGENTS.md: add the clipboard-history test suites to the unit-test coverage list (flagged in earlier reviews).
 - [ ] CONTEXT.md: add a **Clipboard history** glossary entry (recorded copies, the panel, the chooser; owned by `ClipboardHistoryController`).
+- [ ] CONTEXT.md: Settings glossary entry gains the `clipboardHistoryEnabled` key.
 - [ ] Site: both "macOS 14 (Sonoma)" strings → macOS 26 (Tahoe).
 - [ ] APP_STORE.md: version line.
 - [ ] Check `.github/workflows/release.yml`: confirm `macos-latest` provides Xcode 26; if not, pin (`macos-26`).

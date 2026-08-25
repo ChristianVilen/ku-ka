@@ -99,7 +99,7 @@ final class ImageStore: ImageStoring {
     /// caller (AppDelegate) can drop the matching clipboard-history entry.
     /// Fires once per recorded hash — a file annotated after capture reports
     /// two. Not called when the deleted URL was never stored or re-saved
-    /// here.
+    /// here. Callers must be on the main thread.
     var onDeletedHash: ((String) -> Void)?
 
     init(fileManager: FileManaging = FileManager.default,
