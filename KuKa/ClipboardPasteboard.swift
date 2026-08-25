@@ -111,16 +111,20 @@ final class SystemPasteboard: PasteboardReading, PasteboardWriting {
     /// No image flavor: fall back to plain text plus whichever rich
     /// flavors are present. No `.string` data at all, or an empty string
     /// — a blank, unselectable history row helps nobody — is unsupported.
+    /// The size cap is checked against the *total* payload (plain + rtf +
+    /// html): `ClipboardItem.byteCost` is always 0 for text, so
+    /// `ClipboardHistory` never sees these bytes — this is the one place
+    /// that catches an oversized rich flavor (a big Word/Excel copy)
+    /// riding behind a tiny plain string.
     private func readText(now: Date) -> ClipboardItem? {
         guard let plain = pasteboard.string(forType: .string), !plain.isEmpty else { return nil }
-        guard plain.utf8.count <= ClipboardHistory.maxItemBytes else { return nil }
 
-        return ClipboardItem.text(
-            plain: plain,
-            rtf: pasteboard.data(forType: .rtf),
-            html: pasteboard.data(forType: .html),
-            copiedAt: now
-        )
+        let rtf = pasteboard.data(forType: .rtf)
+        let html = pasteboard.data(forType: .html)
+        let totalBytes = plain.utf8.count + (rtf?.count ?? 0) + (html?.count ?? 0)
+        guard totalBytes <= ClipboardHistory.maxItemBytes else { return nil }
+
+        return ClipboardItem.text(plain: plain, rtf: rtf, html: html, copiedAt: now)
     }
 
     // MARK: Writing

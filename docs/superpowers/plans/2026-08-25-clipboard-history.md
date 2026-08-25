@@ -98,7 +98,7 @@ protocol PasteboardReading: AnyObject {
     func readCurrentItem(now: Date) -> ClipboardItem?  // nil: marked, oversized, unsupported
 }
 protocol PasteboardWriting: AnyObject {
-    func write(_ item: ClipboardItem, withFormatting: Bool)
+    func write(_ item: ClipboardItem, withFormatting: Bool) -> Int  // change count the write produced, for self-write suppression
 }
 protocol KeystrokeSending { func sendPasteKeystroke() }
 ```

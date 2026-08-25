@@ -153,9 +153,10 @@ controller, AppKit views kept dumb.
   line in the Features section.
 - `AppDelegate` — owns the controller and wires hotkey, toggle, and the
   `ImageStore` deletion hook.
-- `ImageStore` — keeps a session-scoped map from saved file URL to the content
-  hash of the PNG it copied, and reports the hash on `delete(at:)` through a
-  closure so the controller can drop the matching item.
+- `ImageStore` — keeps a session-scoped map from saved file URL to the set of
+  content hashes of the PNGs it copied for that file (annotation adds a
+  second), and reports each hash on `delete(at:)` through a closure so the
+  controller can drop the matching item.
 
 ## Testing
 

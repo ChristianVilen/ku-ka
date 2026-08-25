@@ -174,9 +174,11 @@ final class ClipboardPanel: FloatingPanel {
             setFrameOrigin(origin)
         }
 
-        // A second hotkey press while the panel is already up re-homes it
-        // on the cursor's screen and refreshes the list, but must not
-        // restart the fade — that would blink a panel being read.
+        // `show()` only ever runs on a hidden panel — the caller's toggle
+        // dismisses on a second hotkey press instead of calling `show()`
+        // again — so this always sets the pre-fade alpha; kept as a guard
+        // rather than an assumption, since restarting the fade on an
+        // already-visible panel would blink a panel being read.
         if !isVisible {
             setAlphaImmediately(shouldFade ? 0 : 1)
         }
