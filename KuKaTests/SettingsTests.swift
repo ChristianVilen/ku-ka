@@ -33,6 +33,16 @@ final class SettingsTests: XCTestCase {
         XCTAssertFalse(Settings(defaults: defaults, loginItem: loginItem).windowTilingEnabled)
     }
 
+    func testClipboardHistoryEnabledDefaultsToTrue() {
+        XCTAssertTrue(sut.clipboardHistoryEnabled)
+    }
+
+    func testClipboardHistoryEnabledPersists() {
+        sut.clipboardHistoryEnabled = false
+        XCTAssertFalse(sut.clipboardHistoryEnabled)
+        XCTAssertFalse(Settings(defaults: defaults, loginItem: loginItem).clipboardHistoryEnabled)
+    }
+
     func testLaunchAtLoginReflectsAndDrivesTheLoginItem() {
         XCTAssertFalse(sut.launchAtLogin)
 
@@ -49,15 +59,5 @@ final class SettingsTests: XCTestCase {
 
         XCTAssertTrue(loginItem.setCalls.isEmpty)
         XCTAssertFalse(sut.launchAtLogin)
-    }
-
-    func testClipboardHistoryEnabledDefaultsTrue() {
-        XCTAssertTrue(sut.clipboardHistoryEnabled)
-    }
-
-    func testClipboardHistoryEnabledPersists() {
-        sut.clipboardHistoryEnabled = false
-        XCTAssertFalse(sut.clipboardHistoryEnabled)
-        XCTAssertFalse(Settings(defaults: defaults, loginItem: loginItem).clipboardHistoryEnabled)
     }
 }
