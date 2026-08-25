@@ -121,12 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         imageStore.onDeletedHash = { [weak self] hash in
-            // ImageStore fires this synchronously on the main thread from
-            // delete(), but ImageStore itself isn't @MainActor, so the
-            // compiler can't see that — assumeIsolated documents it instead.
-            MainActor.assumeIsolated {
-                self?.clipboardHistory.removeItem(hash: hash)
-            }
+            self?.clipboardHistory.removeItem(hash: hash)
         }
     }
 

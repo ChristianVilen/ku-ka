@@ -42,6 +42,14 @@ final class SystemPasteboard: PasteboardReading, PasteboardWriting {
     ]
 
     private let pasteboard = NSPasteboard.general
+    /// Pixel ceiling for adding a TIFF flavor to an image write. Injected
+    /// rather than read off another type, so this adapter carries its own
+    /// limit the same way `ImageStore` carries its own.
+    private let tiffMaxPixels: Int
+
+    init(tiffMaxPixels: Int = PasteboardImage.defaultTIFFMaxPixels) {
+        self.tiffMaxPixels = tiffMaxPixels
+    }
 
     var changeCount: Int { pasteboard.changeCount }
 
@@ -140,21 +148,15 @@ final class SystemPasteboard: PasteboardReading, PasteboardWriting {
         }
     }
 
-    /// Always writes PNG. Adds a TIFF representation too, but only when
-    /// the image is small enough that the transient uncompressed buffer
-    /// is cheap — same rule `ImageStore` applies to its own clipboard
-    /// writes. Pixel size comes from the bitmap decoded to build that
-    /// representation, so there's no separate size to pass in.
+    /// Always writes PNG, plus whatever `PasteboardImage` says should go
+    /// alongside it — the same rule `ImageStore` applies to its own
+    /// clipboard writes. Pixel size comes from the bitmap decoded to build
+    /// that representation, so there's no separate size to pass in.
     private func writeImage(png: Data) {
         pasteboard.setData(png, forType: .png)
 
-        guard let bitmap = NSBitmapImageRep(data: png) else { return }
-        let pixelCount = bitmap.pixelsWide * bitmap.pixelsHigh
-        guard pixelCount <= ImageStore.defaultClipboardTIFFMaxPixels else { return }
-
-        // Same pooling reason as the read side: representation(using:)
-        // hands back a full image-sized buffer.
-        guard let tiff = autoreleasepool(invoking: { bitmap.representation(using: .tiff, properties: [:]) }) else { return }
+        guard let bitmap = NSBitmapImageRep(data: png),
+              let tiff = PasteboardImage.tiffFlavor(for: bitmap, maxPixels: tiffMaxPixels) else { return }
         pasteboard.setData(tiff, forType: .tiff)
     }
 }

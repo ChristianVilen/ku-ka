@@ -1,62 +1,4 @@
 import Cocoa
-import ImageIO
-
-/// Every size and inset the panel draws with, in one place, so the
-/// alignments between the search row and the list rows stay in step when
-/// they are tuned by eye at first run. File scope rather than nested, so
-/// the row and cell views below read the same numbers.
-private enum Metrics {
-    static let size = NSSize(width: 560, height: 400)
-    /// Matches the macOS 26 rounding of a panel this wide.
-    static let cornerRadius: CGFloat = 20
-    /// Panel edge to the search glyph, and to a row's type icon.
-    static let contentInset: CGFloat = 20
-    static let iconSlot: CGFloat = 18
-    static let iconGap: CGFloat = 10
-    static let rowHeight: CGFloat = 34
-    /// The table sits nearer the panel edge than the text does, so the
-    /// selection highlight can reach past the label without touching the
-    /// glass edge.
-    static let tableInset: CGFloat = 12
-    /// Inset of a row's content inside its cell. `tableInset` plus this
-    /// equals `contentInset`, which is what puts a row's icon on the same
-    /// vertical line as the search glyph.
-    static let cellInset = contentInset - tableInset
-    static let thumbnailBox = NSSize(width: 44, height: 24)
-    static let searchFontSize: CGFloat = 18
-    static let rowFontSize: CGFloat = 13
-    static let headerFontSize: CGFloat = 11
-    static let headerHeight: CGFloat = 16
-    /// Panel top edge down to the search field.
-    static let searchTopInset: CGFloat = 16
-    /// Search field down to the separator.
-    static let separatorGap: CGFloat = 14
-    static let separatorHeight: CGFloat = 1
-    /// Last row down to the panel's bottom edge.
-    static let bottomInset: CGFloat = 10
-    /// Gap under the separator in list mode.
-    static let listTopGap: CGFloat = 10
-    /// Chooser header line down to the first row.
-    static let headerGap: CGFloat = 8
-    /// Gap under the separator in chooser mode: the list gap, plus the
-    /// header line and the space below it.
-    static let chooserTopGap = listTopGap + headerHeight + headerGap
-    /// Longest run of the copied text the chooser header shows. The header
-    /// only has to say *which* item is about to be pasted, and a copied
-    /// line can run to hundreds of characters — sometimes carrying things
-    /// the user would rather not have spread across the screen, such as a
-    /// password sitting in a copied note. A short prefix answers the
-    /// question and stops there.
-    static let headerPreviewMaxLength = 60
-    static let selectionInset: CGFloat = 4
-    static let selectionVerticalInset: CGFloat = 2
-    static let selectionRadius: CGFloat = 8
-    /// The panel's top edge sits this far down the screen's visible
-    /// height — high enough to read at a glance, low enough not to crowd
-    /// the menu bar.
-    static let topFraction: CGFloat = 0.25
-    static let fadeDuration: TimeInterval = 0.12
-}
 
 /// The clipboard-history overlay: a filter field above a list of recorded
 /// items, floating on `NSGlassEffectView` glass roughly where Spotlight
@@ -66,8 +8,8 @@ private enum Metrics {
 /// selected row, list-versus-chooser mode — belongs to
 /// `ClipboardHistoryController`; the panel reads that state to render and
 /// pushes key events back into the controller's entry points. It reads no
-/// history, no `NSPasteboard`, and no `Settings` (the one `ClipboardHistory`
-/// mention below is a size constant, not stored content).
+/// history, no `NSPasteboard`, and no `Settings`. Sizes and insets live in
+/// `Metrics`, next to the row views that draw against the same numbers.
 ///
 /// Focus discipline matters here: the panel is borderless and
 /// `.nonactivatingPanel`, so it takes key status without activating Ku-Ka.
@@ -103,12 +45,8 @@ final class ClipboardPanel: FloatingPanel {
     private var scrollTopConstraint: NSLayoutConstraint!
 
     /// Thumbnails only — each one is at most 2× `Metrics.thumbnailBox`, so
-    /// the panel never holds a full-size bitmap. Keyed by content hash,
-    /// which is what makes a row identity stable across reloads. Sized from
-    /// the history's own item cap: a smaller cache would evict rows the
-    /// list still shows, and arrowing through a history full of images
-    /// would re-decode on the main thread all the way down.
-    private let thumbnailCache = NSCache<NSString, NSImage>()
+    /// the panel never holds a full-size bitmap.
+    private let thumbnails = ClipboardThumbnailCache()
 
     /// Guards against re-entry: `orderOut` makes the panel resign key, and
     /// `resignKey` dismisses.
@@ -128,8 +66,6 @@ final class ClipboardPanel: FloatingPanel {
         // A clipboard panel is reached by a global hotkey, so it has to
         // follow the user across spaces and over full-screen apps.
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        thumbnailCache.countLimit = ClipboardHistory.maxItems
 
         buildChrome()
     }
@@ -214,9 +150,7 @@ final class ClipboardPanel: FloatingPanel {
         makeFirstResponder(nil)
         orderOut(nil)
         setAlphaImmediately(1)
-        // Thumbnails are per-session: a screenshot deleted between two
-        // openings of the panel must not come back from this cache.
-        thumbnailCache.removeAllObjects()
+        thumbnails.removeAll()
         isDismissing = false
     }
 
@@ -238,18 +172,7 @@ final class ClipboardPanel: FloatingPanel {
     /// edge a quarter of the way down that screen's visible height.
     private func targetOrigin(mouseLocation: CGPoint) -> NSPoint? {
         let layout = screens.all
-        // A cursor parked in the menu bar sits exactly on its screen's top
-        // edge, and `contains` treats maxY as outside the frame. Without
-        // the second rule the panel would jump to the primary screen every
-        // time the hotkey is pressed from up there.
-        let screen = layout.first { $0.frame.contains(mouseLocation) }
-            ?? layout.first {
-                mouseLocation.x >= $0.frame.minX
-                    && mouseLocation.x < $0.frame.maxX
-                    && abs(mouseLocation.y - $0.frame.maxY) < 1
-            }
-            ?? layout.first
-        guard let screen else { return nil }
+        guard let screen = ScreenGeometry.under(mouseLocation, in: layout) ?? layout.first else { return nil }
 
         let visible = screen.visibleFrame
         let x = visible.midX - Metrics.size.width / 2
@@ -270,10 +193,15 @@ final class ClipboardPanel: FloatingPanel {
     /// enough to be the single entry point for every change — the list
     /// caps out at `ClipboardHistory.maxItems` rows.
     func reload() {
-        let isChooser = controller.mode == .chooser
-        headerLabel.isHidden = !isChooser
-        headerLabel.stringValue = isChooser ? Self.headerText(for: controller.chooserItem) : ""
-        scrollTopConstraint.constant = isChooser ? Metrics.chooserTopGap : Metrics.listTopGap
+        if case .chooser(let item) = controller.mode {
+            headerLabel.isHidden = false
+            headerLabel.stringValue = Self.headerText(for: item)
+            scrollTopConstraint.constant = Metrics.chooserTopGap
+        } else {
+            headerLabel.isHidden = true
+            headerLabel.stringValue = ""
+            scrollTopConstraint.constant = Metrics.listTopGap
+        }
 
         tableView.reloadData()
         syncSelection()
@@ -283,8 +211,7 @@ final class ClipboardPanel: FloatingPanel {
     /// prefix. The label truncates on its own once the width pin bites,
     /// but capping the string as well keeps the header short on every
     /// display width instead of only on narrow ones.
-    private static func headerText(for item: ClipboardItem?) -> String {
-        guard let item else { return "" }
+    private static func headerText(for item: ClipboardItem) -> String {
         let preview = item.previewLabel
         guard preview.count > Metrics.headerPreviewMaxLength else {
             return "Paste “\(preview)”"
@@ -308,7 +235,8 @@ final class ClipboardPanel: FloatingPanel {
     /// message rather than something to paste. Every other row, in either
     /// mode, can be selected.
     private var rowsAreSelectable: Bool {
-        !(controller.mode == .list && controller.visibleItems.isEmpty)
+        if case .chooser = controller.mode { return true }
+        return !controller.visibleItems.isEmpty
     }
 
     // MARK: - Mouse
@@ -321,29 +249,14 @@ final class ClipboardPanel: FloatingPanel {
         return row
     }
 
-    /// `selectRow` is list mode only, by design — the chooser's two rows
-    /// are not history rows. Since the chooser is exactly two rows, a
-    /// single step there always lands on the clicked one.
-    private func selectClickedRow(_ row: Int) {
-        guard controller.mode == .chooser else {
-            controller.selectRow(row)
-            return
-        }
-        if row > controller.selectionIndex {
-            controller.moveSelectionDown()
-        } else if row < controller.selectionIndex {
-            controller.moveSelectionUp()
-        }
-    }
-
     @objc private func rowClicked() {
         guard let row = clickedSelectableRow else { return }
-        selectClickedRow(row)
+        controller.selectRow(row)
     }
 
     @objc private func rowDoubleClicked() {
         guard let row = clickedSelectableRow else { return }
-        selectClickedRow(row)
+        controller.selectRow(row)
         controller.enterPressed()
     }
 
@@ -531,54 +444,21 @@ final class ClipboardPanel: FloatingPanel {
     }
 
     /// Decodes at thumbnail size on demand and caches the small result. The
-    /// item's own PNG bytes belong to the controller's history; nothing
-    /// full-size is ever built or kept here.
-    private func thumbnail(for item: ClipboardItem) -> NSImage? {
-        guard case .image(let png, _) = item.kind else { return nil }
-        let key = item.contentHash as NSString
-        if let cached = thumbnailCache.object(forKey: key) { return cached }
-        guard let image = Self.decodeThumbnail(png: png, fitting: Metrics.thumbnailBox) else { return nil }
-        thumbnailCache.setObject(image, forKey: key)
-        return image
-    }
-
-    private static func decodeThumbnail(png: Data, fitting box: NSSize) -> NSImage? {
-        guard let source = CGImageSourceCreateWithData(png as CFData, nil) else { return nil }
-        // 2× the box keeps the thumbnail crisp on Retina. ImageIO decodes
-        // straight to this size, so the full-resolution bitmap is never
-        // created in the first place.
-        let maxPixelSize = Int(max(box.width, box.height) * 2)
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-        ]
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
-        let pixelWidth = CGFloat(cgImage.width)
-        let pixelHeight = CGFloat(cgImage.height)
-        guard pixelWidth > 0, pixelHeight > 0 else { return nil }
-        let scale = min(box.width / pixelWidth, box.height / pixelHeight)
-        let displaySize = NSSize(
-            width: max((pixelWidth * scale).rounded(), 1),
-            height: max((pixelHeight * scale).rounded(), 1)
-        )
-        return NSImage(cgImage: cgImage, size: displaySize)
-    }
 }
 
 // MARK: - Search field
 
 extension ClipboardPanel: NSTextFieldDelegate {
     func controlTextDidChange(_ notification: Notification) {
-        // Chooser mode has nothing to filter, so stray typing is put back
-        // at once rather than sitting in the field until the chooser
-        // closes. Otherwise the field is the query's only writer, which is
-        // what keeps the two in step without a second sync point.
-        guard controller.mode == .list else {
-            searchField.stringValue = controller.searchQuery
-            return
-        }
         controller.setSearchQuery(searchField.stringValue)
+        // The controller decides whether typing counts — it refuses in
+        // chooser mode, which has nothing to filter. Reading the query
+        // back keeps the field showing what the filter actually holds,
+        // instead of stray keystrokes sitting there until the chooser
+        // closes.
+        if searchField.stringValue != controller.searchQuery {
+            searchField.stringValue = controller.searchQuery
+        }
     }
 
     /// The four keys the panel steers with. Everything else falls through
@@ -633,7 +513,7 @@ extension ClipboardPanel: NSTableViewDelegate {
         let cell = (tableView.makeView(withIdentifier: Self.cellIdentifier, owner: self) as? ClipboardHistoryCellView)
             ?? ClipboardHistoryCellView(identifier: Self.cellIdentifier)
 
-        if controller.mode == .chooser {
+        if case .chooser = controller.mode {
             let option = Self.chooserRows[row]
             cell.configure(symbolName: option.symbol, text: option.title, thumbnail: nil, isMessage: false)
         } else if row < controller.visibleItems.count {
@@ -641,7 +521,7 @@ extension ClipboardPanel: NSTableViewDelegate {
             cell.configure(
                 symbolName: symbolName(for: item),
                 text: item.previewLabel,
-                thumbnail: thumbnail(for: item),
+                thumbnail: thumbnails.thumbnail(for: item),
                 isMessage: false
             )
         } else {
@@ -650,114 +530,5 @@ extension ClipboardPanel: NSTableViewDelegate {
             cell.configure(symbolName: nil, text: Self.emptyStateText, thumbnail: nil, isMessage: true)
         }
         return cell
-    }
-}
-
-// MARK: - Row views
-
-/// Draws the selection as an inset rounded bar rather than the full-width
-/// system band: on glass a bar that runs edge to edge fights the panel's
-/// own rounding.
-private final class ClipboardHistoryRowView: NSTableRowView {
-    /// The glass is the background. Anything AppKit would paint here would
-    /// only sit in front of it and mute it.
-    override func drawBackground(in dirtyRect: NSRect) {}
-
-    /// The search field holds first responder, so the table is never
-    /// "focused" in AppKit's sense. Reporting `.emphasized` anyway keeps
-    /// the selected row vivid, which is the whole point of it.
-    override var interiorBackgroundStyle: NSView.BackgroundStyle {
-        isSelected ? .emphasized : .normal
-    }
-
-    override func drawSelection(in dirtyRect: NSRect) {
-        guard isSelected else { return }
-        let rect = bounds.insetBy(dx: Metrics.selectionInset, dy: Metrics.selectionVerticalInset)
-        NSColor.selectedContentBackgroundColor.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: Metrics.selectionRadius, yRadius: Metrics.selectionRadius).fill()
-    }
-}
-
-/// One row: type icon, one-line label, and — for images — a small
-/// thumbnail on the trailing edge. The thumbnail sits last so that every
-/// row's label starts on the same vertical line.
-private final class ClipboardHistoryCellView: NSTableCellView {
-    private let icon = NSImageView()
-    private let label = NSTextField(labelWithString: "")
-    private let thumbnailView = NSImageView()
-    /// True for the "nothing copied yet" row, which stays secondary
-    /// coloured because it is never selected.
-    private var isMessage = false
-
-    init(identifier: NSUserInterfaceItemIdentifier) {
-        super.init(frame: .zero)
-        self.identifier = identifier
-
-        icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.contentTintColor = .secondaryLabelColor
-
-        label.font = .systemFont(ofSize: Metrics.rowFontSize)
-        label.textColor = .labelColor
-        label.maximumNumberOfLines = 1
-        label.cell?.lineBreakMode = .byTruncatingTail
-        label.cell?.usesSingleLineMode = true
-        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        // A preview label can be 500 characters. Low compression resistance
-        // is what lets it truncate to the row's width; the scroll view
-        // already stops the table from pushing the window, but the row
-        // would otherwise scroll sideways within it.
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        thumbnailView.imageScaling = .scaleProportionallyDown
-        thumbnailView.imageAlignment = .alignCenter
-        thumbnailView.setContentHuggingPriority(.required, for: .horizontal)
-
-        // NSTableCellView's own outlets: VoiceOver reads a row through
-        // them, so a row without them announces as an unlabelled group.
-        textField = label
-        imageView = icon
-
-        let stack = NSStackView(views: [icon, label, thumbnailView])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.distribution = .fill
-        stack.spacing = Metrics.iconGap
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Metrics.cellInset),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Metrics.cellInset),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: Metrics.iconSlot),
-            icon.heightAnchor.constraint(equalToConstant: Metrics.iconSlot),
-            thumbnailView.widthAnchor.constraint(lessThanOrEqualToConstant: Metrics.thumbnailBox.width),
-            thumbnailView.heightAnchor.constraint(lessThanOrEqualToConstant: Metrics.thumbnailBox.height),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    /// Colours follow the row's background: on the accent highlight the
-    /// icon and label switch to the matching foreground colour.
-    override var backgroundStyle: NSView.BackgroundStyle {
-        didSet { applyColors() }
-    }
-
-    func configure(symbolName: String?, text: String, thumbnail: NSImage?, isMessage: Bool) {
-        self.isMessage = isMessage
-        icon.image = symbolName.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
-        label.stringValue = text
-        label.toolTip = text
-        thumbnailView.image = thumbnail
-        thumbnailView.isHidden = thumbnail == nil
-        applyColors()
-    }
-
-    private func applyColors() {
-        let isHighlighted = backgroundStyle == .emphasized
-        let foreground: NSColor = isHighlighted ? .alternateSelectedControlTextColor : .labelColor
-        label.textColor = isMessage ? .secondaryLabelColor : foreground
-        icon.contentTintColor = isHighlighted ? .alternateSelectedControlTextColor : .secondaryLabelColor
     }
 }

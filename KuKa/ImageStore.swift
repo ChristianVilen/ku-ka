@@ -73,11 +73,6 @@ protocol ImageStoring {
 /// the OS after each persistence moment. It also tracks content hashes per
 /// saved file and reports them on deletion.
 final class ImageStore: ImageStoring {
-    /// Images above this pixel count go on the pasteboard as PNG only. An
-    /// uncompressed TIFF costs ~4 bytes per pixel of transient allocation,
-    /// and every modern app reads PNG from the pasteboard.
-    static let defaultClipboardTIFFMaxPixels = 30_000_000
-
     let fileManager: FileManaging
     let clipboard: ClipboardManaging
     let clipboardTIFFMaxPixels: Int
@@ -85,7 +80,7 @@ final class ImageStore: ImageStoring {
     /// The stored file whose image was last copied to the clipboard. Deleting
     /// any other file leaves the clipboard alone.
     private var lastCopiedURL: URL?
-    /// Content hashes (matching `ClipboardItem.hash(bytes:)`) of every PNG
+    /// Content hashes (via the shared `ContentHash`) of every PNG
     /// this session copied to the clipboard for a given file URL — a set,
     /// not a single value, because `saveAnnotated` re-saving to an existing
     /// URL adds a hash rather than replacing one: the pre-annotation capture
@@ -99,12 +94,18 @@ final class ImageStore: ImageStoring {
     /// caller (AppDelegate) can drop the matching clipboard-history entry.
     /// Fires once per recorded hash — a file annotated after capture reports
     /// two. Not called when the deleted URL was never stored or re-saved
-    /// here. Callers must be on the main thread.
-    var onDeletedHash: ((String) -> Void)?
+    /// here.
+    ///
+    /// Typed `@MainActor` so the rule is checked rather than commented: the
+    /// consumer is main-actor state, and `delete(at:)` is only ever reached
+    /// from the thumbnail stack and the editor, both on the main thread.
+    /// `delete(at:)` states that assumption once, in `assumeIsolated`,
+    /// instead of leaving each consumer to make it again.
+    var onDeletedHash: (@MainActor (String) -> Void)?
 
     init(fileManager: FileManaging = FileManager.default,
          clipboard: ClipboardManaging = SystemClipboard(),
-         clipboardTIFFMaxPixels: Int = ImageStore.defaultClipboardTIFFMaxPixels,
+         clipboardTIFFMaxPixels: Int = PasteboardImage.defaultTIFFMaxPixels,
          now: @escaping () -> Date = { Date() }) {
         self.fileManager = fileManager
         self.clipboard = clipboard
@@ -161,8 +162,12 @@ final class ImageStore: ImageStoring {
             clipboard.clearClipboard()
             lastCopiedURL = nil
         }
-        if let hashes = contentHashes.removeValue(forKey: url) {
-            hashes.forEach { onDeletedHash?($0) }
+        if let hashes = contentHashes.removeValue(forKey: url), let onDeletedHash {
+            // See `onDeletedHash`: delete(at:) runs on the main thread, but
+            // ImageStore isn't @MainActor, so the compiler can't see it.
+            MainActor.assumeIsolated {
+                hashes.forEach(onDeletedHash)
+            }
         }
     }
 
@@ -215,11 +220,9 @@ final class ImageStore: ImageStoring {
             guard let png = bitmap.representation(using: .png, properties: [:]) else { return }
 
             try? fileManager.writeImageData(png, to: url)
-            contentHashes[url, default: []].insert(ClipboardItem.hash(bytes: png))
+            contentHashes[url, default: []].insert(ContentHash.of(png))
 
-            let tiff: Data? = cgImage.width * cgImage.height <= clipboardTIFFMaxPixels
-                ? bitmap.representation(using: .tiff, properties: [:])
-                : nil
+            let tiff = PasteboardImage.tiffFlavor(for: bitmap, maxPixels: clipboardTIFFMaxPixels)
             clipboard.copyImage(tiffData: tiff, pngData: png)
         }
     }

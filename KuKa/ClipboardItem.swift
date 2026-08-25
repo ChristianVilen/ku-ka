@@ -1,5 +1,4 @@
 import CoreGraphics
-import CryptoKit
 import Foundation
 
 /// What was on the pasteboard: plain text (with optional rich flavors), or
@@ -10,9 +9,9 @@ enum ClipboardItemKind: Equatable {
 }
 
 /// One recorded clipboard entry. Pure value type: no AppKit, no pasteboard
-/// access. `contentHash` is the dedupe key `ClipboardHistory` matches on, and
-/// is computed the same way here and in the pasteboard adapter so the two
-/// agree on identity.
+/// access. `contentHash` is the dedupe key `ClipboardHistory` matches on; it
+/// comes from `ContentHash`, which `ImageStore` also uses, so a screenshot
+/// and its history row agree on identity.
 struct ClipboardItem: Equatable {
     let kind: ClipboardItemKind
     let contentHash: String
@@ -80,7 +79,7 @@ extension ClipboardItem {
     static func text(plain: String, rtf: Data? = nil, html: Data? = nil, copiedAt: Date) -> ClipboardItem {
         ClipboardItem(
             kind: .text(plain: plain, rtf: rtf, html: html),
-            contentHash: hash(utf8: plain),
+            contentHash: ContentHash.of(utf8: plain),
             copiedAt: copiedAt,
             previewLabel: oneLineLabel(plain)
         )
@@ -90,20 +89,10 @@ extension ClipboardItem {
     static func image(png: Data, pixelSize: CGSize, copiedAt: Date) -> ClipboardItem {
         ClipboardItem(
             kind: .image(png: png, pixelSize: pixelSize),
-            contentHash: hash(bytes: png),
+            contentHash: ContentHash.of(png),
             copiedAt: copiedAt,
             previewLabel: "Image \(Int(pixelSize.width))×\(Int(pixelSize.height))"
         )
-    }
-
-    /// SHA-256 hex digest (lowercase) of a string's UTF-8 bytes.
-    static func hash(utf8 string: String) -> String {
-        hash(bytes: Data(string.utf8))
-    }
-
-    /// SHA-256 hex digest (lowercase) of raw bytes.
-    static func hash(bytes data: Data) -> String {
-        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Takes a bounded prefix of `text` first (cheap even for a huge

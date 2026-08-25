@@ -175,7 +175,7 @@ final class ImageStoreTests: XCTestCase {
         var reportedHash: String?
         sut.onDeletedHash = { reportedHash = $0 }
         sut.delete(at: result!.fileURL)
-        XCTAssertEqual(reportedHash, ClipboardItem.hash(bytes: pngData))
+        XCTAssertEqual(reportedHash, ContentHash.of(pngData))
     }
 
     // MARK: - Clipboard TIFF threshold
@@ -241,7 +241,7 @@ final class ImageStoreTests: XCTestCase {
 
         sut.delete(at: result.fileURL)
 
-        XCTAssertEqual(reportedHash, ClipboardItem.hash(bytes: pngData))
+        XCTAssertEqual(reportedHash, ContentHash.of(pngData))
     }
 
     func testStoreRemembersContentHashPerFile() {
@@ -259,8 +259,8 @@ final class ImageStoreTests: XCTestCase {
         sut.delete(at: first.fileURL)
 
         XCTAssertEqual(reportedHashes, [
-            ClipboardItem.hash(bytes: secondPngData),
-            ClipboardItem.hash(bytes: firstPngData)
+            ContentHash.of(secondPngData),
+            ContentHash.of(firstPngData)
         ])
     }
 
@@ -296,8 +296,8 @@ final class ImageStoreTests: XCTestCase {
         sut.delete(at: captured.fileURL)
 
         XCTAssertEqual(reportedHashes, [
-            ClipboardItem.hash(bytes: capturedPngData),
-            ClipboardItem.hash(bytes: annotatedPngData)
+            ContentHash.of(capturedPngData),
+            ContentHash.of(annotatedPngData)
         ])
     }
 }

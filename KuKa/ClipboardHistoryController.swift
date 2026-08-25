@@ -2,11 +2,11 @@ import Foundation
 
 /// What the clipboard panel should currently render: the filtered history
 /// list, or the "with/without formatting" chooser for a rich-text item that
-/// was just selected. See `ClipboardHistoryController.chooserItem` for
-/// which item the chooser is deciding on.
+/// was just selected. The chooser carries the item it is deciding on, so
+/// the panel cannot end up drawing a chooser with nothing to name.
 enum ClipboardPanelMode: Equatable {
     case list
-    case chooser
+    case chooser(item: ClipboardItem)
 }
 
 /// Owns everything the clipboard-history feature needs except the AppKit
@@ -63,20 +63,14 @@ final class ClipboardHistoryController {
     private(set) var visibleItems: [ClipboardItem] = []
     private(set) var selectionIndex = 0
 
-    /// What the panel should currently render.
+    /// What the panel should currently render. The only public view of
+    /// `panelState` — it drops the saved list selection, which is the
+    /// controller's own business, and keeps the item, which the panel
+    /// needs to name in the chooser header.
     var mode: ClipboardPanelMode {
         switch panelState {
         case .list: return .list
-        case .chooser: return .chooser
-        }
-    }
-
-    /// The item the chooser is deciding how to paste, or nil outside
-    /// chooser mode.
-    var chooserItem: ClipboardItem? {
-        switch panelState {
-        case .list: return nil
-        case .chooser(let item, _): return item
+        case .chooser(let item, _): return .chooser(item: item)
         }
     }
 
@@ -184,11 +178,10 @@ final class ClipboardHistoryController {
     }
 
     /// Pastes the item the chooser captured: without formatting for
-    /// selection 0 (the default), with formatting for selection 1. No-op
-    /// outside chooser mode. Public (rather than folded entirely into
-    /// `enterPressed()`) so a panel that already knows it's in chooser mode
-    /// can call this directly too.
-    func chooserSelectionConfirmed() {
+    /// selection 0 (the default), with formatting for selection 1. Reached
+    /// only through `enterPressed()`, which is the panel's one way in
+    /// regardless of the mode it happens to be showing.
+    private func chooserSelectionConfirmed() {
         guard case .chooser(let item, _) = panelState else { return }
         paste(item, withFormatting: selectionIndex == ChooserOption.withFormatting.rawValue)
     }
@@ -209,8 +202,12 @@ final class ClipboardHistoryController {
         }
     }
 
-    /// Replaces the filter and resets the selection to the top.
+    /// Replaces the filter and resets the selection to the top. List mode
+    /// only — the chooser has nothing to filter, and typing there must not
+    /// disturb what it pre-selected. A caller that owns an editable field
+    /// reads `searchQuery` back afterwards to stay in step.
     func setSearchQuery(_ query: String) {
+        guard case .list = panelState else { return }
         searchQuery = query
         selectionIndex = 0
         refilter()
@@ -228,17 +225,16 @@ final class ClipboardHistoryController {
         onListChanged?()
     }
 
-    /// Jumps the selection straight to `index`, clamped into the visible
-    /// list — what a click on a row needs, and one `onListChanged` instead
-    /// of the one per row that walking there with `moveSelectionUp()` /
-    /// `moveSelectionDown()` would fire.
+    /// Jumps the selection straight to `index`, clamped into whatever the
+    /// panel is showing — what a click on a row needs, and one
+    /// `onListChanged` instead of the one per row that walking there with
+    /// `moveSelectionUp()` / `moveSelectionDown()` would fire.
     ///
-    /// List mode only. The chooser's two rows are not history rows, so a
-    /// jump aimed at the list must never disturb what the chooser
-    /// pre-selected; in chooser mode this does nothing at all, not even
-    /// fire the callback.
+    /// Works in both modes, and needs no mode check of its own:
+    /// `maxSelectionIndex` already knows whether the rows on screen are
+    /// history rows or the chooser's two, so the clamp below lands
+    /// correctly either way.
     func selectRow(_ index: Int) {
-        guard case .list = panelState else { return }
         selectionIndex = min(max(index, 0), maxSelectionIndex)
         onListChanged?()
     }

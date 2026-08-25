@@ -88,7 +88,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         controller.moveSelectionDown()
 
         controller.enterPressed() // rich has flavors -> chooser
-        controller.chooserSelectionConfirmed() // index 0 = without formatting
+        controller.enterPressed() // confirms the chooser; index 0 = without formatting
 
         // Even though the paste itself carried no formatting, the item
         // stored in history must keep the RTF it was copied with — so the
@@ -216,8 +216,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
 
         controller.enterPressed()
 
-        XCTAssertEqual(controller.mode, .chooser)
-        XCTAssertEqual(controller.chooserItem?.contentHash, item.contentHash)
+        XCTAssertEqual(controller.mode, .chooser(item: item))
         XCTAssertEqual(controller.selectionIndex, 0, "without formatting is pre-selected")
         XCTAssertTrue(pasteboard.writes.isEmpty)
         XCTAssertEqual(keystrokeSender.sendCount, 0)
@@ -230,7 +229,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         controller.pollNow()
         controller.enterPressed() // enters chooser, index 0 pre-selected
 
-        controller.chooserSelectionConfirmed()
+        controller.enterPressed()
 
         XCTAssertEqual(pasteboard.writes.count, 1)
         XCTAssertFalse(pasteboard.writes[0].withFormatting)
@@ -246,7 +245,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         controller.enterPressed()
         controller.moveSelectionDown()
 
-        controller.chooserSelectionConfirmed()
+        controller.enterPressed()
 
         XCTAssertEqual(pasteboard.writes.count, 1)
         XCTAssertTrue(pasteboard.writes[0].withFormatting)
@@ -297,7 +296,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         controller.moveSelectionDown()
         controller.moveSelectionDown()
         controller.enterPressed()
-        XCTAssertEqual(controller.mode, .chooser)
+        XCTAssertTrue(controller.mode.isChooser)
 
         // While the chooser is open, the other two rows disappear (e.g.
         // their screenshots got deleted), leaving only the chooser's item.
@@ -400,7 +399,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         controller.onListChanged = { fireCount += 1 }
 
         controller.enterPressed() // rich item -> enters chooser mode
-        XCTAssertEqual(controller.mode, .chooser)
+        XCTAssertTrue(controller.mode.isChooser)
         XCTAssertEqual(fireCount, 1, "onListChanged must fire when entering chooser mode")
 
         controller.escPressed() // chooser -> list
@@ -431,7 +430,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectionIndex, 0)
     }
 
-    func testSelectRowClampsFiresOnceAndIsIgnoredInChooserMode() {
+    func testSelectRowClampsAndFiresOnceInBothModes() {
         controller.enable()
         copyToPasteboard(text("a"))
         controller.pollNow()
@@ -455,16 +454,33 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectionIndex, 0)
         XCTAssertEqual(fireCount, 3)
 
-        // The chooser's two rows are not history rows, so a click-driven
-        // jump into them must not move the selection the chooser set.
+        // A click lands on the chooser's rows the same way, clamped to the
+        // two it has rather than to the history list's length.
         controller.enterPressed() // the rich item opens the chooser
-        XCTAssertEqual(controller.mode, .chooser)
-        let firesBeforeChooserJump = fireCount
+        XCTAssertTrue(controller.mode.isChooser)
 
         controller.selectRow(1)
+        XCTAssertEqual(controller.selectionIndex, 1)
+        XCTAssertEqual(fireCount, 5, "one for entering the chooser, one for the jump")
 
+        controller.selectRow(5)
+        XCTAssertEqual(controller.selectionIndex, 1, "clamped to the chooser's last row")
+        XCTAssertEqual(fireCount, 6)
+    }
+
+    func testSetSearchQueryIsIgnoredInChooserMode() {
+        controller.enable()
+        copyToPasteboard(text("rich", rtf: Data([0x01])))
+        controller.pollNow()
+        controller.enterPressed() // opens the chooser
+        var fireCount = 0
+        controller.onListChanged = { fireCount += 1 }
+
+        controller.setSearchQuery("zzz")
+
+        XCTAssertEqual(controller.searchQuery, "", "the chooser has nothing to filter")
         XCTAssertEqual(controller.selectionIndex, 0, "chooser selection stays where the chooser put it")
-        XCTAssertEqual(fireCount, firesBeforeChooserJump, "a no-op must not fire the change callback")
+        XCTAssertEqual(fireCount, 0, "a no-op must not fire the change callback")
     }
 
     func testSetSearchQueryFiltersAndResetsSelection() {
@@ -507,7 +523,7 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         controller.enterPressed() // "apple rich" has flavors -> chooser mode
         controller.moveSelectionDown() // chooser selection -> 1 ("with formatting")
 
-        XCTAssertEqual(controller.mode, .chooser)
+        XCTAssertTrue(controller.mode.isChooser)
         XCTAssertEqual(controller.searchQuery, "apple")
         XCTAssertEqual(controller.selectionIndex, 1)
 
@@ -517,5 +533,15 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         XCTAssertEqual(controller.searchQuery, "")
         XCTAssertEqual(controller.selectionIndex, 0)
         XCTAssertEqual(controller.visibleItems.map(\.previewLabel), ["banana", "apple rich", "apple"])
+    }
+}
+
+/// Most chooser tests only care *that* the chooser is up, not which item it
+/// holds — `mode` carries the item, so an equality check would have to name
+/// it every time.
+private extension ClipboardPanelMode {
+    var isChooser: Bool {
+        if case .chooser = self { return true }
+        return false
     }
 }
