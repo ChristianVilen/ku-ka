@@ -170,10 +170,12 @@ final class ImageStoreTests: XCTestCase {
         // storeCombined must go through the same content-hash tracking as a
         // plain store(), or deleting a combined screenshot would never clear
         // its clipboard-history row.
+        let pngData = mockClipboard.lastPngData!
+
         var reportedHash: String?
         sut.onDeletedHash = { reportedHash = $0 }
         sut.delete(at: result!.fileURL)
-        XCTAssertEqual(reportedHash, ClipboardItem.hash(bytes: mockClipboard.lastPngData!))
+        XCTAssertEqual(reportedHash, ClipboardItem.hash(bytes: pngData))
     }
 
     // MARK: - Clipboard TIFF threshold

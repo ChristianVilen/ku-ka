@@ -431,6 +431,42 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectionIndex, 0)
     }
 
+    func testSelectRowClampsFiresOnceAndIsIgnoredInChooserMode() {
+        controller.enable()
+        copyToPasteboard(text("a"))
+        controller.pollNow()
+        copyToPasteboard(text("rich", rtf: Data([0x01])))
+        controller.pollNow()
+        // Newest first: [rich, a].
+        var fireCount = 0
+        controller.onListChanged = { fireCount += 1 }
+
+        controller.selectRow(1)
+        XCTAssertEqual(controller.selectionIndex, 1)
+        XCTAssertEqual(fireCount, 1, "one callback per jump, not one per row crossed")
+
+        // Past the end clamps to the last row.
+        controller.selectRow(9)
+        XCTAssertEqual(controller.selectionIndex, 1)
+        XCTAssertEqual(fireCount, 2)
+
+        // Below zero clamps to the top row.
+        controller.selectRow(-3)
+        XCTAssertEqual(controller.selectionIndex, 0)
+        XCTAssertEqual(fireCount, 3)
+
+        // The chooser's two rows are not history rows, so a click-driven
+        // jump into them must not move the selection the chooser set.
+        controller.enterPressed() // the rich item opens the chooser
+        XCTAssertEqual(controller.mode, .chooser)
+        let firesBeforeChooserJump = fireCount
+
+        controller.selectRow(1)
+
+        XCTAssertEqual(controller.selectionIndex, 0, "chooser selection stays where the chooser put it")
+        XCTAssertEqual(fireCount, firesBeforeChooserJump, "a no-op must not fire the change callback")
+    }
+
     func testSetSearchQueryFiltersAndResetsSelection() {
         controller.enable()
         copyToPasteboard(text("apple pie"))

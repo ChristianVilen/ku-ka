@@ -228,6 +228,21 @@ final class ClipboardHistoryController {
         onListChanged?()
     }
 
+    /// Jumps the selection straight to `index`, clamped into the visible
+    /// list — what a click on a row needs, and one `onListChanged` instead
+    /// of the one per row that walking there with `moveSelectionUp()` /
+    /// `moveSelectionDown()` would fire.
+    ///
+    /// List mode only. The chooser's two rows are not history rows, so a
+    /// jump aimed at the list must never disturb what the chooser
+    /// pre-selected; in chooser mode this does nothing at all, not even
+    /// fire the callback.
+    func selectRow(_ index: Int) {
+        guard case .list = panelState else { return }
+        selectionIndex = min(max(index, 0), maxSelectionIndex)
+        onListChanged?()
+    }
+
     /// Drops one item from the history by content hash — e.g. when the
     /// screenshot it represents is deleted from its thumbnail or editor.
     func removeItem(hash: String) {

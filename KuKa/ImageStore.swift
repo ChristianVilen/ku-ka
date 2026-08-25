@@ -95,9 +95,11 @@ final class ImageStore: ImageStoring {
     /// until its URL is deleted (same accepted trade-off as
     /// `WindowTilingController.savedFrames`).
     private var contentHashes: [URL: Set<String>] = [:]
-    /// Fires with the content hash of a deleted file's clipboard bytes, so a
+    /// Fires with a content hash of a deleted file's clipboard bytes, so a
     /// caller (AppDelegate) can drop the matching clipboard-history entry.
-    /// Not called when the deleted URL was never stored or re-saved here.
+    /// Fires once per recorded hash — a file annotated after capture reports
+    /// two. Not called when the deleted URL was never stored or re-saved
+    /// here.
     var onDeletedHash: ((String) -> Void)?
 
     init(fileManager: FileManaging = FileManager.default,
@@ -197,8 +199,8 @@ final class ImageStore: ImageStoring {
     }
 
     /// Encodes a CGImage to PNG exactly once, writes those bytes to disk,
-    /// copies them (plus an optional TIFF rep) to the clipboard, and records
-    /// their content hash against `url`. Two independent NSBitmapImageRep
+    /// copies them (plus an optional TIFF rep) to the clipboard, and adds
+    /// their content hash to the set recorded against `url`. Two independent NSBitmapImageRep
     /// PNG encodings of the same CGImage are not guaranteed byte-identical,
     /// and the hash that matters is the one for the bytes the clipboard
     /// received — the poller reads those back into clipboard history — so
