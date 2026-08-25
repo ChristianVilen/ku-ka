@@ -50,4 +50,14 @@ final class SettingsTests: XCTestCase {
         XCTAssertTrue(loginItem.setCalls.isEmpty)
         XCTAssertFalse(sut.launchAtLogin)
     }
+
+    func testClipboardHistoryEnabledDefaultsTrue() {
+        XCTAssertTrue(sut.clipboardHistoryEnabled)
+    }
+
+    func testClipboardHistoryEnabledPersists() {
+        sut.clipboardHistoryEnabled = false
+        XCTAssertFalse(sut.clipboardHistoryEnabled)
+        XCTAssertFalse(Settings(defaults: defaults, loginItem: loginItem).clipboardHistoryEnabled)
+    }
 }
