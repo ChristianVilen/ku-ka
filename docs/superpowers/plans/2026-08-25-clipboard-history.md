@@ -133,7 +133,8 @@ State the panel needs, exposed as read-only + a `onListChanged` closure: visible
   - `testChooserSecondOptionPastesWithFormatting`
   - `testEscInChooserReturnsToList`
   - `testScreenshotHashRemovalDropsItem`
-  - `testPastedItemMovesToTopOnNextPoll` (write bumps fake changeCount; poll re-reads; dedupe)
+  - `testPasteMovesItemToTopPreservingRichFlavors` (paste without formatting moves the item to the top and keeps its RTF/HTML)
+  - `testOwnPasteWriteIsNotRecordedByNextPoll` (self-write suppression: the poll right after our own paste re-reads nothing)
 - [ ] Add files to targets; run class — red.
 - [ ] **Green:** implement. Paste hand-off order: notify panel to close → `writer.write(...)` → send keystroke after a ~50 ms `DispatchQueue.main.asyncAfter` so focus settles back on the target app (same trick as the capture flow's overlay delay).
 - [ ] Full suite green.

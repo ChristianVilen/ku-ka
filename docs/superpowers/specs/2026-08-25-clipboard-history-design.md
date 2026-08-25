@@ -65,9 +65,17 @@ Pasting: write the chosen item back to the pasteboard (plain only, or plain plus
 rich flavors), close the panel, and synthesize `Cmd+V` key events with `CGEvent`.
 The event flags are set to exactly `.maskCommand`, so modifier keys the user is
 still holding do not leak into the paste. Accessibility permission covers this;
-the app already requires it. Our own pasteboard write bumps `changeCount`; the
-poller reads it back and the dedupe rule moves the pasted item to the top, which
-is the behavior we want.
+the app already requires it. Our own pasteboard write bumps `changeCount` too,
+so the controller immediately adopts that count as the new baseline — self-write
+suppression — instead of waiting for the next poll to read our own write back.
+The pasted item still needs to move to the top of the history, though, and with
+its full flavors intact even when the paste itself was plain-only: a real
+pasteboard write without formatting only puts the plain string on the system
+pasteboard, so letting a later poll re-read it would silently downgrade the
+stored item and the chooser would never offer it again. The controller avoids
+that by re-adding the original in-memory item straight into the history right
+after the write; the existing dedupe-to-top rule moves it to the top without
+touching what it's made of.
 
 ## Panel UI
 

@@ -201,6 +201,9 @@ class FakePasteboard: PasteboardReading, PasteboardWriting {
     private(set) var readCount = 0
     private(set) var lastNow: Date?
     private(set) var writes: [(item: ClipboardItem, withFormatting: Bool)] = []
+    /// Fires synchronously from `write`, before it returns — lets a test
+    /// observe exactly when a write happened relative to other calls.
+    var onWrite: (() -> Void)?
 
     func readCurrentItem(now: Date) -> ClipboardItem? {
         readCount += 1
@@ -215,6 +218,7 @@ class FakePasteboard: PasteboardReading, PasteboardWriting {
         // as new content.
         currentItem = item
         changeCount += 1
+        onWrite?()
     }
 }
 
