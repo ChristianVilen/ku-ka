@@ -20,7 +20,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var statusMenu = StatusMenu(settings: settings, keepAwake: keepAwake)
     private let permissions = PermissionsManager()
-    private let secureInput = SecureInputMonitor()
+    /// Lazy so the tap probe can reference `hotkeyManager`; the closure
+    /// captures the manager, not self, so there is no retain cycle.
+    private lazy var hotkeyHealth = HotkeyHealthMonitor(
+        isTapDelivering: { [hotkeyManager] in hotkeyManager.isDelivering }
+    )
     private var onboardingController: OnboardingWindowController?
     /// False in UI-test runs, where permission handling is skipped entirely
     /// (also keeps the warning badge off the status icon there).
@@ -40,7 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupClipboardHistory()
         if !isTesting {
             setupPermissions()
-            setupSecureInputWatch()
+            setupHotkeyHealthWatch()
             // Polling the real pasteboard during unit/UI test runs would
             // ingest whatever the developer happens to have copied, so this
             // stays behind the same isTesting gate as setupPermissions().
@@ -64,7 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Settings would leave the warning badge stale until onboarding opens.
         statusMenu.onMenuWillOpen = { [weak self] in
             self?.permissions.refresh()
-            self?.secureInput.refresh()
+            self?.hotkeyHealth.refresh()
         }
         permissions.refresh()
         permissionsChanged()
@@ -73,18 +77,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Stuck secure input starves the event tap silently, so watch for it
-    /// and say who is holding it. Called behind the same isTesting gate as
-    /// `setupPermissions()`: tests never poll the real session. The menu-open
-    /// refresh lives in `setupPermissions()`'s `onMenuWillOpen` closure —
-    /// it's a single callback slot shared by both.
-    private func setupSecureInputWatch() {
-        secureInput.onChange = { [weak self] in self?.secureInputChanged() }
-        secureInput.startMonitoring()
+    /// Every hotkey-death cause is silent on its own (a starved tap logs
+    /// nothing a user sees), so watch the health monitor and surface its
+    /// state. Called behind the same isTesting gate as `setupPermissions()`:
+    /// tests never poll the real session. The menu-open refresh lives in
+    /// `setupPermissions()`'s `onMenuWillOpen` closure — it's a single
+    /// callback slot shared by both.
+    private func setupHotkeyHealthWatch() {
+        hotkeyHealth.onChange = { [weak self] in self?.hotkeyHealthChanged() }
+        hotkeyHealth.startMonitoring()
     }
 
-    private func secureInputChanged() {
-        statusMenu.updateSecureInputWarning(secureInput.state)
+    private func hotkeyHealthChanged() {
+        statusMenu.updateHotkeyHealth(hotkeyHealth.state)
         updateStatusItemIcon()
     }
 
@@ -232,10 +237,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatusItemIcon() {
+        // Orange covers the permission hotkey health can't see (Screen
+        // Recording); a missing Accessibility grant shows as red via
+        // `hotkeyHealth`, because it means hotkeys are dead right now.
         statusItem.button?.image = statusMenu.icon(
             keepAwakeActive: keepAwake.isActive,
-            permissionMissing: permissionHandlingEnabled && !permissions.allGranted,
-            hotkeysBlocked: secureInput.state != .inactive
+            permissionMissing: permissionHandlingEnabled && !permissions.screenRecording,
+            hotkeysBlocked: hotkeyHealth.state != .healthy
         )
     }
 }

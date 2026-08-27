@@ -20,7 +20,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var windowTilingItem: NSMenuItem!
     private var clipboardHistoryItem: NSMenuItem!
     private var durationItems: [NSMenuItem] = []
-    private var secureInputItems: [NSMenuItem] = []
+    private var hotkeyWarningItems: [NSMenuItem] = []
 
     init(settings: Settings, keepAwake: KeepAwakeController) {
         self.settings = settings
@@ -31,11 +31,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     /// The status-item image: the app icon, plus a small dot (with a light
     /// ring for contrast) per active state — Keep Awake gets the accent dot
-    /// in the bottom-right, a missing permission gets an orange warning dot
-    /// in the bottom-left. Separate corners so both can show at once.
-    /// Stuck secure input shares the warning corner as a red dot and wins
-    /// over the orange one: it is the more urgent state (hotkeys are dead
-    /// right now), and the menu spells out both anyway.
+    /// in the bottom-right, and the bottom-left is the warning corner: red
+    /// when hotkeys are dead (`hotkeysBlocked`, whatever the cause), orange
+    /// when a permission is missing but hotkeys still work (in practice:
+    /// Screen Recording). Red wins the corner — it is the more urgent state,
+    /// and the menu spells out the cause anyway.
     func icon(keepAwakeActive: Bool, permissionMissing: Bool, hotkeysBlocked: Bool) -> NSImage {
         guard let base = NSImage(named: "MenuBarIcon") else {
             return NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka") ?? NSImage()
@@ -72,23 +72,37 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return badged
     }
 
-    /// Show or clear the secure-input warning at the top of the menu: who is
-    /// blocking the hotkeys, and the one thing the user can do about it.
-    /// Rebuilt on every call, so a repeated `.blocked` never duplicates and a
-    /// changed holder name replaces the old line.
-    func updateSecureInputWarning(_ state: SecureInputState) {
-        for item in secureInputItems { menu.removeItem(item) }
-        secureInputItems = []
-        guard case .blocked(let holderName) = state else { return }
+    /// Show or clear the hotkey-health warning at the top of the menu: why
+    /// hotkeys are dead, and the one thing the user can do about it. Rebuilt
+    /// on every call, so a repeated state never duplicates and a changed
+    /// cause replaces the old lines.
+    func updateHotkeyHealth(_ health: HotkeyHealth) {
+        for item in hotkeyWarningItems { menu.removeItem(item) }
+        hotkeyWarningItems = []
 
-        let warning = NSMenuItem(title: "⚠️ Hotkeys blocked by \(holderName ?? "another app")", action: nil, keyEquivalent: "")
+        let title: String, remedy: String
+        switch health {
+        case .healthy:
+            return
+        case .noPermission:
+            title = "⚠️ Hotkeys off — Accessibility permission missing"
+            remedy = "Grant it under Permissions… below"
+        case .tapDead:
+            title = "⚠️ Hotkeys stopped working"
+            remedy = "Quit and reopen Ku-Ka to fix"
+        case .secureInputStuck(let holderName):
+            title = "⚠️ Hotkeys blocked by \(holderName ?? "another app")"
+            remedy = "Lock and unlock the screen to fix"
+        }
+
+        let warning = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         warning.isEnabled = false
-        let hint = NSMenuItem(title: "Lock and unlock the screen to fix", action: nil, keyEquivalent: "")
+        let hint = NSMenuItem(title: remedy, action: nil, keyEquivalent: "")
         hint.isEnabled = false
         hint.indentationLevel = 1
 
-        secureInputItems = [warning, hint, .separator()]
-        for (index, item) in secureInputItems.enumerated() {
+        hotkeyWarningItems = [warning, hint, .separator()]
+        for (index, item) in hotkeyWarningItems.enumerated() {
             menu.insertItem(item, at: index)
         }
     }

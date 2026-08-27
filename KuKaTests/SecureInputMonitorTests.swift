@@ -104,26 +104,4 @@ final class SecureInputMonitorTests: XCTestCase {
         XCTAssertEqual(sut.state, .blocked(holderName: "Arc"))
     }
 
-    func testPollingPicksUpAStuckGrabWithoutManualRefresh() {
-        var clock = Date(timeIntervalSince1970: 0)
-        let sut = SecureInputMonitor(
-            isSecureInputEnabled: {
-                // Each poll moves the fake clock past the stuck threshold,
-                // so the second tick must report blocked.
-                clock = clock.addingTimeInterval(10)
-                return true
-            },
-            holderName: { "Arc" },
-            now: { clock },
-            pollInterval: 0.01
-        )
-        let changed = expectation(description: "onChange fired by the poll timer")
-        sut.onChange = { changed.fulfill() }
-
-        sut.startMonitoring()
-
-        wait(for: [changed], timeout: 2)
-        sut.stopMonitoring()
-        XCTAssertEqual(sut.state, .blocked(holderName: "Arc"))
-    }
 }

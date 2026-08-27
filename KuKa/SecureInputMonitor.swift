@@ -15,6 +15,9 @@ enum SecureInputState: Equatable {
 /// focused password field — so only a hold lasting `stuckThreshold` counts as
 /// stuck. Nobody but the holder can release the grab; all Ku-Ka can do is
 /// tell the user who to blame, which is what `state` feeds.
+///
+/// Internal seam of `HotkeyHealthMonitor`, which owns the poll timer and
+/// drives `refresh()` — nothing else consumes this type.
 @MainActor
 final class SecureInputMonitor {
     /// How long secure input must be held continuously before it is reported
@@ -29,37 +32,17 @@ final class SecureInputMonitor {
     private let isSecureInputEnabled: () -> Bool
     private let holderName: () -> String?
     private let now: () -> Date
-    private let pollInterval: TimeInterval
     private var activeSince: Date?
-    private var timer: Timer?
 
     /// The probes default to the real system calls; tests inject stand-ins.
     init(
         isSecureInputEnabled: @escaping () -> Bool = { IsSecureEventInputEnabled() },
         holderName: @escaping () -> String? = SecureInputMonitor.systemHolderName,
-        now: @escaping () -> Date = Date.init,
-        pollInterval: TimeInterval = 5
+        now: @escaping () -> Date = Date.init
     ) {
         self.isSecureInputEnabled = isSecureInputEnabled
         self.holderName = holderName
         self.now = now
-        self.pollInterval = pollInterval
-    }
-
-    /// Poll for the app's lifetime. Secure input can be grabbed (and leaked)
-    /// at any moment, and an accessory app gets no notification for it, so a
-    /// timer is the only way to notice.
-    func startMonitoring() {
-        guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
-            // Timers scheduled from the main thread fire on the main run loop.
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-    }
-
-    func stopMonitoring() {
-        timer?.invalidate()
-        timer = nil
     }
 
     /// Re-read secure input and update `state`.

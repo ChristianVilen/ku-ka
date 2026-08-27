@@ -31,26 +31,48 @@ final class StatusMenuTests: XCTestCase {
         _ = (item.target as? NSObject)?.perform(item.action, with: item)
     }
 
-    // MARK: - Secure input warning
+    // MARK: - Hotkey health warning
 
-    func testSecureInputWarningAppearsOnceWithHolderNameAndClears() {
-        sut.updateSecureInputWarning(.blocked(holderName: "Arc"))
-        sut.updateSecureInputWarning(.blocked(holderName: "Arc"))
+    func testHotkeyWarningAppearsOnceWithHolderNameAndClears() {
+        sut.updateHotkeyHealth(.secureInputStuck(holderName: "Arc"))
+        sut.updateHotkeyHealth(.secureInputStuck(holderName: "Arc"))
 
         let warnings = menuItems.filter { $0.title == "⚠️ Hotkeys blocked by Arc" }
         XCTAssertEqual(warnings.count, 1, "repeated updates must not duplicate the warning")
         XCTAssertNotNil(item(titled: "Lock and unlock the screen to fix"))
 
-        sut.updateSecureInputWarning(.inactive)
+        sut.updateHotkeyHealth(.healthy)
 
         XCTAssertNil(item(titled: "⚠️ Hotkeys blocked by Arc"))
         XCTAssertNil(item(titled: "Lock and unlock the screen to fix"))
     }
 
-    func testSecureInputWarningNamesAnotherAppWhenHolderIsUnknown() {
-        sut.updateSecureInputWarning(.blocked(holderName: nil))
+    func testHotkeyWarningNamesAnotherAppWhenHolderIsUnknown() {
+        sut.updateHotkeyHealth(.secureInputStuck(holderName: nil))
 
         XCTAssertNotNil(item(titled: "⚠️ Hotkeys blocked by another app"))
+    }
+
+    func testHotkeyWarningForMissingPermission() {
+        sut.updateHotkeyHealth(.noPermission)
+
+        XCTAssertNotNil(item(titled: "⚠️ Hotkeys off — Accessibility permission missing"))
+        XCTAssertNotNil(item(titled: "Grant it under Permissions… below"))
+    }
+
+    func testHotkeyWarningForDeadTap() {
+        sut.updateHotkeyHealth(.tapDead)
+
+        XCTAssertNotNil(item(titled: "⚠️ Hotkeys stopped working"))
+        XCTAssertNotNil(item(titled: "Quit and reopen Ku-Ka to fix"))
+    }
+
+    func testHotkeyWarningSwitchesWhenTheCauseChanges() {
+        sut.updateHotkeyHealth(.noPermission)
+        sut.updateHotkeyHealth(.tapDead)
+
+        XCTAssertNil(item(titled: "⚠️ Hotkeys off — Accessibility permission missing"))
+        XCTAssertNotNil(item(titled: "⚠️ Hotkeys stopped working"))
     }
 
     // MARK: - Structure
