@@ -71,6 +71,9 @@ final class SecureInputMonitor {
         }
         let start = activeSince ?? now()
         activeSince = start
+        // Resolve the holder once, when the grab first counts as stuck: the
+        // holder can quit while still holding the grab (the leaked case),
+        // and a later lookup would lose its name.
         if now().timeIntervalSince(start) >= Self.stuckThreshold, state == .inactive {
             setState(.blocked(holderName: holderName()))
         }

@@ -40,6 +40,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupClipboardHistory()
         if !isTesting {
             setupPermissions()
+            setupSecureInputWatch()
             // Polling the real pasteboard during unit/UI test runs would
             // ingest whatever the developer happens to have copied, so this
             // stays behind the same isTesting gate as setupPermissions().
@@ -67,14 +68,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         permissions.refresh()
         permissionsChanged()
-        // Stuck secure input starves the event tap silently, so watch for it
-        // and say who is holding it. Behind the same isTesting gate as the
-        // rest of permission handling: tests never poll the real session.
-        secureInput.onChange = { [weak self] in self?.secureInputChanged() }
-        secureInput.startMonitoring()
         if !permissions.allGranted {
             showOnboarding(.welcome)
         }
+    }
+
+    /// Stuck secure input starves the event tap silently, so watch for it
+    /// and say who is holding it. Called behind the same isTesting gate as
+    /// `setupPermissions()`: tests never poll the real session. The menu-open
+    /// refresh lives in `setupPermissions()`'s `onMenuWillOpen` closure —
+    /// it's a single callback slot shared by both.
+    private func setupSecureInputWatch() {
+        secureInput.onChange = { [weak self] in self?.secureInputChanged() }
+        secureInput.startMonitoring()
     }
 
     private func secureInputChanged() {

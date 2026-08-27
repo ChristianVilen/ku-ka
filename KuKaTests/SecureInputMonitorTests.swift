@@ -85,6 +85,25 @@ final class SecureInputMonitorTests: XCTestCase {
         XCTAssertEqual(sut.state, .blocked(holderName: nil))
     }
 
+    func testHolderNameCapturedAtBlockTimeSurvivesTheHolderQuitting() {
+        var clock = Date(timeIntervalSince1970: 0)
+        var holder: String? = "Arc"
+        let sut = SecureInputMonitor(
+            isSecureInputEnabled: { true },
+            holderName: { holder },
+            now: { clock }
+        )
+        sut.refresh()
+        clock = clock.addingTimeInterval(10)
+        sut.refresh()
+
+        holder = nil // the holder quits; the leaked grab stays
+        clock = clock.addingTimeInterval(10)
+        sut.refresh()
+
+        XCTAssertEqual(sut.state, .blocked(holderName: "Arc"))
+    }
+
     func testPollingPicksUpAStuckGrabWithoutManualRefresh() {
         var clock = Date(timeIntervalSince1970: 0)
         let sut = SecureInputMonitor(

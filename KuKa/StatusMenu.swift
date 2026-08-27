@@ -36,7 +36,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// Stuck secure input shares the warning corner as a red dot and wins
     /// over the orange one: it is the more urgent state (hotkeys are dead
     /// right now), and the menu spells out both anyway.
-    func icon(keepAwakeActive: Bool, permissionMissing: Bool, hotkeysBlocked: Bool = false) -> NSImage {
+    func icon(keepAwakeActive: Bool, permissionMissing: Bool, hotkeysBlocked: Bool) -> NSImage {
         guard let base = NSImage(named: "MenuBarIcon") else {
             return NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka") ?? NSImage()
         }
