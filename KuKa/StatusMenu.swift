@@ -20,6 +20,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var windowTilingItem: NSMenuItem!
     private var clipboardHistoryItem: NSMenuItem!
     private var durationItems: [NSMenuItem] = []
+    private var secureInputItems: [NSMenuItem] = []
 
     init(settings: Settings, keepAwake: KeepAwakeController) {
         self.settings = settings
@@ -32,13 +33,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// ring for contrast) per active state — Keep Awake gets the accent dot
     /// in the bottom-right, a missing permission gets an orange warning dot
     /// in the bottom-left. Separate corners so both can show at once.
-    func icon(keepAwakeActive: Bool, permissionMissing: Bool) -> NSImage {
+    /// Stuck secure input shares the warning corner as a red dot and wins
+    /// over the orange one: it is the more urgent state (hotkeys are dead
+    /// right now), and the menu spells out both anyway.
+    func icon(keepAwakeActive: Bool, permissionMissing: Bool, hotkeysBlocked: Bool = false) -> NSImage {
         guard let base = NSImage(named: "MenuBarIcon") else {
             return NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka") ?? NSImage()
         }
         let size = NSSize(width: 18, height: 18)
 
-        guard keepAwakeActive || permissionMissing else {
+        guard keepAwakeActive || permissionMissing || hotkeysBlocked else {
             let icon = (base.copy() as? NSImage) ?? base
             icon.size = size
             icon.isTemplate = false
@@ -57,13 +61,36 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             if keepAwakeActive {
                 drawDot(NSRect(x: rect.maxX - 8, y: rect.minY + 1, width: 7, height: 7), color: .controlAccentColor)
             }
-            if permissionMissing {
+            if hotkeysBlocked {
+                drawDot(NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7), color: .systemRed)
+            } else if permissionMissing {
                 drawDot(NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7), color: .systemOrange)
             }
             return true
         }
         badged.isTemplate = false
         return badged
+    }
+
+    /// Show or clear the secure-input warning at the top of the menu: who is
+    /// blocking the hotkeys, and the one thing the user can do about it.
+    /// Rebuilt on every call, so a repeated `.blocked` never duplicates and a
+    /// changed holder name replaces the old line.
+    func updateSecureInputWarning(_ state: SecureInputState) {
+        for item in secureInputItems { menu.removeItem(item) }
+        secureInputItems = []
+        guard case .blocked(let holderName) = state else { return }
+
+        let warning = NSMenuItem(title: "⚠️ Hotkeys blocked by \(holderName ?? "another app")", action: nil, keyEquivalent: "")
+        warning.isEnabled = false
+        let hint = NSMenuItem(title: "Lock and unlock the screen to fix", action: nil, keyEquivalent: "")
+        hint.isEnabled = false
+        hint.indentationLevel = 1
+
+        secureInputItems = [warning, hint, .separator()]
+        for (index, item) in secureInputItems.enumerated() {
+            menu.insertItem(item, at: index)
+        }
     }
 
     // MARK: - Build

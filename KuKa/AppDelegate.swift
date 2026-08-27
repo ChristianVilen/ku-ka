@@ -20,6 +20,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var statusMenu = StatusMenu(settings: settings, keepAwake: keepAwake)
     private let permissions = PermissionsManager()
+    private let secureInput = SecureInputMonitor()
     private var onboardingController: OnboardingWindowController?
     /// False in UI-test runs, where permission handling is skipped entirely
     /// (also keeps the warning badge off the status icon there).
@@ -60,12 +61,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // An accessory app rarely becomes active, so also re-check every time
         // the status menu opens — otherwise a revocation made in System
         // Settings would leave the warning badge stale until onboarding opens.
-        statusMenu.onMenuWillOpen = { [weak self] in self?.permissions.refresh() }
+        statusMenu.onMenuWillOpen = { [weak self] in
+            self?.permissions.refresh()
+            self?.secureInput.refresh()
+        }
         permissions.refresh()
         permissionsChanged()
+        // Stuck secure input starves the event tap silently, so watch for it
+        // and say who is holding it. Behind the same isTesting gate as the
+        // rest of permission handling: tests never poll the real session.
+        secureInput.onChange = { [weak self] in self?.secureInputChanged() }
+        secureInput.startMonitoring()
         if !permissions.allGranted {
             showOnboarding(.welcome)
         }
+    }
+
+    private func secureInputChanged() {
+        statusMenu.updateSecureInputWarning(secureInput.state)
+        updateStatusItemIcon()
     }
 
     private func permissionsChanged() {
@@ -214,7 +228,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItemIcon() {
         statusItem.button?.image = statusMenu.icon(
             keepAwakeActive: keepAwake.isActive,
-            permissionMissing: permissionHandlingEnabled && !permissions.allGranted
+            permissionMissing: permissionHandlingEnabled && !permissions.allGranted,
+            hotkeysBlocked: secureInput.state != .inactive
         )
     }
 }

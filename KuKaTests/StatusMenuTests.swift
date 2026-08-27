@@ -31,6 +31,28 @@ final class StatusMenuTests: XCTestCase {
         _ = (item.target as? NSObject)?.perform(item.action, with: item)
     }
 
+    // MARK: - Secure input warning
+
+    func testSecureInputWarningAppearsOnceWithHolderNameAndClears() {
+        sut.updateSecureInputWarning(.blocked(holderName: "Arc"))
+        sut.updateSecureInputWarning(.blocked(holderName: "Arc"))
+
+        let warnings = menuItems.filter { $0.title == "⚠️ Hotkeys blocked by Arc" }
+        XCTAssertEqual(warnings.count, 1, "repeated updates must not duplicate the warning")
+        XCTAssertNotNil(item(titled: "Lock and unlock the screen to fix"))
+
+        sut.updateSecureInputWarning(.inactive)
+
+        XCTAssertNil(item(titled: "⚠️ Hotkeys blocked by Arc"))
+        XCTAssertNil(item(titled: "Lock and unlock the screen to fix"))
+    }
+
+    func testSecureInputWarningNamesAnotherAppWhenHolderIsUnknown() {
+        sut.updateSecureInputWarning(.blocked(holderName: nil))
+
+        XCTAssertNotNil(item(titled: "⚠️ Hotkeys blocked by another app"))
+    }
+
     // MARK: - Structure
 
     func testMenuContainsCoreItems() {

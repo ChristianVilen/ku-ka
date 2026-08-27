@@ -48,6 +48,7 @@ KuKa/
 ├── AccessibilityWindowControl.swift # AX-API glue: reads/moves the focused window, NS-space coordinates
 ├── ScreenCoordinates.swift   # Shared top-left (CG/AX) <-> bottom-left (NS) coordinate flip
 ├── PermissionsManager.swift  # Single source of truth for Accessibility + Screen Recording status, polling, deep links
+├── SecureInputMonitor.swift  # Polls macOS secure keyboard input; reports a grab held past 10s as stuck, with the holder app's name
 ├── OnboardingWindowController.swift # Permission onboarding window: per-permission row with live ❌/✅ + Grant button
 ├── ClipboardItem.swift       # Pure value type: text (plain/RTF/HTML) or image (PNG + pixel size), content hash, preview label
 ├── ClipboardHistory.swift    # Pure model: ordered list, dedupe-to-top, item/byte caps with eviction, filter, remove-by-hash
@@ -94,6 +95,7 @@ To keep a file out of the build, put it outside these two folders.
 | `WindowListProvider` | Lists on-screen, layer-0 windows (excluding Ku-Ka's own) via `CGWindowListCopyWindowInfo`, converted to NS coordinates |
 | `ScreenCoordinates` | Shared vertical-flip math used by both `WindowListProvider` and `AccessibilityWindowControl` for CG/AX ↔ NS coordinate conversion |
 | `PermissionsManager` | `@MainActor` single source of truth for the two TCC permissions: `refresh()` re-reads `AXIsProcessTrusted()`/`CGPreflightScreenCaptureAccess()`, request methods deep-link into the right System Settings pane (and trigger the system prompt — for Accessibility only on the first request, see below), 0.5s polling while onboarding is open |
+| `SecureInputMonitor` | `@MainActor`. Polls `IsSecureEventInputEnabled()` every 5s (secure keyboard input starves every CGEvent tap, killing all Ku-Ka hotkeys silently). A grab held for 10s straight (`stuckThreshold`) flips `state` to `.blocked(holderName:)` — the holder resolved from the session dictionary's `kCGSSessionSecureInputPID`, nil when that pid no longer runs (a quit app can leak the grab). `onChange` drives the menu warning and the red status-icon dot; nobody can release the grab programmatically, so telling the user who to blame is the whole feature |
 | `OnboardingWindowController` | Dedicated `NSWindow` (AppKit, no storyboard) shown at launch while a permission is missing — a welcome page first, then the permission checklist. The menu's "Permissions…" and a capture blocked on a missing grant open it straight on the checklist. Flips the app to `.regular` activation policy while open, back to `.accessory` on close |
 | `ClipboardItem` | Pure value type: kind is `.text(plain, rtf: Data?, html: Data?)` or `.image(png: Data, pixelSize)`, plus a content hash from the shared `ContentHash` — the same one `ImageStore` records per file, so the two agree on identity — copy date, `hasRichFlavors`, `byteCost`, and a one-line `previewLabel` built once up front |
 | `ContentHash` | Neutral namespace for the SHA-256 hex digest (CryptoKit) that `ClipboardItem` uses as its dedupe key and `ImageStore` records for each PNG it copies |
@@ -173,6 +175,7 @@ chooser for rich text) → panel closes → ClipboardHistoryController writes th
 - The `tilingEnabled` flag gates the tiling combos, and `clipboardHistoryEnabled` gates the clipboard history combo the same way: while off, the combo isn't matched at all and passes through to other apps. Screenshot combos are unaffected by either flag.
 - Returns `nil` to suppress the system screenshot tool.
 - Requires Accessibility permission. `HotkeyManager` no longer checks or prompts for it — `AppDelegate` starts the tap (via `PermissionsManager` status) as soon as Accessibility is granted, with no relaunch needed; the onboarding window handles the prompting.
+- Secure keyboard input (a focused password field, held via `EnableSecureEventInput`) stops key events from reaching any CGEvent tap, so every Ku-Ka hotkey dies silently while it is on — and a crashed or misbehaving app can leak the grab indefinitely. Nothing can release it from outside (the user locks and unlocks the screen, or logs out). `SecureInputMonitor` watches for a grab held past 10s; `AppDelegate` then shows warning lines at the top of the status menu naming the holder plus a red dot on the status icon, both cleared when the grab is released.
 
 ### Screen Capture
 - Overlay window is dismissed before capture to exclude it from the screenshot.
@@ -220,6 +223,7 @@ KuKaTests/                    # Unit tests (XCTest, macOS 26.0+)
 ├── WindowTilingControllerTests.swift # Saved-frame map behavior: save-then-restore, failed moves, entry lifecycle
 ├── HotkeyManagerTests.swift  # Event routing: tiling combos swallowed/passed through per the tilingEnabled flag, clipboard history combo per the clipboardHistoryEnabled flag (plus extra-modifier rejection), screenshot combos always work
 ├── PermissionsManagerTests.swift # Permission status via injected probes: refresh + change detection, poll-timer pickup, Settings deep-link fallback order
+├── SecureInputMonitorTests.swift # Stuck-grab state machine via injected probes and clock: sustained grab blocks with the holder name (nil when unresolvable), a momentary grab never warns, release clears, poll-timer pickup
 ├── SettingsTests.swift       # Every settings key defaults and round-trips: thumbnail duration, window tiling, clipboard history, launch at login
 ├── StatusMenuTests.swift     # Menu structure; the Window Tiling and Clipboard History toggles (write settings, fire a callback, flip their checkmark); duration picking; launch-at-login; the keep-awake status icon badge
 ├── ClipboardHistoryTests.swift # Pure-model tests for ClipboardHistory: dedupe-to-top, item/byte caps and eviction, filter, remove-by-hash, clear
@@ -259,7 +263,8 @@ When running under XCTest, `AppDelegate` skips `setupPermissions()` entirely to 
 - Clipboard history controller paste handling: Enter pastes plain text and images immediately, and opens the formatting chooser for rich text; the chooser's two rows paste with and without formatting; Esc in the chooser restores the prior list selection (clamped if items were removed while it was open); a paste moves the pasted item to the top of the history and keeps its rich flavors even when the paste itself was plain-only; the poll right after our own paste does not re-record it (self-write suppression, via adopting the write's own change count as the new baseline)
 - Settings (`Settings`): `clipboardHistoryEnabled` defaults to true and persists, same as the other toggles
 - Screenshot deletion (`ImageStore`): remembers the content hash of the PNG behind each saved file; `delete(at:)` reports that hash through `onDeletedHash`, nothing for an unknown URL, and both hashes when a screenshot was re-saved after annotation
-- Status menu (`StatusMenu`): the Clipboard History checkbox writes `clipboardHistoryEnabled`, fires its toggle callback, and flips its own checkmark, same as Window Tiling; the Features section lists "⌘⇧C to open clipboard history"
+- Status menu (`StatusMenu`): the Clipboard History checkbox writes `clipboardHistoryEnabled`, fires its toggle callback, and flips its own checkmark, same as Window Tiling; the Features section lists "⌘⇧C to open clipboard history"; the secure-input warning lines appear once (no duplication on repeated updates) with the holder's name — "another app" when unknown — and disappear when the state clears
+- Secure input (`SecureInputMonitor`): a grab held past the 10s threshold reports `.blocked` with the holder name and fires `onChange` once; a momentary grab (released and re-grabbed under the threshold) never warns; release after blocked clears and fires `onChange`; an unresolvable holder reports nil; the poll timer picks up a stuck grab without a manual `refresh()`
 
 ### Keep Awake implementation
 
