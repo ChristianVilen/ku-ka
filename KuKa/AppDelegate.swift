@@ -20,9 +20,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var statusMenu = StatusMenu(settings: settings, keepAwake: keepAwake)
     private let permissions = PermissionsManager()
-    /// Lazy so the tap probe can reference `hotkeyManager`; the closure
-    /// captures the manager, not self, so there is no retain cycle.
+    /// Lazy so the probes can reference the types that own what they report:
+    /// permission status is `PermissionsManager`'s, tap status is
+    /// `HotkeyManager`'s. The closures capture those, not self, so there is
+    /// no retain cycle.
     private lazy var hotkeyHealth = HotkeyHealthMonitor(
+        isAccessibilityGranted: { [permissions] in permissions.accessibility },
         isTapDelivering: { [hotkeyManager] in hotkeyManager.isDelivering }
     )
     private var onboardingController: OnboardingWindowController?
@@ -97,6 +100,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if permissions.accessibility && !hotkeyManager.isRunning {
             setupHotkey()
         }
+        // After setupHotkey, so the tap probe sees the tap it just started.
+        // Without this the menu would keep the "Hotkeys off" warning, and the
+        // icon its red dot, until the health monitor's next 5s poll.
+        hotkeyHealth.refresh()
         updateStatusItemIcon()
         onboardingController?.refreshRows()
     }
@@ -237,13 +244,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatusItemIcon() {
-        // Orange covers the permission hotkey health can't see (Screen
-        // Recording); a missing Accessibility grant shows as red via
-        // `hotkeyHealth`, because it means hotkeys are dead right now.
         statusItem.button?.image = statusMenu.icon(
             keepAwakeActive: keepAwake.isActive,
-            permissionMissing: permissionHandlingEnabled && !permissions.screenRecording,
-            hotkeysBlocked: hotkeyHealth.state != .healthy
+            warning: statusWarning()
         )
+    }
+
+    /// Dead hotkeys win the corner over a missing permission — they are the
+    /// more urgent state, and the menu spells out the cause. Orange is left
+    /// for the one permission hotkey health can't see (Screen Recording); a
+    /// missing Accessibility grant already shows as red through
+    /// `hotkeyHealth`, because it means hotkeys are dead right now.
+    private func statusWarning() -> StatusWarning? {
+        guard permissionHandlingEnabled else { return nil }
+        if hotkeyHealth.state != .healthy { return .hotkeysDead }
+        if !permissions.screenRecording { return .screenRecordingMissing }
+        return nil
     }
 }

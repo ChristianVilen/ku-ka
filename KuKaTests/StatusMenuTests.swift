@@ -147,8 +147,8 @@ final class StatusMenuTests: XCTestCase {
     // MARK: - Icon
 
     func testIconDiffersWhenKeepAwakeIsActive() {
-        let plain = sut.icon(keepAwakeActive: false, permissionMissing: false, hotkeysBlocked: false)
-        let badged = sut.icon(keepAwakeActive: true, permissionMissing: false, hotkeysBlocked: false)
+        let plain = sut.icon(keepAwakeActive: false, warning: nil)
+        let badged = sut.icon(keepAwakeActive: true, warning: nil)
         XCTAssertNotEqual(plain.tiffRepresentation, badged.tiffRepresentation)
     }
 }

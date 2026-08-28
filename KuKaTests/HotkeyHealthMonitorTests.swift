@@ -5,7 +5,7 @@ import XCTest
 final class HotkeyHealthMonitorTests: XCTestCase {
     /// Builds a monitor whose probes all report healthy unless overridden.
     private func makeSUT(
-        accessibilityTrusted: @escaping () -> Bool = { true },
+        accessibilityGranted: @escaping () -> Bool = { true },
         tapDelivering: @escaping () -> Bool = { true },
         secureInputEnabled: @escaping () -> Bool = { false },
         holderName: @escaping () -> String? = { nil },
@@ -13,7 +13,7 @@ final class HotkeyHealthMonitorTests: XCTestCase {
         pollInterval: TimeInterval = 5
     ) -> HotkeyHealthMonitor {
         HotkeyHealthMonitor(
-            isAccessibilityTrusted: accessibilityTrusted,
+            isAccessibilityGranted: accessibilityGranted,
             isTapDelivering: tapDelivering,
             isSecureInputEnabled: secureInputEnabled,
             holderName: holderName,
@@ -31,7 +31,7 @@ final class HotkeyHealthMonitorTests: XCTestCase {
     }
 
     func testMissingAccessibilityReportsNoPermission() {
-        let sut = makeSUT(accessibilityTrusted: { false })
+        let sut = makeSUT(accessibilityGranted: { false })
 
         sut.refresh()
 
@@ -91,7 +91,7 @@ final class HotkeyHealthMonitorTests: XCTestCase {
     func testNoPermissionOutranksEveryOtherCause() {
         var clock = Date(timeIntervalSince1970: 0)
         let sut = makeSUT(
-            accessibilityTrusted: { false },
+            accessibilityGranted: { false },
             tapDelivering: { false },
             secureInputEnabled: { true },
             holderName: { "Arc" },
@@ -105,7 +105,7 @@ final class HotkeyHealthMonitorTests: XCTestCase {
         XCTAssertEqual(sut.state, .noPermission)
     }
 
-    func testTapDeadOutranksStuckSecureInput() {
+    func testStuckSecureInputOutranksDeadTap() {
         var clock = Date(timeIntervalSince1970: 0)
         let sut = makeSUT(
             tapDelivering: { false },
@@ -118,7 +118,10 @@ final class HotkeyHealthMonitorTests: XCTestCase {
         clock = clock.addingTimeInterval(10)
         sut.refresh()
 
-        XCTAssertEqual(sut.state, .tapDead)
+        // A stuck grab is what disables the tap in the first place, so it is
+        // the cause to report: it carries the remedy that actually works.
+        // "Quit and reopen" would not release another app's grab.
+        XCTAssertEqual(sut.state, .secureInputStuck(holderName: "Arc"))
     }
 
     func testOnChangeFiresOnlyOnTransitions() {
@@ -165,5 +168,73 @@ final class HotkeyHealthMonitorTests: XCTestCase {
         wait(for: [changed], timeout: 2)
         sut.stopMonitoring()
         XCTAssertEqual(sut.state, .secureInputStuck(holderName: "Arc"))
+    }
+
+    func testMomentaryGrabNeverWarns() {
+        var secureInputOn = true
+        var clock = Date(timeIntervalSince1970: 0)
+        let sut = makeSUT(secureInputEnabled: { secureInputOn }, holderName: { "Arc" }, now: { clock })
+
+        sut.refresh()
+        clock = clock.addingTimeInterval(5)
+        secureInputOn = false
+        sut.refresh()
+        // A new grab starts its own clock: 5 more seconds must not be added
+        // onto the released one.
+        secureInputOn = true
+        sut.refresh()
+        clock = clock.addingTimeInterval(5)
+        sut.refresh()
+
+        XCTAssertEqual(sut.state, .healthy)
+    }
+
+    func testUnresolvableHolderReportsStuckWithNilName() {
+        var clock = Date(timeIntervalSince1970: 0)
+        let sut = makeSUT(secureInputEnabled: { true }, holderName: { nil }, now: { clock })
+
+        sut.refresh()
+        clock = clock.addingTimeInterval(10)
+        sut.refresh()
+
+        XCTAssertEqual(sut.state, .secureInputStuck(holderName: nil))
+    }
+
+    func testHolderNameCapturedAtBlockTimeSurvivesTheHolderQuitting() {
+        var clock = Date(timeIntervalSince1970: 0)
+        var holder: String? = "Arc"
+        let sut = makeSUT(secureInputEnabled: { true }, holderName: { holder }, now: { clock })
+
+        sut.refresh()
+        clock = clock.addingTimeInterval(10)
+        sut.refresh()
+        holder = nil // the holder quits; the leaked grab stays
+        clock = clock.addingTimeInterval(10)
+        sut.refresh()
+
+        XCTAssertEqual(sut.state, .secureInputStuck(holderName: "Arc"))
+    }
+
+    func testOutrankedTapDwellKeepsItsOwnClock() {
+        var secureInputOn = true
+        var clock = Date(timeIntervalSince1970: 0)
+        let sut = makeSUT(
+            tapDelivering: { false },
+            secureInputEnabled: { secureInputOn },
+            holderName: { "Arc" },
+            now: { clock }
+        )
+
+        sut.refresh()
+        clock = clock.addingTimeInterval(10)
+        sut.refresh()
+        XCTAssertEqual(sut.state, .secureInputStuck(holderName: "Arc"))
+
+        secureInputOn = false
+        sut.refresh()
+
+        // The tap has been dead the whole time. Losing the tick to the louder
+        // cause must not restart its dwell from zero.
+        XCTAssertEqual(sut.state, .tapDead)
     }
 }

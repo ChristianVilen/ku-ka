@@ -4,6 +4,14 @@ import Cocoa
 /// Settings), keeps checkmarks in step, and renders the status-item icon.
 /// Serves as the menu's delegate, forwarding open/close to KeepAwakeController.
 @MainActor
+/// What the status icon's bottom-left warning corner shows. At most one, and
+/// red beats orange: dead hotkeys are the more urgent state, and the menu
+/// spells out the cause anyway.
+enum StatusWarning {
+    case hotkeysDead
+    case screenRecordingMissing
+}
+
 final class StatusMenu: NSObject, NSMenuDelegate {
     let menu = NSMenu()
     var onTilingToggled: ((Bool) -> Void)?
@@ -31,18 +39,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     /// The status-item image: the app icon, plus a small dot (with a light
     /// ring for contrast) per active state — Keep Awake gets the accent dot
-    /// in the bottom-right, and the bottom-left is the warning corner: red
-    /// when hotkeys are dead (`hotkeysBlocked`, whatever the cause), orange
-    /// when a permission is missing but hotkeys still work (in practice:
-    /// Screen Recording). Red wins the corner — it is the more urgent state,
-    /// and the menu spells out the cause anyway.
-    func icon(keepAwakeActive: Bool, permissionMissing: Bool, hotkeysBlocked: Bool) -> NSImage {
+    /// in the bottom-right, and `warning` gets the bottom-left corner.
+    /// Separate corners so both can show at once.
+    func icon(keepAwakeActive: Bool, warning: StatusWarning?) -> NSImage {
         guard let base = NSImage(named: "MenuBarIcon") else {
             return NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka") ?? NSImage()
         }
         let size = NSSize(width: 18, height: 18)
 
-        guard keepAwakeActive || permissionMissing || hotkeysBlocked else {
+        guard keepAwakeActive || warning != nil else {
             let icon = (base.copy() as? NSImage) ?? base
             icon.size = size
             icon.isTemplate = false
@@ -61,10 +66,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             if keepAwakeActive {
                 drawDot(NSRect(x: rect.maxX - 8, y: rect.minY + 1, width: 7, height: 7), color: .controlAccentColor)
             }
-            if hotkeysBlocked {
-                drawDot(NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7), color: .systemRed)
-            } else if permissionMissing {
-                drawDot(NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7), color: .systemOrange)
+            let corner = NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7)
+            switch warning {
+            case .hotkeysDead: drawDot(corner, color: .systemRed)
+            case .screenRecordingMissing: drawDot(corner, color: .systemOrange)
+            case nil: break
             }
             return true
         }

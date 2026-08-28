@@ -1,63 +1,105 @@
 import Cocoa
-import Carbon.HIToolbox
 
 /// Why hotkeys are currently dead, or `.healthy`. One cause at a time, in
-/// causal "fix this first" order: without Accessibility the tap can't exist,
-/// and a dead tap makes secure input moot.
+/// causal "fix this first" order: without Accessibility no tap can exist at
+/// all, and a stuck secure-input grab is what starves an otherwise healthy
+/// tap — so it is reported instead of the dead tap it explains, because it
+/// is the one with a remedy that works. `.tapDead` therefore means the tap
+/// died for some other reason, where restarting the app is the right advice.
 enum HotkeyHealth: Equatable {
     case healthy
     /// Accessibility permission is missing, so no event tap can be created.
     case noPermission
-    /// The event tap exists but the system has kept it disabled past the
-    /// watchdog's ability to heal it.
-    case tapDead
     /// Secure keyboard input has been held long enough to count as stuck.
     /// `holderName` is the app holding it, or nil when it can't be resolved.
     case secureInputStuck(holderName: String?)
+    /// The event tap exists but the system has kept it disabled past the
+    /// watchdog's ability to heal it, with no secure-input grab to blame.
+    case tapDead
 }
 
-/// The one place that answers "are hotkeys working, and if not why". Owns
-/// raw system probes (injected for tests) and polls them on one timer; the
-/// secure-input dwell rules live behind the internal `SecureInputMonitor`
-/// seam. Consumers read `state` and listen on `onChange`.
+/// How long a condition has been continuously true, against a threshold.
+/// Both causes that need dwell time — a dead tap and a held secure-input
+/// grab — are the same rule, so they share one implementation.
+private struct Dwell {
+    let threshold: TimeInterval
+    /// True while the condition has been held past `threshold`.
+    private(set) var isPast = false
+    private var since: Date?
+
+    init(threshold: TimeInterval) {
+        self.threshold = threshold
+    }
+
+    /// Feeds one reading. Returns true only on the tick where the dwell
+    /// first crosses the threshold — the moment to capture anything that
+    /// must be read while the condition still holds.
+    mutating func update(active: Bool, now: Date) -> Bool {
+        guard active else {
+            reset()
+            return false
+        }
+        let start = since ?? now
+        since = start
+        guard !isPast, now.timeIntervalSince(start) >= threshold else { return false }
+        isPast = true
+        return true
+    }
+
+    mutating func reset() {
+        isPast = false
+        since = nil
+    }
+}
+
+/// The one place that answers "are hotkeys working, and if not why". Polls
+/// its probes on one timer and reduces them to a single cause. Consumers
+/// read `state` and listen on `onChange`.
 @MainActor
 final class HotkeyHealthMonitor {
     private(set) var state: HotkeyHealth = .healthy
     /// Fired whenever `state` changes.
     var onChange: (@MainActor () -> Void)?
 
-    /// How long the tap must read dead continuously before it is reported.
-    /// The watchdog usually revives a system-disabled tap within one 5s
-    /// tick, so a self-healed blip never surfaces.
-    static let tapDeadThreshold: TimeInterval = 10
+    /// How long a cause must hold continuously before it is reported. Long
+    /// enough to type a password into a secure field, and to let the tap
+    /// watchdog heal a system-disabled tap on its own 5s tick — so neither
+    /// normal case ever flashes a warning.
+    static let dwellThreshold: TimeInterval = 10
 
-    private let isAccessibilityTrusted: () -> Bool
+    private let isAccessibilityGranted: () -> Bool
     private let isTapDelivering: () -> Bool
+    private let isSecureInputEnabled: () -> Bool
+    private let holderName: () -> String?
     private let now: () -> Date
     private let pollInterval: TimeInterval
-    private let secureInput: SecureInputMonitor
-    private var tapDeadSince: Date?
+    private var secureInputHeld = Dwell(threshold: HotkeyHealthMonitor.dwellThreshold)
+    private var tapDead = Dwell(threshold: HotkeyHealthMonitor.dwellThreshold)
+    /// Resolved once, when the grab first counts as stuck. Read only while
+    /// `secureInputHeld.isPast`.
+    private var secureInputHolder: String?
     private var timer: Timer?
 
-    /// The probes default to the real system calls; tests inject stand-ins.
-    /// `isTapDelivering` has no default — only `HotkeyManager` can answer it.
+    /// Neither `isAccessibilityGranted` nor `isTapDelivering` has a default:
+    /// permission status is owned by `PermissionsManager` and tap status by
+    /// `HotkeyManager`, so the caller must wire both to those owners instead
+    /// of letting this type read the system a second time. The secure-input
+    /// probes have no other owner, so they default to the real calls. Tests
+    /// inject stand-ins for all of them.
     init(
-        isAccessibilityTrusted: @escaping () -> Bool = { AXIsProcessTrusted() },
+        isAccessibilityGranted: @escaping () -> Bool,
         isTapDelivering: @escaping () -> Bool,
-        isSecureInputEnabled: @escaping () -> Bool = { IsSecureEventInputEnabled() },
-        holderName: @escaping () -> String? = SecureInputMonitor.systemHolderName,
+        isSecureInputEnabled: @escaping () -> Bool = SecureInput.isEnabled,
+        holderName: @escaping () -> String? = SecureInput.holderName,
         now: @escaping () -> Date = Date.init,
         pollInterval: TimeInterval = 5
     ) {
-        self.isAccessibilityTrusted = isAccessibilityTrusted
+        self.isAccessibilityGranted = isAccessibilityGranted
         self.isTapDelivering = isTapDelivering
+        self.isSecureInputEnabled = isSecureInputEnabled
+        self.holderName = holderName
         self.now = now
         self.pollInterval = pollInterval
-        self.secureInput = SecureInputMonitor(
-            isSecureInputEnabled: isSecureInputEnabled,
-            holderName: holderName,
-            now: now
-        )
     }
 
     /// Poll for the app's lifetime. Every cause can appear (and heal) at any
@@ -78,29 +120,37 @@ final class HotkeyHealthMonitor {
 
     /// Re-read every probe and update `state`.
     func refresh() {
-        // Always tick the secure-input dwell, even without permission: its
-        // signal is valid regardless, so a grab that turned stuck while
-        // permission was missing reports the moment permission is granted.
-        secureInput.refresh()
-        guard isAccessibilityTrusted() else {
+        let timestamp = now()
+        // Feed both dwells before picking a cause: one that loses this tick
+        // must keep its own clock running, or it would restart from zero the
+        // moment the louder cause clears. The secure-input dwell ticks even
+        // without permission — its signal is valid regardless, so a grab that
+        // turned stuck while permission was missing reports the moment
+        // permission is granted.
+        if secureInputHeld.update(active: isSecureInputEnabled(), now: timestamp) {
+            // Resolve the holder while the grab is fresh: the holder can quit
+            // and leak the grab, and a later lookup would lose its name.
+            secureInputHolder = holderName()
+        }
+        let accessibility = isAccessibilityGranted()
+        if accessibility {
+            _ = tapDead.update(active: !isTapDelivering(), now: timestamp)
+        } else {
             // Without permission the tap can't exist; don't let dwell time
             // accumulated here surface as an instant tapDead after a grant.
-            tapDeadSince = nil
+            tapDead.reset()
+        }
+
+        guard accessibility else {
             setState(.noPermission)
             return
         }
-        if isTapDelivering() {
-            tapDeadSince = nil
-        } else {
-            let start = tapDeadSince ?? now()
-            tapDeadSince = start
-            if now().timeIntervalSince(start) >= Self.tapDeadThreshold {
-                setState(.tapDead)
-                return
-            }
+        if secureInputHeld.isPast {
+            setState(.secureInputStuck(holderName: secureInputHolder))
+            return
         }
-        if case .blocked(let holder) = secureInput.state {
-            setState(.secureInputStuck(holderName: holder))
+        if tapDead.isPast {
+            setState(.tapDead)
             return
         }
         setState(.healthy)
