@@ -45,9 +45,9 @@ final class Settings {
         set { defaults.set(newValue, forKey: "clipboardHistoryEnabled") }
     }
 
-    /// The default is not ~/Documents or ~/Desktop: with iCloud "Desktop &
-    /// Documents" on, those sync to iCloud, and meeting audio must stay on
-    /// this Mac.
+    /// Defaults to ~/Meetings, not ~/Documents or ~/Desktop: with iCloud
+    /// "Desktop & Documents" on, those sync to iCloud, and meeting audio must
+    /// stay on this Mac.
     var meetingsFolder: URL {
         guard let path = defaults.string(forKey: "meetingsFolder"), !path.isEmpty else {
             return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Meetings", isDirectory: true)

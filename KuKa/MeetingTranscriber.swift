@@ -9,8 +9,8 @@ protocol Transcribing {
     func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript
 }
 
-/// No dependency, no model for Ku-Ka to ship, and no speech-recognition
-/// permission (measured).
+/// Needs no speech-recognition permission and no
+/// `NSSpeechRecognitionUsageDescription` (measured).
 struct SpeechTranscriberAdapter: Transcribing {
     @concurrent
     func needsDownload(for locale: Locale) async throws -> Bool {

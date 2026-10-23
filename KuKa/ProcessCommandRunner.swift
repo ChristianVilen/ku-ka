@@ -53,6 +53,8 @@ final class ProcessCommandRunner: CommandRunning {
         process.standardInput = stdinFile ?? FileHandle.nullDevice
         process.standardOutput = stdoutFile
         process.standardError = stderrFile
+        // So the CLI reads no project files or instructions (such as
+        // CLAUDE.md) and asks for no workspace trust.
         process.currentDirectoryURL = emptyWorkingDirectory
         process.environment = ProcessInfo.processInfo.environment
             .merging(["PATH": searchPath.joined(separator: ":")]) { $1 }

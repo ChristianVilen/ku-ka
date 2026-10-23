@@ -85,6 +85,8 @@ struct MeetingFolder: Hashable {
     }
 
     var title: String {
+        // folderName's yyyy-MM-dd_HH-mm, plus the -2, -3 suffix that create
+        // adds on a name clash.
         guard let match = name.wholeMatch(of: #/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})(?:-(\d+))?/#) else {
             return name
         }
@@ -141,6 +143,8 @@ struct MeetingFolder: Hashable {
     }
 
     func write(_ text: String, to document: MeetingDocument) throws {
+        // Atomic: stage() treats an existing file as a finished step, so a
+        // half-written file must never have the real name.
         try Data(text.utf8).write(to: url(for: document), options: .atomic)
     }
 

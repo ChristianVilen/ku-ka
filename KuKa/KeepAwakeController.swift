@@ -3,9 +3,7 @@ import Cocoa
 /// Owns the "Keep Awake" menu section and drives a `WakeManager`: builds the
 /// inline panel (status line, duration chips, display checkbox) plus the
 /// Turn Off item, reflects session state and the countdown, persists the
-/// display-awake preference, and posts the expiry notification. Keeping all
-/// of the feature's AppKit glue here lets `AppDelegate` stay a thin
-/// coordinator.
+/// display-awake preference, and posts the expiry notification.
 final class KeepAwakeController: NSObject {
     /// Selectable keep-awake durations, in chip order. The chip index is the
     /// only identifier that travels through the panel's callback.
@@ -157,5 +155,6 @@ final class KeepAwakeController: NSObject {
 }
 
 // In an extension: on the class declaration, the conformance would make the
-// whole class @MainActor.
+// whole class @MainActor, and the nonisolated KeepAwakeControllerTests could
+// no longer create or drive it.
 extension KeepAwakeController: MenuSection {}

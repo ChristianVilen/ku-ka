@@ -50,6 +50,8 @@ enum Transcript {
     }
 
     private static let slack: TimeInterval = 1
+    /// Shorter microphone segments are never echoes: a short reply such as
+    /// "okay" or "yes please" often shares its words with the other side.
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
 

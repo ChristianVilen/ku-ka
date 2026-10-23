@@ -6,11 +6,13 @@ enum SummaryCLI: String, CaseIterable {
     case antigravity = "agy"
     case claude = "claude"
 
-    /// A GUI app does not get the user's shell PATH.
     func candidatePaths(home: URL) -> [String] {
         Self.userToolDirectories(home: home).map { "\($0)/\(rawValue)" }
     }
 
+    /// A GUI app does not get the user's shell PATH. The CLIs are looked for
+    /// here, and these folders also go on the child's PATH, for a CLI that
+    /// starts other tools from them.
     static func userToolDirectories(home: URL) -> [String] {
         ["/opt/homebrew/bin", "/usr/local/bin", home.appendingPathComponent(".local/bin").path]
     }

@@ -97,9 +97,9 @@ struct MeetingProcessor {
     }
 
     private func summarize(_ meeting: MeetingFolder) async throws {
-        // This is the first moment a transcript is known to be on disk. Doing
-        // it here also cleans up after a crash between writing the transcript
-        // and this step.
+        // Trash the audio here, not right after writing transcript.md: this
+        // step runs only once transcript.md exists, so it also cleans up after
+        // a crash between the two.
         do {
             try meeting.discardAudio(trash: trash)
         } catch {
