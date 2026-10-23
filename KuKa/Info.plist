@@ -22,5 +22,7 @@
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Ku-Ka needs screen recording permission to capture screenshots.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ku-Ka records your microphone only while you record a meeting, to transcribe it on this Mac.</string>
 </dict>
 </plist>

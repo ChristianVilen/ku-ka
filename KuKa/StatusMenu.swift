@@ -20,6 +20,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private let settings: Settings
     private let keepAwake: KeepAwakeController
+    private let meetingNotes: MeetingNotesController
     private var launchAtLoginItem: NSMenuItem!
     private var windowTilingItem: NSMenuItem!
     private var clipboardHistoryItem: NSMenuItem!
@@ -27,24 +28,26 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var hotkeyWarningItems: [NSMenuItem] = []
     private var renderedHealth: HotkeyHealth?
 
-    init(settings: Settings, keepAwake: KeepAwakeController) {
+    init(settings: Settings, keepAwake: KeepAwakeController, meetingNotes: MeetingNotesController) {
         self.settings = settings
         self.keepAwake = keepAwake
+        self.meetingNotes = meetingNotes
         super.init()
         build()
     }
 
     /// The status-item image: the app icon, plus a small dot (with a light
     /// ring for contrast) per active state — Keep Awake gets the accent dot
-    /// in the bottom-right, and `warning` gets the bottom-left corner.
-    /// Separate corners so both can show at once.
-    func icon(keepAwakeActive: Bool, warning: StatusWarning?) -> NSImage {
+    /// in the bottom-right, recording gets a red dot in the top-right, and
+    /// `warning` gets the bottom-left corner. Separate corners so all three
+    /// can show at once.
+    func icon(keepAwakeActive: Bool, recording: Bool, warning: StatusWarning?) -> NSImage {
         guard let base = NSImage(named: "MenuBarIcon") else {
             return NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka") ?? NSImage()
         }
         let size = NSSize(width: 18, height: 18)
 
-        guard keepAwakeActive || warning != nil else {
+        guard keepAwakeActive || recording || warning != nil else {
             let icon = (base.copy() as? NSImage) ?? base
             icon.size = size
             icon.isTemplate = false
@@ -62,6 +65,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             }
             if keepAwakeActive {
                 drawDot(NSRect(x: rect.maxX - 8, y: rect.minY + 1, width: 7, height: 7), color: .controlAccentColor)
+            }
+            if recording {
+                drawDot(NSRect(x: rect.maxX - 8, y: rect.maxY - 8, width: 7, height: 7), color: .systemRed)
             }
             let corner = NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7)
             switch warning {
@@ -172,6 +178,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // --- Keep Awake ---
         keepAwake.buildMenuSection(into: menu)
 
+        meetingNotes.buildMenuSection(into: menu)
+
         menu.addItem(.separator())
 
         // --- Features ---
@@ -186,7 +194,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             "Multi-monitor support",
             "Auto-save to ~/Screenshots/",
             "Copy to clipboard",
-            "Thumbnail preview & annotation"
+            "Thumbnail preview & annotation",
+            "Meeting transcripts and summaries"
         ] {
             let item = NSMenuItem(title: feature, action: nil, keyEquivalent: "")
             item.isEnabled = false
@@ -256,14 +265,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         NSWorkspace.shared.open(URL(string: "https://github.com/ChristianVilen/ku-ka/issues/new?labels=enhancement")!)
     }
 
-    // MARK: - Menu delegate (keep-awake countdown updates)
+    // MARK: - Menu delegate (keep-awake countdown and recording timer updates)
 
     func menuWillOpen(_ menu: NSMenu) {
         onMenuWillOpen?()
         keepAwake.menuWillOpen()
+        meetingNotes.menuWillOpen()
     }
 
     func menuDidClose(_ menu: NSMenu) {
         keepAwake.menuDidClose()
+        meetingNotes.menuDidClose()
     }
 }

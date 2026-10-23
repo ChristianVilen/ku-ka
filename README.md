@@ -18,6 +18,7 @@ A lightweight macOS menu bar app that replaces the default `Shift+Command+4` scr
 - Keep Awake — stop the Mac from sleeping while a long task (such as an AI coding agent) runs, with a menu-bar toggle and timed sessions
 - Window tiling — hotkeys to snap the active window to the left half, right half, or full screen of its display
 - Clipboard history — `Shift+Command+C` opens a searchable list of what you've copied, text and images, and pastes the item you choose back into the app you were using
+- Meeting notes. Record a call from the menu bar, and Ku-Ka writes a transcript and a summary as Markdown files. Transcription runs on your Mac.
 - Runs as a menu bar agent (no Dock icon)
 
 ## Keep Awake
@@ -51,6 +52,28 @@ Text and images both get recorded, including screenshots Ku-Ka itself saves to y
 The history lives in memory only — nothing is written to disk, so it's empty again after a restart. It holds at most 100 items; images are capped at about 100 MB in total, with the oldest images dropped first. A single item over 50 MB is not recorded. Copies that your password manager marks as sensitive are never recorded.
 
 The whole feature can be turned on and off with the **Clipboard History** checkbox in the menu bar menu (under Settings); the choice is remembered across restarts. While it's off, Ku-Ka stops recording, clears the history it collected, and gives `Shift+Command+C` back to other apps. With the feature on, Ku-Ka takes that shortcut from Chrome and Arc (Inspect Element), Xcode (Activate Console), VS Code (Open External Terminal), and Finder (Computer window).
+
+## Meeting Notes
+
+When a call starts, open the Ku-Ka menu and choose **Start Recording Meeting**. Ku-Ka records your microphone and the sound your Mac plays, so any call app works. The menu bar icon shows a red dot in its top-right corner while Ku-Ka records. Choose **Stop Recording** when the call ends.
+
+Ku-Ka then transcribes the call on your Mac with Apple's speech recognition and asks an AI command-line tool for a summary. It tries Antigravity (`agy`) first and Claude Code (`claude`) if that fails. Install at least one of them in `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`, and log in to it once in Terminal. A notification tells you when the notes are ready. Each meeting gets its own folder, for example `~/Meetings/2026-10-23_14-02/`, with `transcript.md` and `summary.md`.
+
+In the transcript, "Me" is you (the microphone) and "Them" is everyone else (the sound your Mac plays). Headphones give the cleanest transcript. On speakers, your microphone also hears the other people. Ku-Ka removes those repeated lines from "Me" when it finds them.
+
+Only the transcript text goes to the AI tool. Audio never leaves your Mac. Ku-Ka moves the audio files to the Trash when the transcript is written, so you can still restore them from there.
+
+If a step fails, the meeting folder gets an `error.md` with the reason, and the menu shows **Retry Failed Meeting**. Retry continues from the step that failed. If Ku-Ka quits or crashes during a meeting, it finishes the notes from the saved audio the next time it starts. To give up on a meeting, delete its folder. **Open Meetings Folder** in the menu opens the folder that holds them.
+
+To keep the notes in another folder, set the path in Terminal:
+
+```bash
+defaults write com.kuka.screenshot meetingsFolder /path/to/folder
+```
+
+Ku-Ka uses the new folder the next time it needs it, without a restart. Do not use `~/Documents` or `~/Desktop` when iCloud syncs them, because the audio would then leave your Mac.
+
+Recording needs the Screen Recording permission (for the sound your Mac plays) and the Microphone permission. Ku-Ka asks for Microphone the first time you start a recording. Transcription is English only.
 
 ## Requirements
 
@@ -122,6 +145,11 @@ ScreenCaptureKit requires screen recording permission to capture screen content.
 
 Two macOS quirks to expect: the first capture can require one quit-and-reopen of Ku-Ka before the grant takes effect, and roughly every month macOS makes every screenshot app ask again for screen recording. Neither is something Ku-Ka can turn off.
 
+### Microphone (Meeting Notes)
+Microphone lets Ku-Ka record your side of a meeting. Only Meeting Notes needs it, so the setup window does not open for it at launch. Ku-Ka shows the macOS prompt the first time you choose **Start Recording Meeting**. If you said no, Ku-Ka opens the permissions window, where **Grant** opens the Microphone pane.
+
+**System Settings → Privacy & Security → Microphone** → Enable Ku-Ka
+
 ## Usage
 
 1. Launch Ku-Ka — it appears as a camera icon in the menu bar
@@ -152,6 +180,9 @@ The folder is created automatically if it doesn't exist.
 - **Clipboard History** — Turn clipboard recording and the `Shift+Command+C` hotkey on or off (remembered across restarts)
 - **Thumbnail Duration** — Choose how long the floating thumbnail stays visible: 3 seconds, 5 seconds, 15 seconds, or Forever (until dismissed)
 - **Keep Awake** — Keep the Mac from sleeping for a preset time (30 minutes, 1, 2, or 4 hours, or until turned off), with a "Keep display awake" checkbox
+- **Start Recording Meeting** and **Stop Recording** start and stop a meeting recording. While Ku-Ka records, the item shows the elapsed time.
+- **Retry Failed Meeting** appears when a meeting's transcription or summary failed.
+- **Open Meetings Folder** opens the folder that holds the meeting notes.
 - **Quit Ku-Ka** — Exit the app
 
 ## File Structure
@@ -181,7 +212,14 @@ KuKa/
 ├── AccessibilityWindowControl.swift # Reads/moves the focused window via the Accessibility API
 ├── WindowListProvider.swift  # Lists on-screen windows via the window server
 ├── ScreenCoordinates.swift   # Shared top-left/bottom-left coordinate flip
-├── Info.plist           # App config (LSUIElement, screen capture usage)
+├── MeetingFolder.swift       # One meeting on disk and the rule that reads its stage from the files
+├── Transcript.swift          # Merges the two tracks, drops echoes, writes transcript.md
+├── MeetingAudioCapture.swift # Records the microphone and system audio into two CAF files
+├── MeetingTranscriber.swift  # On-device transcription with Apple's SpeechTranscriber
+├── MeetingSummarizer.swift   # Runs agy or claude for the summary, writes summary.md
+├── MeetingProcessor.swift    # Transcribes, then summarizes, from wherever a meeting stopped
+├── MeetingNotesController.swift # Meeting Notes menu section, recording state, and processing queue
+├── Info.plist           # App config (LSUIElement, screen capture and microphone usage)
 └── KuKa.entitlements    # Entitlements (sandbox disabled)
 ```
 
@@ -193,6 +231,10 @@ KuKa/
 - The automatic paste can't reach password fields or apps that block synthetic key events. The item is still on the clipboard, so pasting it by hand (`Cmd+V`) works.
 - No preferences UI for changing the shortcut keys, including the window tiling hotkeys
 - Some windows can't be tiled — apps that don't let their windows be moved or resized through the Accessibility API, and Ku-Ka's own windows. The hotkey then does nothing; there is no error message.
+- Meeting Notes transcribes English only, and it labels speakers only as "Me" and "Them".
+- On speakers, a repeated line of fewer than 3 words can stay in the transcript as yours.
+- A meeting recording is tied to a display. If that display goes away (for example, the external monitor of a closed laptop), the recording stops, Ku-Ka says so, and it makes notes from what it recorded.
+- While `agy` is not logged in, it waits about 60 seconds before it fails, so the summary comes later. The summary's last lines say why `agy` was skipped.
 
 ## Testing
 
@@ -216,7 +258,8 @@ Tests cover:
 - Tiling layout math and the maximize/restore toggle, including apps that snap window sizes
 - Screen-picking and windows-per-screen rules, plus the tiling controller's saved-frame handling
 - Shortcut registration, feature toggles, action delivery, conflict detection, partial failure recovery, wake renewal, stale callback rejection, and cleanup
+- Meeting notes: the stage rule and folder rules on a real temporary folder, the transcript merge and echo rule, the summary fallback from `agy` to `claude`, child processes with real executables, recovery and retry from each step, and the recording controller with a fake capture
 
 ### Test-Mode Guard
 
-When running under XCTest, the app skips real shortcut registration, permission setup, and clipboard polling. Tests use the real registrar with fake Carbon calls. Detection uses `XCTestConfigurationFilePath` (unit tests) and the `--uitesting` launch argument (no UI-test target currently exists).
+When running under XCTest, the app skips real shortcut registration, permission setup, clipboard polling, and meeting recovery. Meeting tests use a temporary folder, never `~/Meetings`. Tests use the real registrar with fake Carbon calls. Detection uses `XCTestConfigurationFilePath` (unit tests) and the `--uitesting` launch argument (no UI-test target currently exists).

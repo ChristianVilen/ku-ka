@@ -43,6 +43,18 @@ final class SettingsTests: XCTestCase {
         XCTAssertFalse(Settings(defaults: defaults, loginItem: loginItem).clipboardHistoryEnabled)
     }
 
+    func testMeetingsFolderDefaultsToMeetingsInTheHomeFolder() {
+        XCTAssertEqual(sut.meetingsFolder.path, NSHomeDirectory() + "/Meetings")
+    }
+
+    func testMeetingsFolderReadsThePathSetWithDefaultsWrite() {
+        defaults.set("/Users/test/work/notes", forKey: "meetingsFolder")
+        XCTAssertEqual(sut.meetingsFolder.path, "/Users/test/work/notes")
+
+        defaults.set("~/Notes", forKey: "meetingsFolder")
+        XCTAssertEqual(sut.meetingsFolder.path, NSHomeDirectory() + "/Notes")
+    }
+
     func testLaunchAtLoginReflectsAndDrivesTheLoginItem() {
         XCTAssertFalse(sut.launchAtLogin)
 

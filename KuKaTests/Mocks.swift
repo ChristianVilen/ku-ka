@@ -238,6 +238,37 @@ class FakeKeystrokeSender: KeystrokeSending {
     }
 }
 
+class FakeActiveRecording: ActiveRecording {
+    private(set) var stopCount = 0
+
+    func stop() {
+        stopCount += 1
+    }
+}
+
+class FakeMeetingAudioCapture: MeetingAudioCapturing {
+    var startError: Error?
+    private(set) var recordings: [FakeActiveRecording] = []
+    private var interruptHandler: (@MainActor (String) -> Void)?
+
+    func start(into meeting: MeetingFolder,
+               onInterrupted: @escaping @MainActor (String) -> Void) async throws -> ActiveRecording {
+        if let startError { throw startError }
+        for track in MeetingTrack.allCases {
+            FileManager.default.createFile(atPath: meeting.audioURL(track).path, contents: Data())
+        }
+        interruptHandler = onInterrupted
+        let recording = FakeActiveRecording()
+        recordings.append(recording)
+        return recording
+    }
+
+    @MainActor
+    func interrupt(reason: String) {
+        interruptHandler?(reason)
+    }
+}
+
 class FakeTranscriber: Transcribing {
     var byFileName: [String: Result<TrackTranscript, Error>] = [:]
 

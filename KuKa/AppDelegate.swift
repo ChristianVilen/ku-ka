@@ -18,7 +18,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowTiling = WindowTilingController()
     private let clipboardHistory = ClipboardHistoryController()
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
-    private lazy var statusMenu = StatusMenu(settings: settings, keepAwake: keepAwake)
+    private lazy var meetingNotes = MeetingNotesController(
+        permissions: permissions,
+        root: { [settings] in settings.meetingsFolder }
+    )
+    private lazy var statusMenu = StatusMenu(settings: settings, keepAwake: keepAwake, meetingNotes: meetingNotes)
     private let permissions = PermissionsManager()
     private var onboardingController: OnboardingWindowController?
     /// False in UI-test runs, where permission handling is skipped entirely
@@ -29,6 +33,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.stop()
         keepAwake.deactivate()
         clipboardHistory.disable()
+        meetingNotes.shutDown()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -38,6 +43,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupThumbnailStack()
         setupKeepAwake()
         setupClipboardHistory()
+        setupMeetingNotes()
         if !isTesting {
             setupHotkey()
             setupPermissions()
@@ -47,6 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if settings.clipboardHistoryEnabled {
                 clipboardHistory.enable()
             }
+            meetingNotes.resumeUnfinished()
         }
     }
 
@@ -208,6 +215,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         keepAwake.onStateChange = { [weak self] in self?.updateStatus() }
     }
 
+    private func setupMeetingNotes() {
+        meetingNotes.onStateChange = { [weak self] in self?.updateStatus() }
+        meetingNotes.onShowPermissions = { [weak self] in self?.showOnboarding() }
+    }
+
     private func openEditor(result: CaptureResult) {
         NSApp.activate(ignoringOtherApps: true)
 
@@ -245,6 +257,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         statusItem.button?.image = statusMenu.icon(
             keepAwakeActive: keepAwake.isActive,
+            recording: meetingNotes.isRecording,
             warning: warning
         )
         scheduleScreenshotSetup()
