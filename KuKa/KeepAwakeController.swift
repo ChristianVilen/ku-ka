@@ -1,5 +1,4 @@
 import Cocoa
-import UserNotifications
 
 /// Owns the "Keep Awake" menu section and drives a `WakeManager`: builds the
 /// inline panel (status line, duration chips, display checkbox) plus the
@@ -23,10 +22,10 @@ final class KeepAwakeController: NSObject {
     private let wakeManager: WakeManager
     private let now: () -> Date
     private let defaults: UserDefaults
+    private let notifier: Notifying
 
     let panelView: KeepAwakePanelView
     private let turnOffItem: NSMenuItem
-    private var hasRequestedNotificationAuth = false
 
     /// Fired whenever the active/inactive state changes, so the owner can
     /// refresh anything outside this section (e.g. the status-bar icon).
@@ -36,10 +35,12 @@ final class KeepAwakeController: NSObject {
 
     init(wakeManager: WakeManager = WakeManager(),
          now: @escaping () -> Date = { Date() },
-         defaults: UserDefaults = .standard) {
+         defaults: UserDefaults = .standard,
+         notifier: Notifying = SystemNotifier.shared) {
         self.wakeManager = wakeManager
         self.now = now
         self.defaults = defaults
+        self.notifier = notifier
         panelView = KeepAwakePanelView(presets: Self.presets)
         turnOffItem = NSMenuItem(title: "Turn Off", action: #selector(turnOff(_:)), keyEquivalent: "")
         super.init()
@@ -97,9 +98,9 @@ final class KeepAwakeController: NSObject {
 
     private func select(_ duration: WakeDuration) {
         // Only timed sessions post an expiry notification, so request
-        // permission (once) only for them.
+        // permission only for them.
         if case .timed = duration {
-            requestNotificationAuthIfNeeded()
+            notifier.requestPermission()
         }
         activate(duration)
     }
@@ -138,21 +139,11 @@ final class KeepAwakeController: NSObject {
         panelView.displayAwakeCheckbox.state = wakeManager.keepDisplayAwake ? .on : .off
     }
 
-    private func requestNotificationAuthIfNeeded() {
-        guard !hasRequestedNotificationAuth else { return }
-        hasRequestedNotificationAuth = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-    }
-
     private func notifyEnded() {
         // If notification authorization was denied or never requested (indefinite
         // sessions don't request it), the center silently drops this request.
         // That's fine — the notification is purely informational.
-        let content = UNMutableNotificationContent()
-        content.title = "Ku-Ka"
-        content.body = "Keep-awake ended — your Mac can sleep again."
-        let request = UNNotificationRequest(identifier: "keepAwakeEnded", content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request)
+        notifier.post(title: "Ku-Ka", body: "Keep-awake ended — your Mac can sleep again.", opening: nil)
     }
 
     static func formatRemaining(_ interval: TimeInterval) -> String {

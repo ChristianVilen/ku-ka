@@ -1,4 +1,5 @@
 import Cocoa
+import UserNotifications
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -58,6 +59,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupClipboardHistory()
         setupMeetingNotes()
         if !isTesting {
+            UNUserNotificationCenter.current().delegate = SystemNotifier.shared
             setupHotkey()
             setupPermissions()
             // Polling the real pasteboard during unit/UI test runs would

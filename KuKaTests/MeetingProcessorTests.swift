@@ -101,7 +101,7 @@ final class MeetingProcessorTests: XCTestCase {
 
         XCTAssertEqual(outcome, .failed(.transcribe, message: "The audio file could not be read."))
         let errorText = """
-        # Transcription failed
+        # Transcription Failed
 
         2026-10-23 15:00
 
@@ -177,7 +177,7 @@ final class MeetingProcessorTests: XCTestCase {
 
         XCTAssertEqual(outcome, .failed(.summarize, message: "agy exited with status 1: authentication failed\nclaude took too long and was stopped"))
         XCTAssertEqual(try meeting.read(.failure), """
-        # Summary failed
+        # Summary Failed
 
         2026-10-23 15:00
 

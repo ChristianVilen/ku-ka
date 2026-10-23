@@ -15,7 +15,8 @@ final class MeetingNotesControllerTests: XCTestCase {
     private var transcriber: Transcribing!
     private var runner: FakeCommandRunner!
     private var clock = localDate(2026, 10, 23, 14, 2)
-    private var notifications: [String] = []
+    private var notifier: FakeNotifier!
+    private var notifications: [String] { notifier.posted.map { "\($0.title): \($0.body)" } }
     private var alerts: [String] = []
     private var opened: [URL] = []
     private var permissionWindows = 0
@@ -32,6 +33,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         transcriber = fakeTranscriber
         runner = FakeCommandRunner()
         runner.results["agy"] = .success(CommandResult(termination: .exited(0), stdout: "## Summary\nShip Friday.", stderr: ""))
+        notifier = FakeNotifier()
         sut = makeController()
     }
 
@@ -55,7 +57,7 @@ final class MeetingNotesControllerTests: XCTestCase {
                 summarizer: Summarizer(runner: runner, home: URL(fileURLWithPath: "/Users/test"), isExecutable: { _ in true }),
                 trash: { try FileManager.default.removeItem(at: $0) },
                 now: { localDate(2026, 10, 23, 15, 0) }),
-            notify: { [unowned self] title, body in notifications.append("\(title): \(body)") },
+            notifier: notifier,
             alertStartFailure: { [unowned self] reason, offersPermissions in
                 alerts.append(reason)
                 return offersPermissions
@@ -118,9 +120,12 @@ final class MeetingNotesControllerTests: XCTestCase {
         XCTAssertFalse(sut.isRecording)
         XCTAssertEqual(stateChanges, 2)
         XCTAssertEqual(capture.recordings.first?.stopCount, 1)
-        XCTAssertEqual(notifications, ["Meeting notes ready: Meeting on 2026-10-23 at 14:02"])
+        XCTAssertEqual(notifications, ["Meeting Notes Ready: Meeting on 2026-10-23 at 14:02. Click to open the summary."])
         let meeting = try XCTUnwrap(MeetingFolder.all(in: root).first?.0)
         XCTAssertEqual(meeting.stage(), .done)
+        XCTAssertEqual(notifier.posted.last?.url?.resolvingSymlinksInPath(), meeting.url(for: .summary).resolvingSymlinksInPath(),
+                       "a click opens the summary")
+        XCTAssertEqual(notifier.permissionRequests, 1, "asked at Start, not at the first notice")
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting", "Open Meetings Folder", ""])
     }
 
@@ -142,9 +147,9 @@ final class MeetingNotesControllerTests: XCTestCase {
         capture.interrupt(reason: "The display was disconnected.")
 
         XCTAssertFalse(sut.isRecording)
-        XCTAssertEqual(notifications, ["Recording stopped: The display was disconnected. Ku-Ka will transcribe what it recorded. Start a new recording to capture the rest."])
+        XCTAssertEqual(notifications, ["Recording Stopped: The display was disconnected. Ku-Ka makes notes from what it recorded. To record the rest, choose Start Recording Meeting."])
         await sut.waitUntilIdle()
-        XCTAssertEqual(notifications.last, "Meeting notes ready: Meeting on 2026-10-23 at 14:02")
+        XCTAssertEqual(notifications.last, "Meeting Notes Ready: Meeting on 2026-10-23 at 14:02. Click to open the summary.")
     }
 
     func testACaptureThatEndsWhileStartingIsReportedAndProcessed() async throws {
@@ -153,9 +158,9 @@ final class MeetingNotesControllerTests: XCTestCase {
         await sut.toggleRecording()
 
         XCTAssertFalse(sut.isRecording)
-        XCTAssertEqual(notifications, ["Recording stopped: The microphone stopped. Ku-Ka will transcribe what it recorded. Start a new recording to capture the rest."])
+        XCTAssertEqual(notifications, ["Recording Stopped: The microphone stopped. Ku-Ka makes notes from what it recorded. To record the rest, choose Start Recording Meeting."])
         await sut.waitUntilIdle()
-        XCTAssertEqual(notifications.last, "Meeting notes ready: Meeting on 2026-10-23 at 14:02")
+        XCTAssertEqual(notifications.last, "Meeting Notes Ready: Meeting on 2026-10-23 at 14:02. Click to open the summary.")
     }
 
     func testCaptureThatCannotStartLeavesNoFolderAndSaysWhy() async {
@@ -243,7 +248,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         sut.resumeUnfinished()
         await sut.waitUntilIdle()
 
-        XCTAssertEqual(notifications, ["Meeting notes ready: Meeting on 2026-10-22 at 09:00"])
+        XCTAssertEqual(notifications, ["Meeting Notes Ready: Meeting on 2026-10-22 at 09:00. Click to open the summary."])
         XCTAssertEqual(failed.stage(), .failed(.transcribe))
     }
 
@@ -258,7 +263,7 @@ final class MeetingNotesControllerTests: XCTestCase {
 
         XCTAssertEqual(failed.stage(), .done)
         XCTAssertEqual(try failed.read(.summary).components(separatedBy: "\n").first, "# Meeting on 2026-10-22 at 10:00")
-        XCTAssertEqual(notifications, ["Meeting notes ready: Meeting on 2026-10-22 at 10:00"])
+        XCTAssertEqual(notifications, ["Meeting Notes Ready: Meeting on 2026-10-22 at 10:00. Click to open the summary."])
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting", "Open Meetings Folder", ""])
     }
 
@@ -278,7 +283,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         sut.resumeUnfinished()
         await sut.waitUntilIdle()
 
-        XCTAssertEqual(notifications, ["Transcription failed: The audio file could not be read. Retry from the Ku-Ka menu."])
+        XCTAssertEqual(notifications, ["Transcription Failed: Meeting on 2026-10-22 at 09:00. Choose Retry Failed Meeting in the Ku-Ka menu to try again. Click to see what went wrong."])
     }
 
     func testTheProgressItemNamesTheStepAndTheWaitingMeetings() async throws {

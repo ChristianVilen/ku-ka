@@ -1,5 +1,4 @@
 import Cocoa
-import UserNotifications
 
 @MainActor
 final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection {
@@ -13,7 +12,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private let root: () -> URL
     private let capture: MeetingAudioCapturing
     private let processor: MeetingProcessor
-    private let notify: (_ title: String, _ body: String) -> Void
+    private let notifier: Notifying
     /// Returns true when the user chose Open Permissions.
     private let alertStartFailure: @MainActor (_ reason: String, _ offersPermissions: Bool) -> Bool
     private let openURL: (URL) -> Void
@@ -43,7 +42,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
          root: @escaping () -> URL,
          capture: MeetingAudioCapturing = ScreenCaptureMeetingAudio(),
          processor: MeetingProcessor = MeetingProcessor(),
-         notify: @escaping (String, String) -> Void = MeetingNotesController.postNotification,
+         notifier: Notifying = SystemNotifier.shared,
          alertStartFailure: @escaping @MainActor (String, Bool) -> Bool = MeetingNotesController.showStartFailureAlert,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
          now: @escaping () -> Date = { Date() }) {
@@ -51,7 +50,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         self.root = root
         self.capture = capture
         self.processor = processor
-        self.notify = notify
+        self.notifier = notifier
         self.alertStartFailure = alertStartFailure
         self.openURL = openURL
         self.now = now
@@ -122,6 +121,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private func start() async {
         recorder = .starting
         updateMenu()
+        notifier.requestPermission()
         if let reason = await missingGrant() {
             recorder = .idle
             updateMenu()
@@ -183,7 +183,9 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         recorder = .idle
         updateMenu()
         onStateChange?()
-        notify("Recording stopped", "\(reason) Ku-Ka will transcribe what it recorded. Start a new recording to capture the rest.")
+        notifier.post(title: "Recording Stopped",
+                      body: "\(reason) Ku-Ka makes notes from what it recorded. To record the rest, choose Start Recording Meeting.",
+                      opening: nil)
         enqueue(meeting)
     }
 
@@ -234,15 +236,22 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     }
 
     private func report(_ outcome: MeetingOutcome, for meeting: MeetingFolder) {
+        // The tool output stays in error.md; a notification is too short for it.
         switch outcome {
-        case .done:
-            notify("Meeting notes ready", meeting.title)
-        case .failed(.transcribe, let message):
-            notify(MeetingStep.transcribe.failureHeading, message + " Retry from the Ku-Ka menu.")
-        case .failed(.summarize, let message):
-            notify("\(MeetingStep.summarize.failureHeading). The transcript is ready.", message + " Retry from the Ku-Ka menu.")
+        case .done(let summary):
+            notifier.post(title: "Meeting Notes Ready", body: "\(meeting.title). Click to open the summary.", opening: summary)
+        case .failed(.transcribe, _):
+            notifier.post(title: MeetingStep.transcribe.failureHeading,
+                          body: "\(meeting.title). Choose Retry Failed Meeting in the Ku-Ka menu to try again. Click to see what went wrong.",
+                          opening: meeting.url(for: .failure))
+        case .failed(.summarize, _):
+            notifier.post(title: MeetingStep.summarize.failureHeading,
+                          body: "The transcript of \(meeting.title) is ready. Choose Retry Failed Meeting in the Ku-Ka menu to try the summary again. Click to see what went wrong.",
+                          opening: meeting.url(for: .failure))
         case .noSpeech:
-            notify("No speech detected", "\(meeting.title). The audio is in the meeting folder.")
+            notifier.post(title: "No Speech Detected",
+                          body: "\(meeting.title). The audio is in the meeting folder. Click to open it.",
+                          opening: meeting.url)
         case .cancelled, .busy, .gone:
             break
         }
@@ -294,19 +303,5 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         if offersPermissions { alert.addButton(withTitle: "Cancel") }
         NSApp.activate()
         return offersPermissions && alert.runModal() == .alertFirstButtonReturn
-    }
-
-    /// Asks for notification permission on first use; macOS shows the prompt
-    /// once and answers from the stored choice after that. A unique
-    /// identifier per post, so two meetings' notices do not replace each other.
-    nonisolated static func postNotification(title: String, body: String) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            UNUserNotificationCenter.current().add(
-                UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
-        }
     }
 }

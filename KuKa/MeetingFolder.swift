@@ -36,8 +36,8 @@ enum MeetingStep: Equatable {
 
     var failureHeading: String {
         switch self {
-        case .transcribe: return "Transcription failed"
-        case .summarize: return "Summary failed"
+        case .transcribe: return "Transcription Failed"
+        case .summarize: return "Summary Failed"
         }
     }
 }

@@ -138,7 +138,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         )
         microphoneRow = PermissionRowView(
             title: "Microphone (Meeting Notes, optional)",
-            explanation: "Lets Ku-Ka record your side of a meeting when you start a recording."
+            explanation: "Lets Ku-Ka record your side of a meeting when you start a recording.",
+            note: "The audio stays on this Mac. For the summary, Ku-Ka sends the transcript text to the AI tool you installed (agy or claude). agy keeps a copy in its history."
         )
 
         let window = NSWindow(

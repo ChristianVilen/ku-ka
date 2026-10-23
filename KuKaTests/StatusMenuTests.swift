@@ -21,7 +21,7 @@ final class StatusMenuTests: XCTestCase {
             root: { [unowned self] in meetingsRoot },
             capture: FakeMeetingAudioCapture(),
             processor: MeetingProcessor(transcriber: FakeTranscriber()),
-            notify: { _, _ in })
+            notifier: FakeNotifier())
         sut = StatusMenu(settings: settings, sections: [KeepAwakeController(defaults: defaults), meetingNotes])
     }
 

@@ -238,6 +238,19 @@ class FakeKeystrokeSender: KeystrokeSending {
     }
 }
 
+class FakeNotifier: Notifying {
+    private(set) var permissionRequests = 0
+    private(set) var posted: [(title: String, body: String, url: URL?)] = []
+
+    func requestPermission() {
+        permissionRequests += 1
+    }
+
+    func post(title: String, body: String, opening url: URL?) {
+        posted.append((title, body, url))
+    }
+}
+
 class FakeActiveRecording: ActiveRecording {
     var endReason: String?
     private(set) var stopCount = 0
