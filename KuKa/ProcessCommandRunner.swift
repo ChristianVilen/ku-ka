@@ -11,8 +11,10 @@ struct CommandResult: Equatable {
 }
 
 protocol CommandRunning {
+    /// `input` becomes the child's stdin; without it, stdin is at end of file.
     /// `searchPath` is the child's whole `PATH`, in order.
-    func run(executable: URL, arguments: [String], searchPath: [String], timeout: Duration) async throws -> CommandResult
+    func run(executable: URL, arguments: [String], input: String?, searchPath: [String],
+             timeout: Duration) async throws -> CommandResult
 }
 
 final class ProcessCommandRunner: CommandRunning {
@@ -22,7 +24,8 @@ final class ProcessCommandRunner: CommandRunning {
         self.killGrace = killGrace
     }
 
-    func run(executable: URL, arguments: [String], searchPath: [String], timeout: Duration) async throws -> CommandResult {
+    func run(executable: URL, arguments: [String], input: String?, searchPath: [String],
+             timeout: Duration) async throws -> CommandResult {
         let fileManager = FileManager.default
         let runFolder = fileManager.temporaryDirectory
             .appendingPathComponent("ku-ka-summary-\(UUID().uuidString)", isDirectory: true)
@@ -35,16 +38,18 @@ final class ProcessCommandRunner: CommandRunning {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
         // Files, not pipes: a pipe holds 64 KB, and a child that fills it
         // blocks until someone reads, so pipes would need reading while the
-        // child runs.
+        // child runs. The same holds for stdin in the other direction.
+        let stdinFile = try input.map { try Self.file(containing: $0, at: runFolder.appendingPathComponent("stdin")) }
         let stdoutFile = try Self.emptyFile(at: stdoutURL)
         let stderrFile = try Self.emptyFile(at: stderrURL)
         defer {
+            try? stdinFile?.close()
             try? stdoutFile.close()
             try? stderrFile.close()
         }
+        process.standardInput = stdinFile ?? FileHandle.nullDevice
         process.standardOutput = stdoutFile
         process.standardError = stderrFile
         process.currentDirectoryURL = emptyWorkingDirectory
@@ -82,6 +87,11 @@ final class ProcessCommandRunner: CommandRunning {
             try? await Task.sleep(for: grace)
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
+    }
+
+    private static func file(containing text: String, at url: URL) throws -> FileHandle {
+        try Data(text.utf8).write(to: url)
+        return try FileHandle(forReadingFrom: url)
     }
 
     private static func emptyFile(at url: URL) throws -> FileHandle {

@@ -6,14 +6,14 @@ final class ProcessCommandRunnerTests: XCTestCase {
     private let searchPath = ["/usr/bin", "/bin"]
 
     private func shell(_ script: String, timeout: Duration = .seconds(10)) async throws -> CommandResult {
-        try await runner.run(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", script],
+        try await runner.run(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", script], input: nil,
                              searchPath: searchPath, timeout: timeout)
     }
 
     func testExitStatusIsReported() async throws {
-        let success = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/true"), arguments: [],
+        let success = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/true"), arguments: [], input: nil,
                                            searchPath: searchPath, timeout: .seconds(10))
-        let failure = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/false"), arguments: [],
+        let failure = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/false"), arguments: [], input: nil,
                                            searchPath: searchPath, timeout: .seconds(10))
 
         XCTAssertEqual(success, CommandResult(termination: .exited(0), stdout: "", stderr: ""))
@@ -47,18 +47,21 @@ final class ProcessCommandRunnerTests: XCTestCase {
         let started = Date()
 
         let result = try await runner.run(executable: URL(fileURLWithPath: "/bin/sh"),
-                                          arguments: ["-c", "trap '' TERM; exec sleep 8"],
+                                          arguments: ["-c", "trap '' TERM; exec sleep 8"], input: nil,
                                           searchPath: searchPath, timeout: .milliseconds(300))
 
         XCTAssertEqual(result.termination, .timedOut)
         XCTAssertLessThan(Date().timeIntervalSince(started), 4)
     }
 
-    func testTheChildGetsEndOfFileOnStdin() async throws {
-        let result = try await runner.run(executable: URL(fileURLWithPath: "/bin/cat"), arguments: [],
+    func testTheChildReadsTheInputOnStdinOrGetsEndOfFile() async throws {
+        let cat = URL(fileURLWithPath: "/bin/cat")
+        let empty = try await runner.run(executable: cat, arguments: [], input: nil, searchPath: searchPath, timeout: .seconds(5))
+        let echoed = try await runner.run(executable: cat, arguments: [], input: "Transcript:\nhello\n",
                                           searchPath: searchPath, timeout: .seconds(5))
 
-        XCTAssertEqual(result, CommandResult(termination: .exited(0), stdout: "", stderr: ""))
+        XCTAssertEqual(empty, CommandResult(termination: .exited(0), stdout: "", stderr: ""))
+        XCTAssertEqual(echoed, CommandResult(termination: .exited(0), stdout: "Transcript:\nhello\n", stderr: ""))
     }
 
     func testTheChildRunsInAnEmptyFolderWithTheGivenSearchPath() async throws {
@@ -69,7 +72,7 @@ final class ProcessCommandRunnerTests: XCTestCase {
 
     func testAMissingExecutableThrows() async {
         do {
-            _ = try await runner.run(executable: URL(fileURLWithPath: "/nonexistent/agy"), arguments: [],
+            _ = try await runner.run(executable: URL(fileURLWithPath: "/nonexistent/agy"), arguments: [], input: nil,
                                      searchPath: searchPath, timeout: .seconds(5))
             XCTFail("expected a launch error")
         } catch {

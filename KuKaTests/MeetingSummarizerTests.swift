@@ -79,7 +79,7 @@ final class MeetingSummarizerTests: XCTestCase {
         XCTAssertEqual(runner.calls.map(\.executable.path), ["/opt/homebrew/bin/agy"])
     }
 
-    func testEachCLIGetsItsOwnArgumentsWithThePromptLastAndTheUserToolsOnItsPath() async {
+    func testEachCLIGetsItsOwnArgumentsAndPromptAndTheUserToolsOnItsPath() async {
         let runner = FakeCommandRunner()
         runner.results["agy"] = .success(CommandResult(termination: .exited(1), stdout: "", stderr: ""))
         runner.results["claude"] = .success(CommandResult(termination: .exited(0), stdout: "## Summary", stderr: ""))
@@ -87,9 +87,10 @@ final class MeetingSummarizerTests: XCTestCase {
         _ = await summarizer(runner).summarize(transcript: transcript)
 
         XCTAssertEqual(runner.calls.map(\.arguments), [
-            ["--disable-slash-commands", "-p", prompt],
-            ["-p", "--tools", "", "--no-session-persistence", "--strict-mcp-config", prompt],
+            ["--sandbox", "--disable-slash-commands", "-p", prompt],
+            ["-p", "--tools", "", "--no-session-persistence", "--strict-mcp-config"],
         ])
+        XCTAssertEqual(runner.calls.map(\.input), [nil, prompt], "claude reads the prompt on stdin")
         let searchPath = ["/opt/homebrew/bin", "/usr/local/bin", "/Users/test/.local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
         XCTAssertEqual(runner.calls.map(\.searchPath), [searchPath, searchPath])
     }
