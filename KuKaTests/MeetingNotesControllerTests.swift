@@ -99,8 +99,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         XCTAssertEqual(capture.recordings.count, 1)
 
         clock = clock.addingTimeInterval(245)
-        sut.menuWillOpen()
-        defer { sut.menuDidClose() }
+        sut.refreshMenuSection()
 
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Stop Recording · 4:05", "Open Meetings Folder", ""])
     }
@@ -223,13 +222,12 @@ final class MeetingNotesControllerTests: XCTestCase {
         await sut.waitUntilIdle()
 
         XCTAssertEqual(notifications, ["Meeting notes ready: Meeting on 2026-10-22 at 09:00"])
-        XCTAssertEqual(failed.stage(), .failed(.transcribe, message: "Speech model missing"))
+        XCTAssertEqual(failed.stage(), .failed(.transcribe))
     }
 
     func testRetryRunsFailedMeetingsFromTheStepThatFailed() async throws {
         let failed = try leftoverMeeting(at: localDate(2026, 10, 22, 10, 0), failure: "agy exited with status 1", transcript: true)
-        sut.menuWillOpen()
-        sut.menuDidClose()
+        sut.refreshMenuSection()
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting", "Retry Failed Meeting", "Open Meetings Folder", ""])
 
         let retry = try XCTUnwrap(item(titled: "Retry Failed Meeting"))
@@ -246,8 +244,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         try leftoverMeeting(at: localDate(2026, 10, 22, 9, 0), failure: "Speech model missing")
         try leftoverMeeting(at: localDate(2026, 10, 22, 10, 0), failure: "agy exited with status 1", transcript: true)
 
-        sut.menuWillOpen()
-        sut.menuDidClose()
+        sut.refreshMenuSection()
 
         XCTAssertNotNil(item(titled: "Retry 2 Failed Meetings"))
     }

@@ -31,8 +31,8 @@ struct MeetingProcessor {
                 return .failed(.transcribe, message: "The meeting folder has no audio and no transcript.")
             case .done?:
                 return .done(summary: meeting.url(for: .summary))
-            case .failed(let step, let message)?:
-                return .failed(step, message: message)
+            case .failed(let step)?:
+                return .failed(step, message: "An earlier attempt failed. See error.md in the meeting folder.")
             case .pending(let step)?:
                 onStep(step)
                 do {
@@ -86,12 +86,8 @@ struct MeetingProcessor {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
-        let heading = switch step {
-        case .transcribe: "Transcription failed"
-        case .summarize: "Summary failed"
-        }
         return """
-        # \(heading)
+        # \(step.failureHeading)
 
         \(formatter.string(from: date))
 

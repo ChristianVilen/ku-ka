@@ -25,86 +25,6 @@ enum SummaryCLI: String, CaseIterable {
     }
 }
 
-struct CommandResult: Equatable {
-    enum Termination: Equatable {
-        case exited(Int32)
-        case timedOut
-    }
-    let termination: Termination
-    let stdout: String
-    let stderr: String
-}
-
-protocol CommandRunning {
-    func run(executable: URL, arguments: [String], timeout: Duration) async throws -> CommandResult
-}
-
-final class ProcessCommandRunner: CommandRunning {
-    private let home: URL
-
-    init(home: URL = FileManager.default.homeDirectoryForCurrentUser) {
-        self.home = home
-    }
-
-    func run(executable: URL, arguments: [String], timeout: Duration) async throws -> CommandResult {
-        let fileManager = FileManager.default
-        let runFolder = fileManager.temporaryDirectory
-            .appendingPathComponent("ku-ka-summary-\(UUID().uuidString)", isDirectory: true)
-        let emptyWorkingDirectory = runFolder.appendingPathComponent("work", isDirectory: true)
-        try fileManager.createDirectory(at: emptyWorkingDirectory, withIntermediateDirectories: true)
-        defer { try? fileManager.removeItem(at: runFolder) }
-        let stdoutURL = runFolder.appendingPathComponent("stdout")
-        let stderrURL = runFolder.appendingPathComponent("stderr")
-
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        // Files, not pipes: a pipe holds 64 KB, and a child that fills it
-        // blocks until someone reads, so pipes would need reading while the
-        // child runs.
-        let stdoutFile = try Self.emptyFile(at: stdoutURL)
-        let stderrFile = try Self.emptyFile(at: stderrURL)
-        defer {
-            try? stdoutFile.close()
-            try? stderrFile.close()
-        }
-        process.standardOutput = stdoutFile
-        process.standardError = stderrFile
-        process.currentDirectoryURL = emptyWorkingDirectory
-        let path = (SummaryCLI.userToolDirectories(home: home) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"])
-            .joined(separator: ":")
-        process.environment = ProcessInfo.processInfo.environment.merging(["PATH": path]) { $1 }
-        let (exits, exited) = AsyncStream<Void>.makeStream()
-        process.terminationHandler = { _ in exited.finish() }
-
-        try Task.checkCancellation()
-        try process.run()
-        let timer = Task {
-            do { try await Task.sleep(for: timeout) } catch { return false }
-            process.terminate()
-            return true
-        }
-        await withTaskCancellationHandler {
-            for await _ in exits {}
-        } onCancel: {
-            process.terminate()
-        }
-        timer.cancel()
-        try Task.checkCancellation()
-
-        let termination: CommandResult.Termination = await timer.value ? .timedOut : .exited(process.terminationStatus)
-        return CommandResult(termination: termination,
-                             stdout: String(decoding: try Data(contentsOf: stdoutURL), as: UTF8.self),
-                             stderr: String(decoding: try Data(contentsOf: stderrURL), as: UTF8.self))
-    }
-
-    private static func emptyFile(at url: URL) throws -> FileHandle {
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-        return try FileHandle(forWritingTo: url)
-    }
-}
-
 struct SummaryFailure: Equatable, CustomStringConvertible {
     enum Reason: Equatable {
         case notInstalled(searched: [String])
@@ -160,6 +80,7 @@ struct Summarizer {
 
     func summarize(transcript: String) async -> SummaryResult {
         let prompt = SummaryPrompt.make(transcript: transcript)
+        let searchPath = SummaryCLI.userToolDirectories(home: home) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
         var failures: [SummaryFailure] = []
         for cli in SummaryCLI.allCases {
             if Task.isCancelled { break }
@@ -171,7 +92,8 @@ struct Summarizer {
             let reason: SummaryFailure.Reason
             do {
                 let result = try await runner.run(executable: URL(fileURLWithPath: path),
-                                                  arguments: cli.arguments(prompt: prompt), timeout: timeout)
+                                                  arguments: cli.arguments(prompt: prompt),
+                                                  searchPath: searchPath, timeout: timeout)
                 switch result.termination {
                 case .exited(0) where !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty:
                     return .written(markdown: result.stdout, by: cli, after: failures)

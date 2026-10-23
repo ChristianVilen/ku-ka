@@ -22,7 +22,7 @@ final class StatusMenuTests: XCTestCase {
             capture: FakeMeetingAudioCapture(),
             processor: MeetingProcessor(transcriber: FakeTranscriber()),
             notify: { _, _ in })
-        sut = StatusMenu(settings: settings, keepAwake: KeepAwakeController(defaults: defaults), meetingNotes: meetingNotes)
+        sut = StatusMenu(settings: settings, sections: [KeepAwakeController(defaults: defaults), meetingNotes])
     }
 
     override func tearDown() {

@@ -79,7 +79,7 @@ final class MeetingSummarizerTests: XCTestCase {
         XCTAssertEqual(runner.calls.map(\.executable.path), ["/opt/homebrew/bin/agy"])
     }
 
-    func testEachCLIGetsItsOwnArgumentsWithThePromptLast() async {
+    func testEachCLIGetsItsOwnArgumentsWithThePromptLastAndTheUserToolsOnItsPath() async {
         let runner = FakeCommandRunner()
         runner.results["agy"] = .success(CommandResult(termination: .exited(1), stdout: "", stderr: ""))
         runner.results["claude"] = .success(CommandResult(termination: .exited(0), stdout: "## Summary", stderr: ""))
@@ -90,6 +90,8 @@ final class MeetingSummarizerTests: XCTestCase {
             ["--disable-slash-commands", "-p", prompt],
             ["-p", "--tools", "", "--no-session-persistence", "--strict-mcp-config", prompt],
         ])
+        let searchPath = ["/opt/homebrew/bin", "/usr/local/bin", "/Users/test/.local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        XCTAssertEqual(runner.calls.map(\.searchPath), [searchPath, searchPath])
     }
 
     func testFallsBackToClaudeAndKeepsWhyAgyFailed() async {

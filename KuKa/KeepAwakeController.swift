@@ -3,10 +3,10 @@ import UserNotifications
 
 /// Owns the "Keep Awake" menu section and drives a `WakeManager`: builds the
 /// inline panel (status line, duration chips, display checkbox) plus the
-/// Turn Off item, reflects session state, runs the per-second countdown while
-/// the menu is open, persists the display-awake preference, and posts the
-/// expiry notification. Keeping all of the feature's AppKit glue here lets
-/// `AppDelegate` stay a thin coordinator.
+/// Turn Off item, reflects session state and the countdown, persists the
+/// display-awake preference, and posts the expiry notification. Keeping all
+/// of the feature's AppKit glue here lets `AppDelegate` stay a thin
+/// coordinator.
 final class KeepAwakeController: NSObject {
     /// Selectable keep-awake durations, in chip order. The chip index is the
     /// only identifier that travels through the panel's callback.
@@ -26,7 +26,6 @@ final class KeepAwakeController: NSObject {
 
     let panelView: KeepAwakePanelView
     private let turnOffItem: NSMenuItem
-    private var countdownTimer: Timer?
     private var hasRequestedNotificationAuth = false
 
     /// Fired whenever the active/inactive state changes, so the owner can
@@ -83,29 +82,7 @@ final class KeepAwakeController: NSObject {
 
         menu.addItem(.separator())
 
-        updateMenu()
-    }
-
-    // MARK: - Menu delegate forwarding (called by AppDelegate)
-
-    func menuWillOpen() {
-        updateMenu()
-        // Re-entrancy guard: never leak a previous timer if open/close didn't pair.
-        countdownTimer?.invalidate()
-        countdownTimer = nil
-        guard wakeManager.session?.expiresAt != nil else { return }
-        // .common mode so it keeps firing while the menu tracks events. Teardown
-        // is owned solely by menuDidClose.
-        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.updateMenu()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        countdownTimer = timer
-    }
-
-    func menuDidClose() {
-        countdownTimer?.invalidate()
-        countdownTimer = nil
+        refreshMenuSection()
     }
 
     // MARK: - Actions
@@ -131,11 +108,11 @@ final class KeepAwakeController: NSObject {
     // MARK: - State
 
     private func handleStateChange() {
-        updateMenu()
+        refreshMenuSection()
         onStateChange?()
     }
 
-    private func updateMenu() {
+    func refreshMenuSection() {
         let session = wakeManager.session
         turnOffItem.isHidden = session == nil
 
@@ -179,3 +156,7 @@ final class KeepAwakeController: NSObject {
         return minutes == 0 ? "\(hours)h left" : "\(hours)h \(minutes)m left"
     }
 }
+
+// In an extension: on the class declaration, the conformance would make the
+// whole class @MainActor.
+extension KeepAwakeController: MenuSection {}

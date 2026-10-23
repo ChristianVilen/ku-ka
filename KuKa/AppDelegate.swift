@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         permissions: permissions,
         root: { [settings] in settings.meetingsFolder }
     )
-    private lazy var statusMenu = StatusMenu(settings: settings, keepAwake: keepAwake, meetingNotes: meetingNotes)
+    private lazy var statusMenu = StatusMenu(settings: settings, sections: [keepAwake, meetingNotes])
     private let permissions = PermissionsManager()
     private var onboardingController: OnboardingWindowController?
     /// False in UI-test runs, where permission handling is skipped entirely

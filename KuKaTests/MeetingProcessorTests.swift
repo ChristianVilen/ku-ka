@@ -111,7 +111,7 @@ final class MeetingProcessorTests: XCTestCase {
 
         """
         XCTAssertEqual(try meeting.read(.failure), errorText)
-        XCTAssertEqual(meeting.stage(), .failed(.transcribe, message: errorText))
+        XCTAssertEqual(meeting.stage(), .failed(.transcribe))
         XCTAssertTrue(audioExists(meeting))
         XCTAssertEqual(trashed, [])
         XCTAssertEqual(runner.calls.count, 0)
@@ -156,7 +156,7 @@ final class MeetingProcessorTests: XCTestCase {
 
         let outcome = await process(meeting)
 
-        XCTAssertEqual(outcome, .failed(.transcribe, message: "Earlier failure"))
+        XCTAssertEqual(outcome, .failed(.transcribe, message: "An earlier attempt failed. See error.md in the meeting folder."))
         XCTAssertEqual(steps, [])
     }
 

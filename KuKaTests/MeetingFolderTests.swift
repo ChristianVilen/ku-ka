@@ -3,17 +3,16 @@ import XCTest
 
 final class MeetingFolderTests: XCTestCase {
     func testStageFollowsTheMostAdvancedFile() {
-        let failure = "Speech model missing"
         let cases: [(MeetingFolderContents, MeetingStage?)] = [
             (MeetingFolderContents(hasSummary: true), .done),
-            (MeetingFolderContents(hasTranscript: true, hasSummary: true, failureMessage: failure), .done),
+            (MeetingFolderContents(hasTranscript: true, hasSummary: true, hasFailure: true), .done),
             (MeetingFolderContents(hasTranscript: true), .pending(.summarize)),
             (MeetingFolderContents(audio: [.system], hasTranscript: true), .pending(.summarize)),
-            (MeetingFolderContents(hasTranscript: true, failureMessage: failure), .failed(.summarize, message: failure)),
+            (MeetingFolderContents(hasTranscript: true, hasFailure: true), .failed(.summarize)),
             (MeetingFolderContents(audio: [.system]), .pending(.transcribe)),
-            (MeetingFolderContents(audio: [.microphone, .system], failureMessage: failure), .failed(.transcribe, message: failure)),
+            (MeetingFolderContents(audio: [.microphone, .system], hasFailure: true), .failed(.transcribe)),
             (MeetingFolderContents(), nil),
-            (MeetingFolderContents(failureMessage: failure), nil),
+            (MeetingFolderContents(hasFailure: true), nil),
         ]
         for (contents, expected) in cases {
             XCTAssertEqual(MeetingStage(contents), expected, "\(contents)")
@@ -63,10 +62,10 @@ final class MeetingFolderTests: XCTestCase {
         XCTAssertEqual(meeting.stage(), .pending(.transcribe))
 
         try meeting.write("Speech model missing", to: .failure)
-        XCTAssertEqual(meeting.stage(), .failed(.transcribe, message: "Speech model missing"))
+        XCTAssertEqual(meeting.stage(), .failed(.transcribe))
 
         try meeting.write("# Transcript", to: .transcript)
-        XCTAssertEqual(meeting.stage(), .failed(.summarize, message: "Speech model missing"))
+        XCTAssertEqual(meeting.stage(), .failed(.summarize))
 
         try meeting.clearFailure()
         XCTAssertEqual(meeting.stage(), .pending(.summarize))

@@ -2,15 +2,19 @@ import XCTest
 @testable import KuKa
 
 final class ProcessCommandRunnerTests: XCTestCase {
-    private let runner = ProcessCommandRunner(home: URL(fileURLWithPath: "/Users/test", isDirectory: true))
+    private let runner = ProcessCommandRunner()
+    private let searchPath = ["/usr/bin", "/bin"]
 
     private func shell(_ script: String, timeout: Duration = .seconds(10)) async throws -> CommandResult {
-        try await runner.run(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", script], timeout: timeout)
+        try await runner.run(executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", script],
+                             searchPath: searchPath, timeout: timeout)
     }
 
     func testExitStatusIsReported() async throws {
-        let success = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/true"), arguments: [], timeout: .seconds(10))
-        let failure = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/false"), arguments: [], timeout: .seconds(10))
+        let success = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/true"), arguments: [],
+                                           searchPath: searchPath, timeout: .seconds(10))
+        let failure = try await runner.run(executable: URL(fileURLWithPath: "/usr/bin/false"), arguments: [],
+                                           searchPath: searchPath, timeout: .seconds(10))
 
         XCTAssertEqual(success, CommandResult(termination: .exited(0), stdout: "", stderr: ""))
         XCTAssertEqual(failure, CommandResult(termination: .exited(1), stdout: "", stderr: ""))
@@ -39,20 +43,22 @@ final class ProcessCommandRunnerTests: XCTestCase {
     }
 
     func testTheChildGetsEndOfFileOnStdin() async throws {
-        let result = try await runner.run(executable: URL(fileURLWithPath: "/bin/cat"), arguments: [], timeout: .seconds(5))
+        let result = try await runner.run(executable: URL(fileURLWithPath: "/bin/cat"), arguments: [],
+                                          searchPath: searchPath, timeout: .seconds(5))
 
         XCTAssertEqual(result, CommandResult(termination: .exited(0), stdout: "", stderr: ""))
     }
 
-    func testTheChildRunsInAnEmptyFolderWithTheUserToolsOnItsPath() async throws {
+    func testTheChildRunsInAnEmptyFolderWithTheGivenSearchPath() async throws {
         let result = try await shell("ls -A | wc -l | tr -d ' '; echo \"$PATH\"")
 
-        XCTAssertEqual(result.stdout, "0\n/opt/homebrew/bin:/usr/local/bin:/Users/test/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\n")
+        XCTAssertEqual(result.stdout, "0\n/usr/bin:/bin\n")
     }
 
     func testAMissingExecutableThrows() async {
         do {
-            _ = try await runner.run(executable: URL(fileURLWithPath: "/nonexistent/agy"), arguments: [], timeout: .seconds(5))
+            _ = try await runner.run(executable: URL(fileURLWithPath: "/nonexistent/agy"), arguments: [],
+                                     searchPath: searchPath, timeout: .seconds(5))
             XCTFail("expected a launch error")
         } catch {
             XCTAssertEqual((error as? CocoaError)?.code, .fileNoSuchFile, "\(error)")

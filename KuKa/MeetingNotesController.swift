@@ -2,7 +2,7 @@ import Cocoa
 import UserNotifications
 
 @MainActor
-final class MeetingNotesController: NSObject, NSMenuItemValidation {
+final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection {
     private enum Recorder {
         case idle
         case starting
@@ -21,7 +21,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation {
     private var queue: [MeetingFolder] = []
     private var current: (meeting: MeetingFolder, step: MeetingStep)?
     private var processingTask: Task<Void, Never>?
-    private var elapsedTimer: Timer?
 
     private let recordItem: NSMenuItem
     private let progressItem: NSMenuItem
@@ -69,24 +68,9 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation {
         updateMenu()
     }
 
-    func menuWillOpen() {
+    func refreshMenuSection() {
         updateMenu()
         reloadFailedMeetingsFromDisk()
-        elapsedTimer?.invalidate()
-        elapsedTimer = nil
-        guard isRecording else { return }
-        // .common mode: menu tracking runs the run loop in a mode where
-        // default-mode timers do not fire.
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateMenu() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        elapsedTimer = timer
-    }
-
-    func menuDidClose() {
-        elapsedTimer?.invalidate()
-        elapsedTimer = nil
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -103,7 +87,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation {
     func shutDown() {
         if case .recording(_, _, let handle) = recorder { handle.stop() }
         recorder = .idle
-        menuDidClose()
         processingTask?.cancel()
     }
 
@@ -153,19 +136,11 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation {
 
     private func hasGrants() async -> Bool {
         permissions.refresh()
-        guard permissions.screenRecording else {
+        guard permissions.screenRecording, permissions.microphone != .denied else {
             onShowPermissions?()
             return false
         }
-        switch permissions.microphone {
-        case .granted:
-            return true
-        case .notDetermined:
-            return await permissions.requestMicrophone()
-        case .denied:
-            onShowPermissions?()
-            return false
-        }
+        return await permissions.requestMicrophone()
     }
 
     private func stop() {
@@ -238,9 +213,9 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation {
         case .done:
             notify("Meeting notes ready", meeting.title)
         case .failed(.transcribe, let message):
-            notify("Transcription failed", message + " Retry from the Ku-Ka menu.")
+            notify(MeetingStep.transcribe.failureHeading, message + " Retry from the Ku-Ka menu.")
         case .failed(.summarize, let message):
-            notify("Summary failed. The transcript is ready.", message + " Retry from the Ku-Ka menu.")
+            notify("\(MeetingStep.summarize.failureHeading). The transcript is ready.", message + " Retry from the Ku-Ka menu.")
         case .cancelled:
             break
         }
@@ -253,9 +228,8 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation {
         case .recording(_, let since, _): recordItem.title = "Stop Recording · \(Self.formatElapsed(now().timeIntervalSince(since)))"
         }
         if let current {
-            let verb = current.step == .transcribe ? "Transcribing" : "Summarizing"
             let waiting = queue.isEmpty ? "" : " (+\(queue.count) waiting)"
-            progressItem.title = "\(verb) \(current.meeting.title)…\(waiting)"
+            progressItem.title = "\(current.step.progressVerb) \(current.meeting.title)…\(waiting)"
             progressItem.isHidden = false
         } else {
             progressItem.isHidden = true

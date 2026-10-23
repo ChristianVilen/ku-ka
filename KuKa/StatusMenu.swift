@@ -6,6 +6,14 @@ enum StatusWarning {
     case screenRecordingMissing
 }
 
+/// A feature's own group of menu items. `StatusMenu` refreshes every section
+/// when the menu opens, then once a second while it stays open.
+@MainActor
+protocol MenuSection: AnyObject {
+    func buildMenuSection(into menu: NSMenu)
+    func refreshMenuSection()
+}
+
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     let menu = NSMenu()
@@ -19,8 +27,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     var onMenuWillOpen: (() -> Void)?
 
     private let settings: Settings
-    private let keepAwake: KeepAwakeController
-    private let meetingNotes: MeetingNotesController
+    private let sections: [MenuSection]
+    private var refreshTimer: Timer?
     private var launchAtLoginItem: NSMenuItem!
     private var windowTilingItem: NSMenuItem!
     private var clipboardHistoryItem: NSMenuItem!
@@ -28,10 +36,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private var hotkeyWarningItems: [NSMenuItem] = []
     private var renderedHealth: HotkeyHealth?
 
-    init(settings: Settings, keepAwake: KeepAwakeController, meetingNotes: MeetingNotesController) {
+    init(settings: Settings, sections: [MenuSection]) {
         self.settings = settings
-        self.keepAwake = keepAwake
-        self.meetingNotes = meetingNotes
+        self.sections = sections
         super.init()
         build()
     }
@@ -175,10 +182,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // --- Keep Awake ---
-        keepAwake.buildMenuSection(into: menu)
-
-        meetingNotes.buildMenuSection(into: menu)
+        for section in sections {
+            section.buildMenuSection(into: menu)
+        }
 
         menu.addItem(.separator())
 
@@ -265,16 +271,27 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         NSWorkspace.shared.open(URL(string: "https://github.com/ChristianVilen/ku-ka/issues/new?labels=enhancement")!)
     }
 
-    // MARK: - Menu delegate (keep-awake countdown and recording timer updates)
+    // MARK: - Menu delegate
 
     func menuWillOpen(_ menu: NSMenu) {
         onMenuWillOpen?()
-        keepAwake.menuWillOpen()
-        meetingNotes.menuWillOpen()
+        refreshSections()
+        refreshTimer?.invalidate()
+        // .common mode: menu tracking runs the run loop in a mode where
+        // default-mode timers do not fire.
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshSections() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        keepAwake.menuDidClose()
-        meetingNotes.menuDidClose()
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func refreshSections() {
+        for section in sections { section.refreshMenuSection() }
     }
 }

@@ -4,13 +4,6 @@ enum MeetingTrack: CaseIterable, Hashable {
     case microphone
     case system
 
-    var speaker: Speaker {
-        switch self {
-        case .microphone: return .me
-        case .system: return .them
-        }
-    }
-
     var fileName: String {
         switch self {
         case .microphone: return "me.caf"
@@ -33,18 +26,32 @@ enum MeetingDocument: String, CaseIterable {
 enum MeetingStep: Equatable {
     case transcribe
     case summarize
+
+    var progressVerb: String {
+        switch self {
+        case .transcribe: return "Transcribing"
+        case .summarize: return "Summarizing"
+        }
+    }
+
+    var failureHeading: String {
+        switch self {
+        case .transcribe: return "Transcription failed"
+        case .summarize: return "Summary failed"
+        }
+    }
 }
 
 struct MeetingFolderContents: Equatable {
     var audio: Set<MeetingTrack> = []
     var hasTranscript = false
     var hasSummary = false
-    var failureMessage: String?
+    var hasFailure = false
 }
 
 enum MeetingStage: Equatable {
     case pending(MeetingStep)
-    case failed(MeetingStep, message: String)
+    case failed(MeetingStep)
     case done
 
     init?(_ contents: MeetingFolderContents) {
@@ -58,10 +65,9 @@ enum MeetingStage: Equatable {
         } else {
             return nil
         }
-        switch (next, contents.failureMessage) {
-        case (nil, _): self = .done
-        case (let step?, let message?): self = .failed(step, message: message)
-        case (let step?, nil): self = .pending(step)
+        switch next {
+        case nil: self = .done
+        case let step?: self = contents.hasFailure ? .failed(step) : .pending(step)
         }
     }
 }
@@ -131,7 +137,7 @@ struct MeetingFolder: Hashable {
             audio: Set(MeetingTrack.allCases.filter { fileManager.fileExists(atPath: audioURL($0).path) }),
             hasTranscript: fileManager.fileExists(atPath: url(for: .transcript).path),
             hasSummary: fileManager.fileExists(atPath: url(for: .summary).path),
-            failureMessage: try? read(.failure)))
+            hasFailure: fileManager.fileExists(atPath: url(for: .failure).path)))
     }
 
     func write(_ text: String, to document: MeetingDocument) throws {

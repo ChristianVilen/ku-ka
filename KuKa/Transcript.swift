@@ -21,16 +21,14 @@ enum Transcript {
     static func merge(_ tracks: [MeetingTrack: TrackTranscript], joinGap: TimeInterval = 2) -> [TranscriptLine] {
         let them = tracks[.system]?.segments ?? []
         let me = (tracks[.microphone]?.segments ?? []).filter { mic in !them.contains { isEcho(mic, of: $0) } }
-        let spoken = (them.map { (Speaker.them, $0) } + me.map { (Speaker.me, $0) })
-            .filter { !$0.1.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        // Them sorts first on an equal start. The offset keeps equal (start, speaker) in input order.
-        let ordered = spoken.enumerated()
-            .sorted { ($0.element.1.start, speakerRank($0.element.0), $0.offset) < ($1.element.1.start, speakerRank($1.element.0), $1.offset) }
-            .map(\.element)
+        let spoken = (them.map { (speaker: Speaker.them, segment: $0) } + me.map { (speaker: Speaker.me, segment: $0) })
+            .filter { !$0.segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            // sorted(by:) is stable, so Them, listed first, stays first on an equal start.
+            .sorted { $0.segment.start < $1.segment.start }
 
         var lines: [TranscriptLine] = []
         var lastEnd = -TimeInterval.infinity
-        for (speaker, segment) in ordered {
+        for (speaker, segment) in spoken {
             let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if let last = lines.last, last.speaker == speaker, segment.start - lastEnd < joinGap {
                 lines[lines.count - 1] = TranscriptLine(speaker: speaker, start: last.start, text: last.text + " " + text)
@@ -54,10 +52,6 @@ enum Transcript {
     private static let slack: TimeInterval = 1
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
-
-    private static func speakerRank(_ speaker: Speaker) -> Int {
-        speaker == .them ? 0 : 1
-    }
 
     static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval) -> String {
         var text = """
