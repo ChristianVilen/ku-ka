@@ -24,6 +24,7 @@ final class ProcessCommandRunner: CommandRunning {
         self.killGrace = killGrace
     }
 
+    @concurrent
     func run(executable: URL, arguments: [String], input: String?, searchPath: [String],
              timeout: Duration) async throws -> CommandResult {
         let fileManager = FileManager.default

@@ -10,6 +10,7 @@ protocol Transcribing {
 struct SpeechTranscriberAdapter: Transcribing {
     private let locale = Locale(identifier: "en_US")
 
+    @concurrent
     func transcribe(_ audio: URL) async throws -> TrackTranscript {
         let file = try AVAudioFile(forReading: audio)
         guard file.length > 0 else { return TrackTranscript(segments: [], duration: 0) }

@@ -3,6 +3,7 @@ import CoreMedia
 import ScreenCaptureKit
 
 protocol MeetingAudioCapturing {
+    @MainActor
     func start(into meeting: MeetingFolder,
                onInterrupted: @escaping @MainActor (_ reason: String) -> Void) async throws -> ActiveRecording
 }
@@ -16,6 +17,7 @@ protocol ActiveRecording: AnyObject {
 }
 
 final class ScreenCaptureMeetingAudio: MeetingAudioCapturing {
+    @MainActor
     func start(into meeting: MeetingFolder,
                onInterrupted: @escaping @MainActor (String) -> Void) async throws -> ActiveRecording {
         let content: SCShareableContent
@@ -82,8 +84,8 @@ extension MeetingTrack {
 }
 
 /// The writers, `timelineStart` and `isClosed` are used only on `queue`.
-/// `stream` is touched only on the main thread, or in `start` before the
-/// recording is shared. So nothing needs a lock.
+/// `stream` and `endReason` are used only on the main actor, where `start`,
+/// `stop` and the interruption hop run. So nothing needs a lock.
 final class ScreenCaptureRecording:NSObject, ActiveRecording, SCStreamOutput, SCStreamDelegate {
     let queue = DispatchQueue(label: "ku-ka.meeting-audio")
     var stream: SCStream?

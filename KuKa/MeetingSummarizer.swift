@@ -84,6 +84,7 @@ struct Summarizer {
         self.timeout = timeout
     }
 
+    @concurrent
     func summarize(transcript: String) async -> SummaryResult {
         let prompt = SummaryPrompt.make(transcript: transcript)
         let searchPath = SummaryCLI.userToolDirectories(home: home) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]

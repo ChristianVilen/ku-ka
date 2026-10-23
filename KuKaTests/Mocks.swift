@@ -267,6 +267,7 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
     private(set) var recordings: [FakeActiveRecording] = []
     private var interruptHandler: (@MainActor (String) -> Void)?
 
+    @MainActor
     func start(into meeting: MeetingFolder,
                onInterrupted: @escaping @MainActor (String) -> Void) async throws -> ActiveRecording {
         if let startError { throw startError }
@@ -278,7 +279,7 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
         recordings.append(recording)
         if let reason = endsWhileStarting {
             recording.endReason = reason
-            await onInterrupted(reason)
+            onInterrupted(reason)
         }
         return recording
     }
