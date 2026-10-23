@@ -55,6 +55,13 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(sut.meetingsFolder.path, NSHomeDirectory() + "/Notes")
     }
 
+    func testMeetingLocaleDefaultsToUSEnglishAndReadsTheTagSetWithDefaultsWrite() {
+        XCTAssertEqual(sut.meetingLocale.identifier(.bcp47), "en-US")
+
+        defaults.set("de-DE", forKey: "meetingLocale")
+        XCTAssertEqual(sut.meetingLocale.identifier(.bcp47), "de-DE")
+    }
+
     func testLaunchAtLoginReflectsAndDrivesTheLoginItem() {
         XCTAssertFalse(sut.launchAtLogin)
 

@@ -292,9 +292,22 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
 
 class FakeTranscriber: Transcribing {
     var byFileName: [String: Result<TrackTranscript, Error>] = [:]
+    var modelIsMissing = false
+    private(set) var downloads: [String] = []
+    private(set) var transcribedLocales: [String] = []
 
-    func transcribe(_ audio: URL) async throws -> TrackTranscript {
-        try byFileName[audio.lastPathComponent, default: .success(TrackTranscript(segments: [], duration: 0))].get()
+    func needsDownload(for locale: Locale) async throws -> Bool {
+        modelIsMissing
+    }
+
+    func download(for locale: Locale) async throws {
+        downloads.append(locale.identifier(.bcp47))
+        modelIsMissing = false
+    }
+
+    func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript {
+        transcribedLocales.append(locale.identifier(.bcp47))
+        return try byFileName[audio.lastPathComponent, default: .success(TrackTranscript(segments: [], duration: 0))].get()
     }
 }
 

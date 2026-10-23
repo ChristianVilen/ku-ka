@@ -85,6 +85,24 @@ final class MeetingProcessorTests: XCTestCase {
         XCTAssertEqual(meeting.stage(), .done)
     }
 
+    func testAMissingSpeechModelIsDownloadedForTheConfiguredLanguageFirst() async throws {
+        let meeting = try makeMeeting()
+        transcriber.modelIsMissing = true
+        var downloadsReported = 0
+        let processor = MeetingProcessor(
+            transcriber: transcriber,
+            summarizer: Summarizer(runner: runner, home: URL(fileURLWithPath: "/Users/test"), isExecutable: { _ in true }),
+            locale: { Locale(identifier: "de-DE") },
+            trash: { try FileManager.default.removeItem(at: $0) })
+
+        let outcome = await processor.process(meeting, onStep: { _ in }, onDownload: { downloadsReported += 1 })
+
+        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
+        XCTAssertEqual(downloadsReported, 1)
+        XCTAssertEqual(transcriber.downloads, ["de-DE"])
+        XCTAssertEqual(transcriber.transcribedLocales, ["de-DE", "de-DE"])
+    }
+
     func testTheCLIGetsTheTranscriptFromDisk() async throws {
         let meeting = try makeMeeting()
 
@@ -255,7 +273,10 @@ final class MeetingProcessorTests: XCTestCase {
 }
 
 private struct SuspendedTranscriber: Transcribing {
-    func transcribe(_ audio: URL) async throws -> TrackTranscript {
+    func needsDownload(for locale: Locale) async throws -> Bool { false }
+    func download(for locale: Locale) async throws {}
+
+    func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript {
         try await Task.sleep(for: .seconds(60))
         return TrackTranscript(segments: [], duration: 0)
     }

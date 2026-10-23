@@ -15,20 +15,26 @@ enum MeetingOutcome: Equatable {
 struct MeetingProcessor {
     private let transcriber: Transcribing
     private let summarizer: Summarizer
+    private let locale: () -> Locale
     private let trash: (URL) throws -> Void
     private let now: () -> Date
 
     init(transcriber: Transcribing = SpeechTranscriberAdapter(),
          summarizer: Summarizer = Summarizer(),
+         locale: @escaping () -> Locale = { Locale(identifier: "en-US") },
          trash: @escaping (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
          now: @escaping () -> Date = { Date() }) {
         self.transcriber = transcriber
         self.summarizer = summarizer
+        self.locale = locale
         self.trash = trash
         self.now = now
     }
 
-    func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void) async -> MeetingOutcome {
+    /// `onDownload` runs when the speech model must be downloaded before
+    /// the transcription can start.
+    func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
+                 onDownload: () -> Void = {}) async -> MeetingOutcome {
         guard let lock = meeting.lock() else { return meeting.stage() == nil ? .gone : .busy }
         defer { lock.release() }
         while true {
@@ -46,7 +52,7 @@ struct MeetingProcessor {
                 do {
                     switch step {
                     case .transcribe:
-                        guard try await transcribe(meeting) else { return .noSpeech }
+                        guard try await transcribe(meeting, onDownload: onDownload) else { return .noSpeech }
                     case .summarize:
                         try await summarize(meeting)
                     }
@@ -68,10 +74,15 @@ struct MeetingProcessor {
 
     /// False when nobody spoke. The meeting is then done, and its audio stays
     /// in the folder.
-    private func transcribe(_ meeting: MeetingFolder) async throws -> Bool {
+    private func transcribe(_ meeting: MeetingFolder, onDownload: () -> Void) async throws -> Bool {
+        let locale = self.locale()
+        if try await transcriber.needsDownload(for: locale) {
+            onDownload()
+            try await transcriber.download(for: locale)
+        }
         var tracks: [MeetingTrack: TrackTranscript] = [:]
         for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {
-            tracks[track] = try await transcriber.transcribe(meeting.audioURL(track))
+            tracks[track] = try await transcriber.transcribe(meeting.audioURL(track), locale: locale)
         }
         let lines = Transcript.merge(tracks)
         let duration = tracks.values.map(\.duration).max() ?? 0

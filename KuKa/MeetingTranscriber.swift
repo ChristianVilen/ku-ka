@@ -2,30 +2,45 @@ import AVFAudio
 import Speech
 
 protocol Transcribing {
-    func transcribe(_ audio: URL) async throws -> TrackTranscript
+    /// True when the speech model for `locale` must be downloaded first.
+    /// Throws when this Mac cannot transcribe `locale` at all.
+    func needsDownload(for locale: Locale) async throws -> Bool
+    func download(for locale: Locale) async throws
+    func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript
 }
 
 /// No dependency, no model for Ku-Ka to ship, and no speech-recognition
 /// permission (measured).
 struct SpeechTranscriberAdapter: Transcribing {
-    private let locale = Locale(identifier: "en_US")
+    @concurrent
+    func needsDownload(for locale: Locale) async throws -> Bool {
+        guard SpeechTranscriber.isAvailable else {
+            throw MeetingStepError("On-device speech recognition is not available on this Mac.")
+        }
+        let wanted = locale.identifier(.bcp47)
+        let supported = await SpeechTranscriber.supportedLocales.map { $0.identifier(.bcp47) }
+        guard supported.contains(wanted) else {
+            throw MeetingStepError("Speech recognition does not support \(wanted) on this Mac. "
+                                   + "Supported: \(supported.sorted().joined(separator: ", ")).")
+        }
+        return await !SpeechTranscriber.installedLocales.contains { $0.identifier(.bcp47) == wanted }
+    }
 
     @concurrent
-    func transcribe(_ audio: URL) async throws -> TrackTranscript {
+    func download(for locale: Locale) async throws {
+        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+            try await request.downloadAndInstall()
+        }
+    }
+
+    @concurrent
+    func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript {
         let file = try AVAudioFile(forReading: audio)
         guard file.length > 0 else { return TrackTranscript(segments: [], duration: 0) }
         let duration = Double(file.length) / file.processingFormat.sampleRate
 
-        guard SpeechTranscriber.isAvailable else {
-            throw MeetingStepError("On-device speech recognition is not available on this Mac.")
-        }
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
-        let installed = await SpeechTranscriber.installedLocales
-        if !installed.contains(where: { $0.identifier(.bcp47) == locale.identifier(.bcp47) }),
-           let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            try await request.downloadAndInstall()
-        }
-
         let collector = Task { () -> [TranscriptSegment] in
             var segments: [TranscriptSegment] = []
             for try await result in transcriber.results {

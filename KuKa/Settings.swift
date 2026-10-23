@@ -55,6 +55,15 @@ final class Settings {
         return URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
     }
 
+    /// A BCP 47 tag such as "de-DE", set with `defaults write`. It must match
+    /// one of `SpeechTranscriber.supportedLocales` exactly.
+    var meetingLocale: Locale {
+        guard let tag = defaults.string(forKey: "meetingLocale"), !tag.isEmpty else {
+            return Locale(identifier: "en-US")
+        }
+        return Locale(identifier: tag)
+    }
+
     var didShowScreenshotShortcutSetup: Bool {
         get { defaults.bool(forKey: "didShowScreenshotShortcutSetup") }
         set { defaults.set(newValue, forKey: "didShowScreenshotShortcutSetup") }

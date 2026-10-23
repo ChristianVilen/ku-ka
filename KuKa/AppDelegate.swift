@@ -23,7 +23,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var meetingNotes = MeetingNotesController(
         permissions: permissions,
-        root: { [settings] in settings.meetingsFolder }
+        root: { [settings] in settings.meetingsFolder },
+        processor: MeetingProcessor(locale: { [settings] in settings.meetingLocale })
     )
     private lazy var statusMenu = StatusMenu(settings: settings, sections: [keepAwake, meetingNotes])
     private let permissions = PermissionsManager()

@@ -73,6 +73,14 @@ defaults write com.kuka.screenshot meetingsFolder /path/to/folder
 
 Ku-Ka uses the new folder the next time it needs it, without a restart. Do not use `~/Documents` or `~/Desktop` when iCloud syncs them, because the audio would then leave your Mac.
 
+Ku-Ka transcribes US English by default. To transcribe another language, set its tag in Terminal:
+
+```bash
+defaults write com.kuka.screenshot meetingLocale de-DE
+```
+
+The tag must match one that Apple's speech recognition supports, for example `en-GB`, `de-DE`, `fr-FR`, `es-ES`, `it-IT`, `pt-BR`, `ja-JP`, `ko-KR`, or `zh-CN`. Finnish is not supported. If the tag is not supported, the transcription fails and `error.md` lists the supported tags. The first meeting in a new language downloads its speech model; the menu shows **Downloading speech model** meanwhile. The summary is written in the language of the transcript.
+
 Recording needs the Screen Recording permission (for the sound your Mac plays) and the Microphone permission. Ku-Ka asks for Microphone the first time you start a recording. Transcription is English only.
 
 ## Requirements
@@ -231,7 +239,7 @@ KuKa/
 - The automatic paste can't reach password fields or apps that block synthetic key events. The item is still on the clipboard, so pasting it by hand (`Cmd+V`) works.
 - No preferences UI for changing the shortcut keys, including the window tiling hotkeys
 - Some windows can't be tiled — apps that don't let their windows be moved or resized through the Accessibility API, and Ku-Ka's own windows. The hotkey then does nothing; there is no error message.
-- Meeting Notes transcribes English only, and it labels speakers only as "Me" and "Them".
+- Meeting Notes transcribes one language per meeting, set with `meetingLocale` (US English by default), and it labels speakers only as "Me" and "Them".
 - On speakers, a repeated line of fewer than 3 words can stay in the transcript as yours.
 - A meeting recording is tied to a display. If that display goes away (for example, the external monitor of a closed laptop), the recording stops, Ku-Ka says so, and it makes notes from what it recorded.
 - While `agy` is not logged in, it waits about 60 seconds before it fails, so the summary comes later. The summary's last lines say why `agy` was skipped.

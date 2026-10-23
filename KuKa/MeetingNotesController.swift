@@ -20,7 +20,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
 
     private var recorder: Recorder = .idle
     private var queue: [MeetingFolder] = []
-    private var current: (meeting: MeetingFolder, step: MeetingStep)?
+    private var current: (meeting: MeetingFolder, activity: String)?
     private var processingTask: Task<Void, Never>?
 
     private let statusLineItem: NSMenuItem
@@ -223,10 +223,13 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private func processQueue() async {
         while !queue.isEmpty, !Task.isCancelled {
             let meeting = queue.removeFirst()
-            let outcome = await processor.process(meeting) { [weak self] step in
-                self?.current = (meeting, step)
+            let outcome = await processor.process(meeting, onStep: { [weak self] step in
+                self?.current = (meeting, step.progressVerb)
                 self?.updateMenu()
-            }
+            }, onDownload: { [weak self] in
+                self?.current = (meeting, "Downloading speech model")
+                self?.updateMenu()
+            })
             current = nil
             report(outcome, for: meeting)
         }
@@ -272,7 +275,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         progressItem.isHidden = current == nil
         waitingItem.isHidden = current == nil || queue.isEmpty
         if let current {
-            progressItem.title = "\(current.step.progressVerb): \(current.meeting.title)"
+            progressItem.title = "\(current.activity): \(current.meeting.title)"
             waitingItem.title = queue.count == 1 ? "1 more meeting waiting" : "\(queue.count) more meetings waiting"
         }
     }

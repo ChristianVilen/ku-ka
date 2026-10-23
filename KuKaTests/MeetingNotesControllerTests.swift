@@ -343,7 +343,10 @@ final class MeetingNotesControllerTests: XCTestCase {
 }
 
 private struct SuspendedTranscriber: Transcribing {
-    func transcribe(_ audio: URL) async throws -> TrackTranscript {
+    func needsDownload(for locale: Locale) async throws -> Bool { false }
+    func download(for locale: Locale) async throws {}
+
+    func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript {
         try await Task.sleep(for: .seconds(60))
         return TrackTranscript(segments: [], duration: 0)
     }
