@@ -238,6 +238,17 @@ class FakeKeystrokeSender: KeystrokeSending {
     }
 }
 
+class FakeCommandRunner: CommandRunning {
+    var results: [String: Result<CommandResult, Error>] = [:]
+    private(set) var calls: [(executable: URL, arguments: [String])] = []
+
+    func run(executable: URL, arguments: [String], timeout: Duration) async throws -> CommandResult {
+        calls.append((executable, arguments))
+        return try results[executable.lastPathComponent,
+                           default: .success(CommandResult(termination: .exited(127), stdout: "", stderr: "not faked"))].get()
+    }
+}
+
 extension XCTestCase {
     func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
