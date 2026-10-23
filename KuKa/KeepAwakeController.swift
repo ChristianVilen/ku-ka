@@ -82,7 +82,15 @@ final class KeepAwakeController: NSObject {
 
         menu.addItem(.separator())
 
-        refreshMenuSection()
+        updateMenu()
+    }
+
+    func menuWillOpen() {
+        updateMenu()
+    }
+
+    func menuTick() {
+        updateMenu()
     }
 
     // MARK: - Actions
@@ -108,11 +116,11 @@ final class KeepAwakeController: NSObject {
     // MARK: - State
 
     private func handleStateChange() {
-        refreshMenuSection()
+        updateMenu()
         onStateChange?()
     }
 
-    func refreshMenuSection() {
+    private func updateMenu() {
         let session = wakeManager.session
         turnOffItem.isHidden = session == nil
 

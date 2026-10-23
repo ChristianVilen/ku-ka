@@ -14,6 +14,8 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private let capture: MeetingAudioCapturing
     private let processor: MeetingProcessor
     private let notify: (_ title: String, _ body: String) -> Void
+    /// Returns true when the user chose Open Permissions.
+    private let alertStartFailure: @MainActor (_ reason: String, _ offersPermissions: Bool) -> Bool
     private let openURL: (URL) -> Void
     private let now: () -> Date
 
@@ -22,8 +24,10 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private var current: (meeting: MeetingFolder, step: MeetingStep)?
     private var processingTask: Task<Void, Never>?
 
+    private let statusLineItem: NSMenuItem
     private let recordItem: NSMenuItem
     private let progressItem: NSMenuItem
+    private let waitingItem: NSMenuItem
     private let retryItem: NSMenuItem
     private let openFolderItem: NSMenuItem
 
@@ -40,6 +44,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
          capture: MeetingAudioCapturing = ScreenCaptureMeetingAudio(),
          processor: MeetingProcessor = MeetingProcessor(),
          notify: @escaping (String, String) -> Void = MeetingNotesController.postNotification,
+         alertStartFailure: @escaping @MainActor (String, Bool) -> Bool = MeetingNotesController.showStartFailureAlert,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
          now: @escaping () -> Date = { Date() }) {
         self.permissions = permissions
@@ -47,30 +52,38 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         self.capture = capture
         self.processor = processor
         self.notify = notify
+        self.alertStartFailure = alertStartFailure
         self.openURL = openURL
         self.now = now
+        statusLineItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         recordItem = NSMenuItem(title: "", action: #selector(recordClicked), keyEquivalent: "")
         progressItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        waitingItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         retryItem = NSMenuItem(title: "", action: #selector(retryClicked), keyEquivalent: "")
         openFolderItem = NSMenuItem(title: "Open Meetings Folder", action: #selector(openFolderClicked), keyEquivalent: "")
         super.init()
         for item in [recordItem, retryItem, openFolderItem] { item.target = self }
-        progressItem.isHidden = true
-        retryItem.isHidden = true
+        for item in [statusLineItem, progressItem, waitingItem, retryItem] { item.isHidden = true }
     }
 
     func buildMenuSection(into menu: NSMenu) {
         let header = NSMenuItem(title: "Meeting Notes", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
-        for item in [recordItem, progressItem, retryItem, openFolderItem] { menu.addItem(item) }
+        for item in [statusLineItem, recordItem, progressItem, waitingItem, retryItem, openFolderItem] {
+            menu.addItem(item)
+        }
         menu.addItem(.separator())
         updateMenu()
     }
 
-    func refreshMenuSection() {
+    func menuWillOpen() {
         updateMenu()
         reloadFailedMeetingsFromDisk()
+    }
+
+    func menuTick() {
+        updateMenu()
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -109,9 +122,10 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private func start() async {
         recorder = .starting
         updateMenu()
-        guard await hasGrants() else {
+        if let reason = await missingGrant() {
             recorder = .idle
             updateMenu()
+            if alertStartFailure(reason, true) { onShowPermissions?() }
             return
         }
         let startedAt = now()
@@ -134,18 +148,21 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
             }
         } catch {
             recorder = .idle
-            notify("Could not start recording", error.localizedDescription)
+            _ = alertStartFailure(error.localizedDescription, false)
         }
         updateMenu()
     }
 
-    private func hasGrants() async -> Bool {
+    /// Nil when recording can start, otherwise the reason it cannot.
+    private func missingGrant() async -> String? {
         permissions.refresh()
-        guard permissions.screenRecording, permissions.microphone != .denied else {
-            onShowPermissions?()
-            return false
+        guard permissions.screenRecording else {
+            return "Ku-Ka needs Screen Recording permission to record the other people on the call."
         }
-        return await permissions.requestMicrophone()
+        guard permissions.microphone != .denied, await permissions.requestMicrophone() else {
+            return "Ku-Ka needs Microphone permission to record your side of the call."
+        }
+        return nil
     }
 
     private func stop() {
@@ -233,16 +250,21 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
 
     private func updateMenu() {
         switch recorder {
-        case .idle: recordItem.title = "Start Recording Meeting"
-        case .starting: recordItem.title = "Starting…"
-        case .recording(_, let since, _, _): recordItem.title = "Stop Recording · \(Self.formatElapsed(now().timeIntervalSince(since)))"
+        case .idle:
+            statusLineItem.isHidden = true
+        case .starting:
+            statusLineItem.title = "Starting Recording"
+            statusLineItem.isHidden = false
+        case .recording(_, let since, _, _):
+            statusLineItem.title = "● Recording · \(Self.formatElapsed(now().timeIntervalSince(since)))"
+            statusLineItem.isHidden = false
         }
+        recordItem.title = isRecording ? "Stop Recording Meeting" : "Start Recording Meeting"
+        progressItem.isHidden = current == nil
+        waitingItem.isHidden = current == nil || queue.isEmpty
         if let current {
-            let waiting = queue.isEmpty ? "" : " (+\(queue.count) waiting)"
-            progressItem.title = "\(current.step.progressVerb) \(current.meeting.title)…\(waiting)"
-            progressItem.isHidden = false
-        } else {
-            progressItem.isHidden = true
+            progressItem.title = "\(current.step.progressVerb): \(current.meeting.title)"
+            waitingItem.title = queue.count == 1 ? "1 more meeting waiting" : "\(queue.count) more meetings waiting"
         }
     }
 
@@ -262,6 +284,16 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         return hours > 0
             ? String(format: "%d:%02d:%02d", hours, minutes, seconds % 60)
             : String(format: "%d:%02d", minutes, seconds % 60)
+    }
+
+    static func showStartFailureAlert(reason: String, offersPermissions: Bool) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Recording Did Not Start"
+        alert.informativeText = reason
+        alert.addButton(withTitle: offersPermissions ? "Open Permissions" : "OK")
+        if offersPermissions { alert.addButton(withTitle: "Cancel") }
+        NSApp.activate()
+        return offersPermissions && alert.runModal() == .alertFirstButtonReturn
     }
 
     /// Asks for notification permission on first use; macOS shows the prompt

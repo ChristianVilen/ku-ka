@@ -100,8 +100,8 @@ final class StatusMenuTests: XCTestCase {
         let titles = menuItems.filter { !$0.isHidden }.map(\.title)
         let lidHint = try XCTUnwrap(titles.firstIndex(of: "Closing the lid still sleeps your Mac"))
 
-        XCTAssertEqual(Array(titles[(lidHint + 1)...(lidHint + 5)]),
-                       ["", "Meeting Notes", "Start Recording Meeting", "Open Meetings Folder", ""])
+        XCTAssertEqual(Array(titles[(lidHint + 1)...(lidHint + 6)]),
+                       ["", "Meeting Notes", "Start Recording Meeting", "Open Meetings Folder", "", "Features"])
     }
 
     func testOpeningTheMenuShowsFailedMeetingsFromDisk() throws {

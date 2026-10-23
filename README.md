@@ -55,7 +55,7 @@ The whole feature can be turned on and off with the **Clipboard History** checkb
 
 ## Meeting Notes
 
-When a call starts, open the Ku-Ka menu and choose **Start Recording Meeting**. Ku-Ka records your microphone and the sound your Mac plays, so any call app works. The menu bar icon shows a red dot in its top-right corner while Ku-Ka records. Choose **Stop Recording** when the call ends.
+When a call starts, open the Ku-Ka menu and choose **Start Recording Meeting**. Ku-Ka records your microphone and the sound your Mac plays, so any call app works. While Ku-Ka records, its menu bar icon shows a red record mark (a red dot with a white centre) in its top-right corner, and a stop button appears next to it. When the call ends, click the stop button or choose **Stop Recording Meeting**. If Start cannot record, for example because a permission is missing, an alert says why.
 
 Ku-Ka then transcribes the call on your Mac with Apple's speech recognition and asks an AI command-line tool for a summary. It tries Antigravity (`agy`) first and Claude Code (`claude`) if that fails. Install at least one of them in `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`, and log in to it once in Terminal. A notification tells you when the notes are ready. Each meeting gets its own folder, for example `~/Meetings/2026-10-23_14-02/`, with `transcript.md` and `summary.md`.
 
@@ -118,7 +118,7 @@ Alternatively, you can use the GUI method:
 
 ## Permissions
 
-Screen Recording lets Ku-Ka take screenshots. Accessibility lets it move windows and paste from clipboard history. On first launch, a setup window explains these permissions. Grant the permissions for the features you use; each row updates after you allow it in System Settings. Open the window again from **Permissions…** in the menu. A red dot means an Accessibility or shortcut problem. An orange dot means Screen Recording is missing, when no red warning is present.
+Screen Recording lets Ku-Ka take screenshots and record the sound of a call for Meeting Notes. Accessibility lets it move windows and paste from clipboard history. On first launch, a setup window explains these permissions. Grant the permissions for the features you use; each row updates after you allow it in System Settings. Open the window again from **Permissions…** in the menu. A red dot in the bottom-left corner of the menu bar icon means an Accessibility or shortcut problem. An orange dot in that corner means Screen Recording is missing, when no red warning is present.
 
 ### Accessibility (window tiling and automatic paste)
 Accessibility lets Ku-Ka move and resize windows and paste items from clipboard history. Registering the shortcuts does not need this permission.
@@ -139,14 +139,14 @@ Ku-Ka retries within a few seconds. The menu warnings disappear when the shortcu
 All Ku-Ka shortcuts use registered macOS hotkeys instead of a keyboard event tap. The menu lists registration failures for each shortcut; other registered shortcuts remain available. If a shortcut cannot be released, Ku-Ka reports it and retries while running. Opening clipboard history and pasting are separate operations, so automatic paste can still fail in protected fields.
 
 ### Screen Recording (required)
-ScreenCaptureKit requires screen recording permission to capture screen content.
+ScreenCaptureKit requires screen recording permission to capture screen content. Meeting Notes also needs it to record the sound your Mac plays.
 
 **System Settings → Privacy & Security → Screen Recording** → Enable Ku-Ka
 
 Two macOS quirks to expect: the first capture can require one quit-and-reopen of Ku-Ka before the grant takes effect, and roughly every month macOS makes every screenshot app ask again for screen recording. Neither is something Ku-Ka can turn off.
 
 ### Microphone (Meeting Notes)
-Microphone lets Ku-Ka record your side of a meeting. Only Meeting Notes needs it, so the setup window does not open for it at launch. Ku-Ka shows the macOS prompt the first time you choose **Start Recording Meeting**. If you said no, Ku-Ka opens the permissions window, where **Grant** opens the Microphone pane.
+Microphone lets Ku-Ka record your side of a meeting. Only Meeting Notes needs it, so the setup window does not open for it at launch. Ku-Ka shows the macOS prompt the first time you choose **Start Recording Meeting**. If you said no, an alert offers **Open Permissions**; there, **Grant** opens the Microphone pane. Until you are asked, the Microphone row shows "–" and **Allow** instead of ❌, because the permission is optional.
 
 **System Settings → Privacy & Security → Microphone** → Enable Ku-Ka
 
@@ -180,7 +180,7 @@ The folder is created automatically if it doesn't exist.
 - **Clipboard History** — Turn clipboard recording and the `Shift+Command+C` hotkey on or off (remembered across restarts)
 - **Thumbnail Duration** — Choose how long the floating thumbnail stays visible: 3 seconds, 5 seconds, 15 seconds, or Forever (until dismissed)
 - **Keep Awake** — Keep the Mac from sleeping for a preset time (30 minutes, 1, 2, or 4 hours, or until turned off), with a "Keep display awake" checkbox
-- **Start Recording Meeting** and **Stop Recording** start and stop a meeting recording. While Ku-Ka records, the item shows the elapsed time.
+- **Start Recording Meeting** and **Stop Recording Meeting** start and stop a meeting recording. While Ku-Ka records, a line above them shows the elapsed time. While Ku-Ka makes notes, a line shows the step and how many meetings wait.
 - **Retry Failed Meeting** appears when a meeting's transcription or summary failed.
 - **Open Meetings Folder** opens the folder that holds the meeting notes.
 - **Quit Ku-Ka** — Exit the app

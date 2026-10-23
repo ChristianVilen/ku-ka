@@ -16,6 +16,7 @@ final class MeetingNotesControllerTests: XCTestCase {
     private var runner: FakeCommandRunner!
     private var clock = localDate(2026, 10, 23, 14, 2)
     private var notifications: [String] = []
+    private var alerts: [String] = []
     private var opened: [URL] = []
     private var permissionWindows = 0
     private var stateChanges = 0
@@ -55,6 +56,10 @@ final class MeetingNotesControllerTests: XCTestCase {
                 trash: { try FileManager.default.removeItem(at: $0) },
                 now: { localDate(2026, 10, 23, 15, 0) }),
             notify: { [unowned self] title, body in notifications.append("\(title): \(body)") },
+            alertStartFailure: { [unowned self] reason, offersPermissions in
+                alerts.append(reason)
+                return offersPermissions
+            },
             openURL: { [unowned self] in opened.append($0) },
             now: { [unowned self] in clock })
         controller.onShowPermissions = { [unowned self] in permissionWindows += 1 }
@@ -99,9 +104,9 @@ final class MeetingNotesControllerTests: XCTestCase {
         XCTAssertEqual(capture.recordings.count, 1)
 
         clock = clock.addingTimeInterval(245)
-        sut.refreshMenuSection()
+        sut.menuTick()
 
-        XCTAssertEqual(visibleTitles, ["Meeting Notes", "Stop Recording · 4:05", "Open Meetings Folder", ""])
+        XCTAssertEqual(visibleTitles, ["Meeting Notes", "● Recording · 4:05", "Stop Recording Meeting", "Open Meetings Folder", ""])
     }
 
     func testStopProcessesTheMeetingAndSaysTheNotesAreReady() async throws {
@@ -160,26 +165,30 @@ final class MeetingNotesControllerTests: XCTestCase {
 
         XCTAssertFalse(sut.isRecording)
         XCTAssertEqual(meetingNames(), [])
-        XCTAssertEqual(notifications, ["Could not start recording: No display is available to capture audio from."])
+        XCTAssertEqual(alerts, ["No display is available to capture audio from."])
+        XCTAssertEqual(permissionWindows, 0)
+        XCTAssertEqual(notifications, [])
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting", "Open Meetings Folder", ""])
     }
 
-    func testMissingScreenRecordingOpensThePermissionsWindowAndRecordsNothing() async {
+    func testMissingScreenRecordingSaysWhyAndOffersThePermissionsWindow() async {
         screenRecording = false
 
         await sut.toggleRecording()
 
+        XCTAssertEqual(alerts, ["Ku-Ka needs Screen Recording permission to record the other people on the call."])
         XCTAssertEqual(permissionWindows, 1)
         XCTAssertEqual(capture.recordings.count, 0)
         XCTAssertEqual(meetingNames(), [])
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting", "Open Meetings Folder", ""])
     }
 
-    func testADeniedMicrophoneOpensThePermissionsWindow() async {
+    func testADeniedMicrophoneSaysWhyAndOffersThePermissionsWindow() async {
         microphone = .denied
 
         await sut.toggleRecording()
 
+        XCTAssertEqual(alerts, ["Ku-Ka needs Microphone permission to record your side of the call."])
         XCTAssertEqual(permissionWindows, 1)
         XCTAssertFalse(sut.isRecording)
     }
@@ -191,10 +200,11 @@ final class MeetingNotesControllerTests: XCTestCase {
         await sut.toggleRecording()
 
         XCTAssertTrue(sut.isRecording)
+        XCTAssertEqual(alerts, [])
         XCTAssertEqual(permissionWindows, 0)
     }
 
-    func testRefusingTheMicrophonePromptRecordsNothing() async {
+    func testRefusingTheMicrophonePromptRecordsNothingAndSaysWhy() async {
         microphone = .notDetermined
         var prompts = 0
         answerMicrophonePrompt = { [unowned self] in prompts += 1; microphone = .denied; return false }
@@ -204,7 +214,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         XCTAssertEqual(prompts, 1)
         XCTAssertFalse(sut.isRecording)
         XCTAssertEqual(capture.recordings.count, 0)
-        XCTAssertEqual(permissionWindows, 0)
+        XCTAssertEqual(alerts, ["Ku-Ka needs Microphone permission to record your side of the call."])
     }
 
     func testASecondClickWhileTheMicrophonePromptIsUpStartsNothing() async {
@@ -213,7 +223,8 @@ final class MeetingNotesControllerTests: XCTestCase {
         answerMicrophonePrompt = { await withCheckedContinuation { prompt = $0 } }
         let firstClick = Task { await sut.toggleRecording() }
         await waitUntil { prompt != nil }
-        XCTAssertEqual(item(titled: "Starting…").map(sut.validateMenuItem), false, "the record item is disabled while starting")
+        XCTAssertTrue(visibleTitles.contains("Starting Recording"))
+        XCTAssertEqual(item(titled: "Start Recording Meeting").map(sut.validateMenuItem), false, "the record item is disabled while starting")
 
         await sut.toggleRecording()
         microphone = .granted
@@ -238,7 +249,7 @@ final class MeetingNotesControllerTests: XCTestCase {
 
     func testRetryRunsFailedMeetingsFromTheStepThatFailed() async throws {
         let failed = try leftoverMeeting(at: localDate(2026, 10, 22, 10, 0), failure: "agy exited with status 1", transcript: true)
-        sut.refreshMenuSection()
+        sut.menuWillOpen()
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting", "Retry Failed Meeting", "Open Meetings Folder", ""])
 
         let retry = try XCTUnwrap(item(titled: "Retry Failed Meeting"))
@@ -255,7 +266,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         try leftoverMeeting(at: localDate(2026, 10, 22, 9, 0), failure: "Speech model missing")
         try leftoverMeeting(at: localDate(2026, 10, 22, 10, 0), failure: "agy exited with status 1", transcript: true)
 
-        sut.refreshMenuSection()
+        sut.menuWillOpen()
 
         XCTAssertNotNil(item(titled: "Retry 2 Failed Meetings"))
     }
@@ -280,7 +291,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         await waitUntil { visibleTitles.count > 4 }
 
         XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting",
-                                       "Transcribing Meeting on 2026-10-22 at 09:00… (+1 waiting)",
+                                       "Transcribing: Meeting on 2026-10-22 at 09:00", "1 more meeting waiting",
                                        "Open Meetings Folder", ""])
     }
 
@@ -301,7 +312,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         let meeting = try leftoverMeeting(at: localDate(2026, 10, 22, 9, 0))
         sut.resumeUnfinished()
         await waitUntil { visibleTitles.count > 4 }
-        XCTAssertNotNil(item(titled: "Transcribing Meeting on 2026-10-22 at 09:00…"))
+        XCTAssertNotNil(item(titled: "Transcribing: Meeting on 2026-10-22 at 09:00"))
 
         sut.shutDown()
         await sut.waitUntilIdle()

@@ -158,7 +158,7 @@ final class OnboardingWindowControllerTests: XCTestCase {
         }
         let row = try XCTUnwrap(descendants(of: controller.window!.contentView!).first { view in
             view is PermissionRowView
-                && descendants(of: view).contains { ($0 as? NSTextField)?.stringValue == "Microphone (Meeting Notes)" }
+                && descendants(of: view).contains { ($0 as? NSTextField)?.stringValue == "Microphone (Meeting Notes, optional)" }
         })
         let grant = try XCTUnwrap(descendants(of: row).compactMap { $0 as? NSButton }.first)
         XCTAssertEqual(grant.title, "Grant")

@@ -6,12 +6,13 @@ enum StatusWarning {
     case screenRecordingMissing
 }
 
-/// A feature's own group of menu items. `StatusMenu` refreshes every section
-/// when the menu opens, then once a second while it stays open.
+/// A feature's own group of menu items, ending with its own separator.
 @MainActor
 protocol MenuSection: AnyObject {
     func buildMenuSection(into menu: NSMenu)
-    func refreshMenuSection()
+    func menuWillOpen()
+    /// Called once a second while the menu is open, so keep it cheap.
+    func menuTick()
 }
 
 @MainActor
@@ -43,11 +44,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         build()
     }
 
-    /// The status-item image: the app icon, plus a small dot (with a light
+    /// The status-item image: the app icon, plus a small mark (with a light
     /// ring for contrast) per active state — Keep Awake gets the accent dot
-    /// in the bottom-right, recording gets a red dot in the top-right, and
-    /// `warning` gets the bottom-left corner. Separate corners so all three
-    /// can show at once.
+    /// in the bottom-right, recording gets a red record mark (a dot with a
+    /// white centre, so it does not rely on colour alone) in the top-right,
+    /// and `warning` gets the bottom-left corner. Separate corners so all
+    /// three can show at once.
     func icon(keepAwakeActive: Bool, recording: Bool, warning: StatusWarning?) -> NSImage {
         guard let base = NSImage(named: "MenuBarIcon") else {
             return NSImage(systemSymbolName: "camera.viewfinder", accessibilityDescription: "Ku-Ka") ?? NSImage()
@@ -74,7 +76,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 drawDot(NSRect(x: rect.maxX - 8, y: rect.minY + 1, width: 7, height: 7), color: .controlAccentColor)
             }
             if recording {
-                drawDot(NSRect(x: rect.maxX - 8, y: rect.maxY - 8, width: 7, height: 7), color: .systemRed)
+                let mark = NSRect(x: rect.maxX - 8, y: rect.maxY - 8, width: 7, height: 7)
+                drawDot(mark, color: .systemRed)
+                NSColor.white.setFill()
+                NSBezierPath(ovalIn: mark.insetBy(dx: 2.25, dy: 2.25)).fill()
             }
             let corner = NSRect(x: rect.minX + 1, y: rect.minY + 1, width: 7, height: 7)
             switch warning {
@@ -186,8 +191,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             section.buildMenuSection(into: menu)
         }
 
-        menu.addItem(.separator())
-
         // --- Features ---
         let featuresLabel = NSMenuItem(title: "Features", action: nil, keyEquivalent: "")
         featuresLabel.isEnabled = false
@@ -275,12 +278,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         onMenuWillOpen?()
-        refreshSections()
+        for section in sections { section.menuWillOpen() }
         refreshTimer?.invalidate()
         // .common mode: menu tracking runs the run loop in a mode where
         // default-mode timers do not fire.
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshSections() }
+            MainActor.assumeIsolated {
+                for section in self?.sections ?? [] { section.menuTick() }
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         refreshTimer = timer
@@ -289,9 +294,5 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func menuDidClose(_ menu: NSMenu) {
         refreshTimer?.invalidate()
         refreshTimer = nil
-    }
-
-    private func refreshSections() {
-        for section in sections { section.refreshMenuSection() }
     }
 }

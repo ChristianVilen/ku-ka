@@ -1,10 +1,17 @@
 import Cocoa
 
-/// One checklist row in the onboarding window: a live ❌/✅ status, the
+/// One checklist row in the onboarding window: a live ❌/✅/– status, the
 /// permission name, a one-sentence explanation of why it's needed, and a
 /// Grant button. Pure view — `OnboardingWindowController` pushes status in
-/// via `setGranted` and receives clicks via `onGrant`.
+/// via `setStatus` and receives clicks via `onGrant`.
 final class PermissionRowView: NSView {
+    enum Status {
+        case granted
+        case missing
+        /// An optional permission the user was never asked for.
+        case notAsked
+    }
+
     private let statusLabel = NSTextField(labelWithString: "❌")
     private let grantButton = NSButton(title: "Grant", target: nil, action: nil)
 
@@ -61,10 +68,19 @@ final class PermissionRowView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func setGranted(_ granted: Bool) {
-        statusLabel.stringValue = granted ? "✅" : "❌"
-        grantButton.isEnabled = !granted
-        grantButton.title = granted ? "Granted" : "Grant"
+    func setStatus(_ status: Status) {
+        switch status {
+        case .granted:
+            statusLabel.stringValue = "✅"
+            grantButton.title = "Granted"
+        case .missing:
+            statusLabel.stringValue = "❌"
+            grantButton.title = "Grant"
+        case .notAsked:
+            statusLabel.stringValue = "–"
+            grantButton.title = "Allow"
+        }
+        grantButton.isEnabled = status != .granted
     }
 
     @objc private func grantClicked() {
@@ -117,11 +133,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         )
         screenRecordingRow = PermissionRowView(
             title: "Screen Recording (required)",
-            explanation: "Lets Ku-Ka read the screen content to take screenshots.",
+            explanation: "Lets Ku-Ka take screenshots and record the sound of a call for Meeting Notes.",
             note: "macOS may need you to quit and reopen Ku-Ka once before capture works, and will ask you to re-approve about once a month. That's a macOS rule, not a bug."
         )
         microphoneRow = PermissionRowView(
-            title: "Microphone (Meeting Notes)",
+            title: "Microphone (Meeting Notes, optional)",
             explanation: "Lets Ku-Ka record your side of a meeting when you start a recording."
         )
 
@@ -183,7 +199,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         title.font = .boldSystemFont(ofSize: 20)
 
         let body = NSTextField(wrappingLabelWithString:
-            "Ku-Ka lives in your menu bar. Use ⇧⌘3 / ⇧⌘4 to take screenshots you can annotate, or use its shortcuts to move windows and open clipboard history.\n\nScreen Recording lets Ku-Ka take screenshots. Accessibility lets it move windows and paste from clipboard history. The next step helps you grant these permissions."
+            "Ku-Ka lives in your menu bar. Use ⇧⌘3 / ⇧⌘4 to take screenshots you can annotate, or use its shortcuts to move windows and open clipboard history.\n\nScreen Recording lets Ku-Ka take screenshots and record call audio for Meeting Notes. Accessibility lets it move windows and paste from clipboard history. The next step helps you grant these permissions."
         )
         body.font = .systemFont(ofSize: 13)
         body.alignment = .center
@@ -204,7 +220,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private func makeChecklistPage() -> NSView {
         let header = NSTextField(wrappingLabelWithString:
-            "Screen Recording is needed for screenshots. Accessibility is needed for window tiling and automatic paste. Microphone is needed only for Meeting Notes. Grant the permissions for the features you use. The status updates after you allow each one in System Settings."
+            "Screen Recording is needed for screenshots and for Meeting Notes. Accessibility is needed for window tiling and automatic paste. Microphone is needed only for Meeting Notes. Grant the permissions for the features you use. The status updates after you allow each one in System Settings."
         )
         header.font = .systemFont(ofSize: 13)
 
@@ -314,9 +330,13 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func refreshRows() {
-        accessibilityRow.setGranted(permissions.accessibility)
-        screenRecordingRow.setGranted(permissions.screenRecording)
-        microphoneRow.setGranted(permissions.microphone == .granted)
+        accessibilityRow.setStatus(permissions.accessibility ? .granted : .missing)
+        screenRecordingRow.setStatus(permissions.screenRecording ? .granted : .missing)
+        switch permissions.microphone {
+        case .granted: microphoneRow.setStatus(.granted)
+        case .denied: microphoneRow.setStatus(.missing)
+        case .notDetermined: microphoneRow.setStatus(.notAsked)
+        }
     }
 
     @objc private func continueClicked() {
