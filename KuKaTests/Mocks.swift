@@ -238,6 +238,14 @@ class FakeKeystrokeSender: KeystrokeSending {
     }
 }
 
+class FakeTranscriber: Transcribing {
+    var byFileName: [String: Result<TrackTranscript, Error>] = [:]
+
+    func transcribe(_ audio: URL) async throws -> TrackTranscript {
+        try byFileName[audio.lastPathComponent, default: .success(TrackTranscript(segments: [], duration: 0))].get()
+    }
+}
+
 class FakeCommandRunner: CommandRunning {
     var results: [String: Result<CommandResult, Error>] = [:]
     private(set) var calls: [(executable: URL, arguments: [String])] = []
@@ -256,6 +264,14 @@ extension XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
+    }
+}
+
+@MainActor
+func waitUntil(_ condition: () -> Bool) async {
+    let deadline = Date().addingTimeInterval(5)
+    while !condition(), Date() < deadline {
+        try? await Task.sleep(for: .milliseconds(10))
     }
 }
 
