@@ -6,7 +6,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private enum Recorder {
         case idle
         case starting
-        case recording(MeetingFolder, since: Date, ActiveRecording)
+        case recording(MeetingFolder, since: Date, ActiveRecording, MeetingLock)
     }
 
     private let permissions: PermissionsManager
@@ -85,7 +85,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     }
 
     func shutDown() {
-        if case .recording(_, _, let handle) = recorder { handle.stop() }
+        if case .recording(_, _, let handle, _) = recorder { handle.stop() }
         recorder = .idle
         processingTask?.cancel()
     }
@@ -118,11 +118,16 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         do {
             let meeting = try MeetingFolder.create(in: root(), startingAt: startedAt)
             do {
+                guard let lock = meeting.lock() else { throw CocoaError(.fileLocking) }
                 let handle = try await capture.start(into: meeting) { [weak self] reason in
                     self?.handleInterruption(of: meeting, reason: reason)
                 }
-                recorder = .recording(meeting, since: startedAt, handle)
-                onStateChange?()
+                if let reason = handle.endReason {
+                    endRecording(meeting, interruptedBecause: reason)
+                } else {
+                    recorder = .recording(meeting, since: startedAt, handle, lock)
+                    onStateChange?()
+                }
             } catch {
                 try? FileManager.default.removeItem(at: meeting.url)
                 throw error
@@ -144,7 +149,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     }
 
     private func stop() {
-        guard case .recording(let meeting, _, let handle) = recorder else { return }
+        guard case .recording(let meeting, _, let handle, _) = recorder else { return }
         handle.stop()
         recorder = .idle
         updateMenu()
@@ -153,7 +158,11 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     }
 
     private func handleInterruption(of meeting: MeetingFolder, reason: String) {
-        guard case .recording(let recording, _, _) = recorder, recording == meeting else { return }
+        guard case .recording(let recording, _, _, _) = recorder, recording == meeting else { return }
+        endRecording(meeting, interruptedBecause: reason)
+    }
+
+    private func endRecording(_ meeting: MeetingFolder, interruptedBecause reason: String) {
         recorder = .idle
         updateMenu()
         onStateChange?()
@@ -185,7 +194,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     }
 
     private func enqueue(_ meeting: MeetingFolder) {
-        if case .recording(let recording, _, _) = recorder, recording == meeting { return }
         guard !queue.contains(meeting), current?.meeting != meeting else { return }
         queue.append(meeting)
         updateMenu()
@@ -216,7 +224,9 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
             notify(MeetingStep.transcribe.failureHeading, message + " Retry from the Ku-Ka menu.")
         case .failed(.summarize, let message):
             notify("\(MeetingStep.summarize.failureHeading). The transcript is ready.", message + " Retry from the Ku-Ka menu.")
-        case .cancelled:
+        case .noSpeech:
+            notify("No speech detected", "\(meeting.title). The audio is in the meeting folder.")
+        case .cancelled, .busy, .gone:
             break
         }
     }
@@ -225,7 +235,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         switch recorder {
         case .idle: recordItem.title = "Start Recording Meeting"
         case .starting: recordItem.title = "Starting…"
-        case .recording(_, let since, _): recordItem.title = "Stop Recording · \(Self.formatElapsed(now().timeIntervalSince(since)))"
+        case .recording(_, let since, _, _): recordItem.title = "Stop Recording · \(Self.formatElapsed(now().timeIntervalSince(since)))"
         }
         if let current {
             let waiting = queue.isEmpty ? "" : " (+\(queue.count) waiting)"

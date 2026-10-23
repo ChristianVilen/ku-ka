@@ -16,6 +16,12 @@ protocol CommandRunning {
 }
 
 final class ProcessCommandRunner: CommandRunning {
+    private let killGrace: Duration
+
+    init(killGrace: Duration = .seconds(5)) {
+        self.killGrace = killGrace
+    }
+
     func run(executable: URL, arguments: [String], searchPath: [String], timeout: Duration) async throws -> CommandResult {
         let fileManager = FileManager.default
         let runFolder = fileManager.temporaryDirectory
@@ -51,13 +57,13 @@ final class ProcessCommandRunner: CommandRunning {
         try process.run()
         let timer = Task {
             do { try await Task.sleep(for: timeout) } catch { return false }
-            process.terminate()
+            stop(process)
             return true
         }
         await withTaskCancellationHandler {
             for await _ in exits {}
         } onCancel: {
-            process.terminate()
+            stop(process)
         }
         timer.cancel()
         try Task.checkCancellation()
@@ -66,6 +72,16 @@ final class ProcessCommandRunner: CommandRunning {
         return CommandResult(termination: termination,
                              stdout: String(decoding: try Data(contentsOf: stdoutURL), as: UTF8.self),
                              stderr: String(decoding: try Data(contentsOf: stderrURL), as: UTF8.self))
+    }
+
+    /// SIGTERM lets the CLI clean up. SIGKILL follows for a child that ignores it.
+    private func stop(_ process: Process) {
+        process.terminate()
+        let grace = killGrace
+        Task {
+            try? await Task.sleep(for: grace)
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
     }
 
     private static func emptyFile(at url: URL) throws -> FileHandle {

@@ -2,8 +2,13 @@ import Foundation
 
 enum MeetingOutcome: Equatable {
     case done(summary: URL)
+    case noSpeech
     case failed(MeetingStep, message: String)
     case cancelled
+    /// Another recorder or processor holds the folder's lock.
+    case busy
+    /// The folder was moved or deleted.
+    case gone
 }
 
 @MainActor
@@ -24,11 +29,14 @@ struct MeetingProcessor {
     }
 
     func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void) async -> MeetingOutcome {
+        guard let lock = meeting.lock() else { return meeting.stage() == nil ? .gone : .busy }
+        defer { lock.release() }
         while true {
             if Task.isCancelled { return .cancelled }
-            switch meeting.stage() {
+            let stage = meeting.stage()
+            switch stage {
             case nil:
-                return .failed(.transcribe, message: "The meeting folder has no audio and no transcript.")
+                return .gone
             case .done?:
                 return .done(summary: meeting.url(for: .summary))
             case .failed(let step)?:
@@ -37,30 +45,44 @@ struct MeetingProcessor {
                 onStep(step)
                 do {
                     switch step {
-                    case .transcribe: try await transcribe(meeting)
-                    case .summarize: try await summarize(meeting)
+                    case .transcribe:
+                        guard try await transcribe(meeting) else { return .noSpeech }
+                    case .summarize:
+                        try await summarize(meeting)
                     }
                 } catch {
                     if Task.isCancelled { return .cancelled }
-                    let message = (error as? MeetingStepError)?.message ?? error.localizedDescription
-                    try? meeting.write(Self.failureText(step: step, message: message, at: now()), to: .failure)
-                    return .failed(step, message: message)
+                    return fail(meeting, at: step, message: (error as? MeetingStepError)?.message ?? error.localizedDescription)
+                }
+                if meeting.stage() == stage {
+                    return fail(meeting, at: step, message: "The step finished, but the meeting folder did not change.")
                 }
             }
         }
     }
 
-    private func transcribe(_ meeting: MeetingFolder) async throws {
+    private func fail(_ meeting: MeetingFolder, at step: MeetingStep, message: String) -> MeetingOutcome {
+        try? meeting.write(Self.failureText(step: step, message: message, at: now()), to: .failure)
+        return .failed(step, message: message)
+    }
+
+    /// False when nobody spoke. The meeting is then done, and its audio stays
+    /// in the folder.
+    private func transcribe(_ meeting: MeetingFolder) async throws -> Bool {
         var tracks: [MeetingTrack: TrackTranscript] = [:]
         for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {
             tracks[track] = try await transcriber.transcribe(meeting.audioURL(track))
         }
         let lines = Transcript.merge(tracks)
-        guard !lines.isEmpty else {
-            throw MeetingStepError("No speech was detected. The audio is still in the meeting folder.")
-        }
         let duration = tracks.values.map(\.duration).max() ?? 0
+        if lines.isEmpty {
+            // Summary first: it marks the meeting done, so a crash before the
+            // transcript is written cannot run the summary step, which would
+            // trash the audio.
+            try meeting.write(SummaryDocument.noSpeech(title: meeting.title), to: .summary)
+        }
         try meeting.write(Transcript.markdown(lines, title: meeting.title, duration: duration), to: .transcript)
+        return !lines.isEmpty
     }
 
     private func summarize(_ meeting: MeetingFolder) async throws {

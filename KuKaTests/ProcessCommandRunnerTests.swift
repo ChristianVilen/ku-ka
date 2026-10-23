@@ -42,6 +42,18 @@ final class ProcessCommandRunnerTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
     }
 
+    func testAChildThatIgnoresTerminateIsKilledAfterTheGracePeriod() async throws {
+        let runner = ProcessCommandRunner(killGrace: .milliseconds(200))
+        let started = Date()
+
+        let result = try await runner.run(executable: URL(fileURLWithPath: "/bin/sh"),
+                                          arguments: ["-c", "trap '' TERM; exec sleep 8"],
+                                          searchPath: searchPath, timeout: .milliseconds(300))
+
+        XCTAssertEqual(result.termination, .timedOut)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 4)
+    }
+
     func testTheChildGetsEndOfFileOnStdin() async throws {
         let result = try await runner.run(executable: URL(fileURLWithPath: "/bin/cat"), arguments: [],
                                           searchPath: searchPath, timeout: .seconds(5))

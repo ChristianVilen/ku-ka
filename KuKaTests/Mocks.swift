@@ -239,6 +239,7 @@ class FakeKeystrokeSender: KeystrokeSending {
 }
 
 class FakeActiveRecording: ActiveRecording {
+    var endReason: String?
     private(set) var stopCount = 0
 
     func stop() {
@@ -248,6 +249,8 @@ class FakeActiveRecording: ActiveRecording {
 
 class FakeMeetingAudioCapture: MeetingAudioCapturing {
     var startError: Error?
+    /// Ends the capture with this reason before `start` returns.
+    var endsWhileStarting: String?
     private(set) var recordings: [FakeActiveRecording] = []
     private var interruptHandler: (@MainActor (String) -> Void)?
 
@@ -260,6 +263,10 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
         interruptHandler = onInterrupted
         let recording = FakeActiveRecording()
         recordings.append(recording)
+        if let reason = endsWhileStarting {
+            recording.endReason = reason
+            await onInterrupted(reason)
+        }
         return recording
     }
 

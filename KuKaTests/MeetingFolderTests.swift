@@ -74,6 +74,17 @@ final class MeetingFolderTests: XCTestCase {
         XCTAssertEqual(meeting.stage(), .done)
     }
 
+    func testOnlyOneWriterCanLockAMeetingAtATime() throws {
+        let meeting = try MeetingFolder.create(in: try makeTemporaryDirectory(), startingAt: localDate(2026, 10, 23, 14, 2))
+
+        let first = try XCTUnwrap(meeting.lock())
+        XCTAssertNil(meeting.lock())
+        first.release()
+
+        XCTAssertNotNil(meeting.lock())
+        XCTAssertNil(meeting.stage(), "the lock file does not make a folder a meeting")
+    }
+
     func testClearFailureCanRunTwice() throws {
         let meeting = try MeetingFolder.create(in: try makeTemporaryDirectory(), startingAt: localDate(2026, 10, 23, 14, 2))
         try meeting.write("# Transcript", to: .transcript)

@@ -159,7 +159,40 @@ struct MeetingFolder: Hashable {
         try trash(audioFolder)
     }
 
+    /// Nil when a recorder or processor already holds the folder, in this
+    /// process or another Ku-Ka, or when the folder is gone. The system
+    /// releases the lock when the process ends, so a crash leaves no stale
+    /// lock behind.
+    func lock() -> MeetingLock? {
+        let descriptor = open(url.appendingPathComponent(".lock").path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { return nil }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            close(descriptor)
+            return nil
+        }
+        return MeetingLock(descriptor: descriptor)
+    }
+
     private var audioFolder: URL {
         url.appendingPathComponent("audio", isDirectory: true)
+    }
+}
+
+/// Closing the descriptor releases the `flock`.
+final class MeetingLock {
+    private var descriptor: Int32
+
+    init(descriptor: Int32) {
+        self.descriptor = descriptor
+    }
+
+    func release() {
+        guard descriptor >= 0 else { return }
+        close(descriptor)
+        descriptor = -1
+    }
+
+    deinit {
+        release()
     }
 }

@@ -143,4 +143,8 @@ enum SummaryDocument {
         guard !failures.isEmpty else { return text + "Summary by `\(cli.rawValue)`.\n" }
         return text + "Summary by `\(cli.rawValue)`. Tried first:\n\n" + failures.map { "- \($0)\n" }.joined()
     }
+
+    static func noSpeech(title: String) -> String {
+        "# \(title)\n\nNo speech was detected, so there is no summary. The audio is in the meeting folder.\n"
+    }
 }

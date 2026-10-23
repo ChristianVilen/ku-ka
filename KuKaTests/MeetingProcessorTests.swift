@@ -117,14 +117,55 @@ final class MeetingProcessorTests: XCTestCase {
         XCTAssertEqual(runner.calls.count, 0)
     }
 
-    func testNoSpeechFailsTheTranscriptionAndKeepsTheAudio() async throws {
+    func testNoSpeechEndsTheMeetingAndKeepsTheAudio() async throws {
         let meeting = try makeMeeting()
         transcriber.byFileName = [:]
 
         let outcome = await process(meeting)
 
-        XCTAssertEqual(outcome, .failed(.transcribe, message: "No speech was detected. The audio is still in the meeting folder."))
+        XCTAssertEqual(outcome, .noSpeech)
+        XCTAssertEqual(meeting.stage(), .done)
+        XCTAssertEqual(try meeting.read(.transcript), """
+        # Meeting on 2026-10-23 at 14:02
+
+        Duration: 00:00:00
+
+        "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+
+        No speech was detected.
+
+        """)
+        XCTAssertEqual(try meeting.read(.summary), """
+        # Meeting on 2026-10-23 at 14:02
+
+        No speech was detected, so there is no summary. The audio is in the meeting folder.
+
+        """)
         XCTAssertTrue(audioExists(meeting))
+        XCTAssertEqual(trashed, [])
+        XCTAssertEqual(runner.calls.count, 0)
+    }
+
+    func testAMeetingFolderThatIsGoneEndsWithoutAFailure() async throws {
+        let meeting = try makeMeeting()
+        try FileManager.default.removeItem(at: meeting.url)
+
+        let outcome = await process(meeting)
+
+        XCTAssertEqual(outcome, .gone)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: meeting.url.path))
+    }
+
+    func testAMeetingThatAnotherWriterHoldsIsLeftAlone() async throws {
+        let meeting = try makeMeeting()
+        let otherWriter = try XCTUnwrap(meeting.lock())
+
+        let outcome = await process(meeting)
+
+        XCTAssertEqual(outcome, .busy)
+        XCTAssertEqual(steps, [])
+        XCTAssertEqual(meeting.stage(), .pending(.transcribe))
+        otherWriter.release()
     }
 
     func testASummaryFailureKeepsTheTranscriptAndListsEachCLI() async throws {

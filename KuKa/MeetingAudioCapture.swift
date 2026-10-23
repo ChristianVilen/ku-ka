@@ -8,6 +8,10 @@ protocol MeetingAudioCapturing {
 }
 
 protocol ActiveRecording: AnyObject {
+    /// Set on the main actor just before `onInterrupted` runs. The capture can
+    /// end before `start` returns, while the caller cannot yet match the
+    /// callback to this recording, so the caller checks this afterwards.
+    var endReason: String? { get }
     func stop()
 }
 
@@ -56,11 +60,13 @@ final class ScreenCaptureMeetingAudio: MeetingAudioCapturing {
 enum MeetingCaptureError: LocalizedError {
     case noDisplay
     case screenRecordingDeclined
+    case unsupportedAudioFormat
 
     var errorDescription: String? {
         switch self {
         case .noDisplay: return "No display is available to capture audio from."
         case .screenRecordingDeclined: return "Ku-Ka needs Screen Recording permission to record a meeting."
+        case .unsupportedAudioFormat: return "Ku-Ka cannot convert the audio format of this device."
         }
     }
 }
@@ -81,6 +87,7 @@ extension MeetingTrack {
 final class ScreenCaptureRecording:NSObject, ActiveRecording, SCStreamOutput, SCStreamDelegate {
     let queue = DispatchQueue(label: "ku-ka.meeting-audio")
     var stream: SCStream?
+    private(set) var endReason: String?
     private let onInterrupted: @MainActor (String) -> Void
     private let writers: [MeetingTrack: AudioTrackWriter]
     /// Presentation time of the first buffer of any track. Both outputs use
@@ -125,6 +132,7 @@ final class ScreenCaptureRecording:NSObject, ActiveRecording, SCStreamOutput, SC
         closeFiles()
         Task { @MainActor in
             stopStream()
+            endReason = reason
             onInterrupted(reason)
         }
     }
@@ -161,10 +169,12 @@ final class AudioTrackWriter {
 
     func append(_ sampleBuffer: CMSampleBuffer, timelineStart: CMTime) throws {
         let frames = AVAudioFrameCount(sampleBuffer.numSamples)
-        guard frames > 0,
-              var description = sampleBuffer.formatDescription?.audioStreamBasicDescription,
+        guard frames > 0 else { return }
+        guard var description = sampleBuffer.formatDescription?.audioStreamBasicDescription,
               let inputFormat = AVAudioFormat(streamDescription: &description),
-              let input = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frames) else { return }
+              let input = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frames) else {
+            throw MeetingCaptureError.unsupportedAudioFormat
+        }
         input.frameLength = frames
         let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
             sampleBuffer, at: 0, frameCount: Int32(frames), into: input.mutableAudioBufferList)
@@ -173,14 +183,16 @@ final class AudioTrackWriter {
         if converter?.inputFormat != inputFormat {
             converter = AVAudioConverter(from: inputFormat, to: Self.fileFormat)
         }
-        guard let converter else { return }
+        guard let converter else { throw MeetingCaptureError.unsupportedAudioFormat }
 
         let bufferStart = CMTimeSubtract(sampleBuffer.presentationTimeStamp, timelineStart).seconds
         try writeSilence(frames: AudioTimeline.silenceFrames(
             written: file.framePosition, bufferStart: bufferStart, sampleRate: Self.fileFormat.sampleRate))
 
         let capacity = AVAudioFrameCount((Double(frames) * Self.fileFormat.sampleRate / inputFormat.sampleRate).rounded(.up)) + 1
-        guard let output = AVAudioPCMBuffer(pcmFormat: Self.fileFormat, frameCapacity: capacity) else { return }
+        guard let output = AVAudioPCMBuffer(pcmFormat: Self.fileFormat, frameCapacity: capacity) else {
+            throw MeetingCaptureError.unsupportedAudioFormat
+        }
         var consumed = false
         var conversionError: NSError?
         // .noDataNow instead of .endOfStream keeps the converter's state, so

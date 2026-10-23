@@ -66,6 +66,9 @@ enum Transcript {
         for line in lines {
             text += "**[\(clock(line.start))] \(line.speaker.rawValue):** \(line.text)\n\n"
         }
+        if lines.isEmpty {
+            text += "No speech was detected.\n\n"
+        }
         return String(text.dropLast())
     }
 

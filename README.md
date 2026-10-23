@@ -63,7 +63,7 @@ In the transcript, "Me" is you (the microphone) and "Them" is everyone else (the
 
 Only the transcript text goes to the AI tool. Audio never leaves your Mac. Ku-Ka moves the audio files to the Trash when the transcript is written, so you can still restore them from there.
 
-If a step fails, the meeting folder gets an `error.md` with the reason, and the menu shows **Retry Failed Meeting**. Retry continues from the step that failed. If Ku-Ka quits or crashes during a meeting, it finishes the notes from the saved audio the next time it starts. To give up on a meeting, delete its folder. **Open Meetings Folder** in the menu opens the folder that holds them.
+If nobody spoke, the meeting ends without a summary and keeps its audio, so you can listen to it. If a step fails, the meeting folder gets an `error.md` with the reason, and the menu shows **Retry Failed Meeting**. Retry continues from the step that failed. If Ku-Ka quits or crashes during a meeting, it finishes the notes from the saved audio the next time it starts. To give up on a meeting, delete its folder. **Open Meetings Folder** in the menu opens the folder that holds them.
 
 To keep the notes in another folder, set the path in Terminal:
 

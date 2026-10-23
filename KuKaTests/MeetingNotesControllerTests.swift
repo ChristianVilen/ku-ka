@@ -142,6 +142,17 @@ final class MeetingNotesControllerTests: XCTestCase {
         XCTAssertEqual(notifications.last, "Meeting notes ready: Meeting on 2026-10-23 at 14:02")
     }
 
+    func testACaptureThatEndsWhileStartingIsReportedAndProcessed() async throws {
+        capture.endsWhileStarting = "The microphone stopped."
+
+        await sut.toggleRecording()
+
+        XCTAssertFalse(sut.isRecording)
+        XCTAssertEqual(notifications, ["Recording stopped: The microphone stopped. Ku-Ka will transcribe what it recorded. Start a new recording to capture the rest."])
+        await sut.waitUntilIdle()
+        XCTAssertEqual(notifications.last, "Meeting notes ready: Meeting on 2026-10-23 at 14:02")
+    }
+
     func testCaptureThatCannotStartLeavesNoFolderAndSaysWhy() async {
         capture.startError = TestError(errorDescription: "No display is available to capture audio from.")
 
