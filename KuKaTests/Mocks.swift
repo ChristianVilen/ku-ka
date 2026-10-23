@@ -237,3 +237,18 @@ class FakeKeystrokeSender: KeystrokeSending {
         sendCount += 1
     }
 }
+
+extension XCTestCase {
+    func makeTemporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("KuKaTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+}
+
+func localDate(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int, _ second: Int = 0) -> Date {
+    Calendar.current.date(from: DateComponents(year: year, month: month, day: day,
+                                               hour: hour, minute: minute, second: second))!
+}
