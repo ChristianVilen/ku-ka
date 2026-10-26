@@ -32,7 +32,8 @@ struct MeetingProcessor {
     }
 
     /// `onDownload` runs when the speech model must be downloaded before
-    /// the transcription can start.
+    /// the transcription can start, and `onStep(.transcribe)` runs again
+    /// once it is installed.
     func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
                  onDownload: () -> Void = {}) async -> MeetingOutcome {
         let lock: MeetingLock
@@ -63,7 +64,7 @@ struct MeetingProcessor {
                 do {
                     switch step {
                     case .transcribe:
-                        guard try await transcribe(meeting, onDownload: onDownload) else { return .noSpeech }
+                        guard try await transcribe(meeting, onStep: onStep, onDownload: onDownload) else { return .noSpeech }
                     case .summarize:
                         try await summarize(meeting)
                     }
@@ -85,11 +86,13 @@ struct MeetingProcessor {
 
     /// False when nobody spoke. The meeting is then done, and its audio stays
     /// in the folder.
-    private func transcribe(_ meeting: MeetingFolder, onDownload: () -> Void) async throws -> Bool {
+    private func transcribe(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
+                            onDownload: () -> Void) async throws -> Bool {
         let locale = self.locale()
         if try await transcriber.needsDownload(for: locale) {
             onDownload()
             try await transcriber.download(for: locale)
+            onStep(.transcribe)
         }
         var tracks: [MeetingTrack: TrackTranscript] = [:]
         for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {

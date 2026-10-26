@@ -300,6 +300,21 @@ final class MeetingNotesControllerTests: XCTestCase {
                                        "Open Meetings Folder", ""])
     }
 
+    func testTheProgressItemSaysTranscribingAgainOnceTheSpeechModelIsDownloaded() async throws {
+        let suspended = SuspendedTranscriber()
+        suspended.modelIsMissing = true
+        transcriber = suspended
+        sut = makeController()
+        try leftoverMeeting(at: localDate(2026, 10, 22, 9, 0))
+
+        sut.resumeUnfinished()
+        await waitUntil { suspended.downloads == ["en-US"] && visibleTitles.contains("Transcribing: Meeting on 2026-10-22 at 09:00") }
+
+        XCTAssertEqual(suspended.downloads, ["en-US"])
+        XCTAssertEqual(visibleTitles, ["Meeting Notes", "Start Recording Meeting",
+                                       "Transcribing: Meeting on 2026-10-22 at 09:00", "Open Meetings Folder", ""])
+    }
+
     func testQuittingWhileRecordingClosesTheFilesAndLeavesTheMeetingForTheNextLaunch() async throws {
         await sut.toggleRecording()
 
@@ -342,11 +357,8 @@ final class MeetingNotesControllerTests: XCTestCase {
     }
 }
 
-private struct SuspendedTranscriber: Transcribing {
-    func needsDownload(for locale: Locale) async throws -> Bool { false }
-    func download(for locale: Locale) async throws {}
-
-    func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript {
+private final class SuspendedTranscriber: FakeTranscriber {
+    override func transcribe(_ audio: URL, locale: Locale) async throws -> TrackTranscript {
         try await Task.sleep(for: .seconds(60))
         return TrackTranscript(segments: [], duration: 0)
     }
