@@ -55,11 +55,17 @@ enum Transcript {
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
 
-    static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval) -> String {
+    static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval,
+                         by transcriber: String, after failures: [TranscriberFailure]) -> String {
+        let byline = failures.isEmpty
+            ? "Transcript by \(transcriber)."
+            : "Transcript by \(transcriber). Tried first:\n\n" + failures.map { "- \($0)" }.joined(separator: "\n")
         var text = """
         # \(title)
 
         Duration: \(clock(duration))
+
+        \(byline)
 
         "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
 
