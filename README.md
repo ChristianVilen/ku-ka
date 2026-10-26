@@ -81,7 +81,7 @@ defaults write com.kuka.screenshot meetingLocale de-DE
 
 The tag must match one that Apple's speech recognition supports, for example `en-GB`, `de-DE`, `fr-FR`, `es-ES`, `it-IT`, `pt-BR`, `ja-JP`, `ko-KR`, or `zh-CN`. Finnish is not supported. If the tag is not supported, the transcription fails and `error.md` lists the supported tags. The first meeting in a new language downloads its speech model; the menu shows **Downloading speech model** meanwhile. The summary is written in the language of the transcript.
 
-Recording needs the Screen Recording permission (for the sound your Mac plays) and the Microphone permission. Ku-Ka asks for Microphone the first time you start a recording. Transcription is English only.
+Recording needs the Screen Recording permission (for the sound your Mac plays) and the Microphone permission. Ku-Ka asks for Microphone the first time you start a recording.
 
 ## Requirements
 
