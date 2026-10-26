@@ -177,6 +177,23 @@ final class MeetingProcessorTests: XCTestCase {
         XCTAssertEqual(events, ["Transcribing", "Downloading", "Transcribing", "Summarizing"])
     }
 
+    func testFallbackDiagnosticsStayOnDiskButDoNotEnterTheSummaryPrompt() async throws {
+        let meeting = try makeMeeting()
+        whisper.failure = (.load, MeetingStepError("The model could not load."))
+
+        let outcome = await process(meeting)
+
+        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
+        XCTAssertTrue(try meeting.read(.transcript).contains("Whisper could not load its model: The model could not load."))
+        let prompt = try XCTUnwrap(runner.calls.first?.arguments.last)
+        XCTAssertEqual(prompt.components(separatedBy: "Transcript:\n\n").last, """
+        **[00:00:01] Them:** Let's ship on Friday
+
+        **[00:00:04] Me:** Sounds good
+
+        """)
+    }
+
     func testWhenNoTranscriberCanStartErrorMdListsEachReason() async throws {
         let meeting = try makeMeeting()
         whisper.failure = (.unavailable, MeetingStepError("Whisper does not support eo."))
@@ -204,10 +221,14 @@ final class MeetingProcessorTests: XCTestCase {
 
     func testTheCLIGetsTheTranscriptFromDisk() async throws {
         let meeting = try makeMeeting()
+        try meeting.write("**[00:00:07] Me:** This was saved by an earlier run.", to: .transcript)
 
-        _ = await process(meeting)
+        let outcome = await process(meeting)
 
-        XCTAssertEqual(runner.calls.first?.arguments.last, SummaryPrompt.make(transcript: try meeting.read(.transcript)))
+        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
+        let prompt = try XCTUnwrap(runner.calls.first?.arguments.last)
+        XCTAssertEqual(prompt.components(separatedBy: "Transcript:\n\n").last,
+                       "**[00:00:07] Me:** This was saved by an earlier run.")
     }
 
     func testATranscriptionFailureAfterLoadingWritesTheReasonKeepsTheAudioAndDoesNotFallBack() async throws {
@@ -385,6 +406,25 @@ final class MeetingProcessorTests: XCTestCase {
         XCTAssertEqual(meeting.stage(), .pending(.transcribe))
     }
 
+    func testCancellationDiscardsEvenSuccessfulTrackResultsBeforeWritingDocuments() async throws {
+        for empty in [true, false] {
+            let meeting = try makeMeeting()
+            let transcriber = CancelledReturningTranscriber(empty: empty)
+            let processor = makeProcessor(transcribers: [transcriber, apple])
+            let run = Task { await process(meeting, with: processor) }
+
+            let outcome = await run.value
+
+            XCTAssertEqual(outcome, .cancelled)
+            XCTAssertEqual(meeting.stage(), .pending(.transcribe))
+            XCTAssertTrue(audioExists(meeting))
+            for document in MeetingDocument.allCases {
+                XCTAssertFalse(FileManager.default.fileExists(atPath: meeting.url(for: document).path), document.rawValue)
+            }
+            XCTAssertEqual(apple.loads, [])
+        }
+    }
+
     func testCancellingDuringTheWhisperDownloadNeitherFailsNorFallsBack() async throws {
         let meeting = try makeMeeting()
         let suspended = SuspendedTranscriber(name: "Whisper")
@@ -403,6 +443,21 @@ final class MeetingProcessorTests: XCTestCase {
         XCTAssertEqual(meeting.stage(), .pending(.transcribe))
         XCTAssertEqual(apple.downloads, [])
         XCTAssertEqual(apple.loads, [])
+    }
+}
+
+private final class CancelledReturningTranscriber: FakeTranscriber {
+    let empty: Bool
+
+    init(empty: Bool) {
+        self.empty = empty
+        super.init(name: "Cancelled Whisper")
+    }
+
+    override func transcribe(_ audio: URL) async throws -> TrackTranscript {
+        withUnsafeCurrentTask { $0?.cancel() }
+        return TrackTranscript(segments: empty ? [] : [TranscriptSegment(start: 0, end: 1, text: "Synthetic speech")],
+                               duration: 61)
     }
 }
 

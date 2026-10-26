@@ -32,7 +32,7 @@ final class WhisperKitTranscriberTests: XCTestCase {
         try FileManager.default.contentsOfDirectory(atPath: root.path).sorted()
     }
 
-    private func makeAudioFile(named name: String, seconds: Int) throws -> URL {
+    private func makeAudioFile(named name: String, seconds: Int, sample: Int16 = 0) throws -> URL {
         let url = try makeTemporaryDirectory().appendingPathComponent(name)
         let format = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: false))
         let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: false)
@@ -40,6 +40,8 @@ final class WhisperKitTranscriberTests: XCTestCase {
         if frames > 0 {
             let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
             buffer.frameLength = frames
+            let samples = try XCTUnwrap(buffer.int16ChannelData?[0])
+            samples.initialize(repeating: sample, count: Int(frames))
             try file.write(from: buffer)
         }
         return url
@@ -143,6 +145,20 @@ final class WhisperKitTranscriberTests: XCTestCase {
         otherKuKa.release()
     }
 
+    func testTheModelCacheIsExcludedFromBackupsWhenDownloadedOrLoaded() async throws {
+        try await sut.download(for: english)
+        XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+
+        var folder = try XCTUnwrap(root)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = false
+        try folder.setResourceValues(values)
+
+        _ = try await sut.load(for: english)
+
+        XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+    }
+
     func testTheSessionTranscribesInWhispersLanguageCode() async throws {
         try await sut.download(for: english)
         client.segments = [TranscriptionSegment(start: 0.5, end: 1.25, text: " Hyvää huomenta"),
@@ -179,6 +195,44 @@ final class WhisperKitTranscriberTests: XCTestCase {
 
         XCTAssertEqual(transcript, TrackTranscript(segments: [], duration: 0))
         XCTAssertEqual(client.transcriptions, [])
+    }
+
+    func testAWhisperChunkFailureFailsTheWholeTrackInsteadOfReturningPartialSpeech() async throws {
+        let model = try await ChunkResultWhisperKit(WhisperKitConfig(verbose: false, load: false, download: false))
+        model.failChunks = true
+        let audio = try makeAudioFile(named: "them.caf", seconds: 61)
+        let adapter = WhisperKitLibrary.LoadedModel(whisperKit: model)
+
+        let message = await errorMessage { _ = try await adapter.transcribe(audio, languageCode: "en") }
+
+        XCTAssertEqual(message, "Chunk failed.")
+    }
+
+    func testSuccessfulWhisperChunksKeepTheirAbsoluteTrackTimes() async throws {
+        let model = try await ChunkResultWhisperKit(WhisperKitConfig(verbose: false, load: false, download: false))
+        let audio = try makeAudioFile(named: "them.caf", seconds: 60, sample: 3_277)
+        let adapter = WhisperKitLibrary.LoadedModel(whisperKit: model)
+
+        let segments = try await adapter.transcribe(audio, languageCode: "en")
+
+        XCTAssertEqual(segments.map(\.start), [0.5, 30.5])
+        XCTAssertEqual(segments.map(\.end), [1.5, 31.5])
+        XCTAssertEqual(segments.map(\.text), ["Synthetic speech", "Synthetic speech"])
+    }
+}
+
+private final class ChunkResultWhisperKit: WhisperKit {
+    var failChunks = false
+
+    override func transcribeWithOptions(audioArrays: [[Float]], decodeOptionsArray: [DecodingOptions?] = [nil],
+                                         seekOffsets: [Int]? = nil, callback: TranscriptionCallback? = nil)
+        async -> [Result<[TranscriptionResult], Error>] {
+        audioArrays.enumerated().map { index, _ in
+            if failChunks && index == 1 { return .failure(MeetingStepError("Chunk failed.")) }
+            return .success([TranscriptionResult(text: "Synthetic speech", segments: [
+                TranscriptionSegment(start: 0.5, end: 1.5, text: "Synthetic speech")
+            ], language: "en", timings: TranscriptionTimings())])
+        }
     }
 }
 

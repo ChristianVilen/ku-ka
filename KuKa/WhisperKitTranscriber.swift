@@ -27,6 +27,7 @@ struct WhisperKitTranscriber: Transcribing {
     @concurrent
     func download(for locale: Locale) async throws {
         try FileManager.default.createDirectory(at: modelsFolder, withIntermediateDirectories: true)
+        excludeModelsFromBackup()
         let lock: FileLock
         do {
             lock = try FileLock.acquire(at: modelsFolder.appendingPathComponent(".lock"))
@@ -44,7 +45,19 @@ struct WhisperKitTranscriber: Transcribing {
     @concurrent
     func load(for locale: Locale) async throws -> any TranscriptionSession {
         let languageCode = try Self.supportedLanguageCode(for: locale)
+        excludeModelsFromBackup()
         return Session(model: try await client.load(model: Self.model, from: installed), languageCode: languageCode)
+    }
+
+    private func excludeModelsFromBackup() {
+        var folder = modelsFolder
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        do {
+            try folder.setResourceValues(values)
+        } catch {
+            NSLog("Ku-Ka: could not exclude the Whisper model cache from backups: \(error)")
+        }
     }
 
     private static func supportedLanguageCode(for locale: Locale) throws -> String {
@@ -88,8 +101,9 @@ struct WhisperKitTranscriber: Transcribing {
             guard file.length > 0 else { return TrackTranscript(segments: [], duration: 0) }
             let duration = Double(file.length) / file.processingFormat.sampleRate
             do {
-                return WhisperKitTranscriber.trackTranscript(try await model.transcribe(audio, languageCode: languageCode),
-                                                             duration: duration)
+                let segments = try await model.transcribe(audio, languageCode: languageCode)
+                try Task.checkCancellation()
+                return WhisperKitTranscriber.trackTranscript(segments, duration: duration)
             } catch {
                 if Task.isCancelled { throw error }
                 throw MeetingStepError("Whisper could not transcribe \(audio.lastPathComponent): \(error.localizedDescription)")
@@ -152,14 +166,34 @@ struct WhisperKitLibrary: WhisperKitClient {
                         firstTokenLogProbThreshold: nil, concurrentWorkerCount: 4, chunkingStrategy: .vad)
     }
 
-    private struct LoadedModel: WhisperModel {
+    struct LoadedModel: WhisperModel {
         let whisperKit: WhisperKit
 
         @concurrent
         func transcribe(_ audio: URL, languageCode: String) async throws -> [TranscriptionSegment] {
-            try await whisperKit.transcribe(audioPath: audio.path,
-                                            decodeOptions: WhisperKitLibrary.decodingOptions(languageCode: languageCode))
-                .flatMap(\.segments)
+            try Task.checkCancellation()
+            let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audio.path)
+            let options = WhisperKitLibrary.decodingOptions(languageCode: languageCode)
+            let window = whisperKit.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
+            if samples.count <= window {
+                let results = try await whisperKit.transcribe(audioArray: samples, decodeOptions: options)
+                try Task.checkCancellation()
+                return results.flatMap(\.segments)
+            }
+
+            let chunker = VADAudioChunker(vad: whisperKit.voiceActivityDetector)
+            let chunks = try await chunker.chunkAll(audioArray: samples, maxChunkLength: window, decodeOptions: options)
+            var chunkOptions = options
+            chunkOptions.clipTimestamps = []
+            let results = await whisperKit.transcribeWithOptions(
+                audioArrays: chunks.map(\.audioSamples),
+                decodeOptionsArray: Array(repeating: chunkOptions, count: chunks.count),
+                seekOffsets: chunks.map(\.seekOffsetIndex))
+            try Task.checkCancellation()
+            // WhisperKit 1.1.1's high-level VAD path drops failed chunks. Check
+            // every result before its offset helper can discard any failures.
+            for result in results { _ = try result.get() }
+            return chunker.updateSeekOffsetsForResults(chunkedResults: results, audioChunks: chunks).flatMap(\.segments)
         }
     }
 }

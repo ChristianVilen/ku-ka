@@ -86,9 +86,11 @@ struct MeetingProcessor {
     private func transcribe(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
                             onDownload: () -> Void) async throws -> Bool {
         let (session, transcriber, failures) = try await startTranscriber(onStep: onStep, onDownload: onDownload)
+        try Task.checkCancellation()
         var tracks: [MeetingTrack: TrackTranscript] = [:]
         for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {
             tracks[track] = try await session.transcribe(meeting.audioURL(track))
+            try Task.checkCancellation()
         }
         let lines = Transcript.merge(tracks)
         let duration = tracks.values.map(\.duration).max() ?? 0
@@ -108,16 +110,22 @@ struct MeetingProcessor {
         let locale = self.locale()
         var failures: [TranscriberFailure] = []
         for transcriber in transcribers {
+            try Task.checkCancellation()
             var stage = TranscriberFailure.Stage.unavailable
             do {
-                if try await transcriber.needsDownload(for: locale) {
+                let needsDownload = try await transcriber.needsDownload(for: locale)
+                try Task.checkCancellation()
+                if needsDownload {
                     stage = .download
                     onDownload()
                     defer { onStep(.transcribe) }
                     try await transcriber.download(for: locale)
                 }
+                try Task.checkCancellation()
                 stage = .load
-                return (try await transcriber.load(for: locale), transcriber.name, failures)
+                let session = try await transcriber.load(for: locale)
+                try Task.checkCancellation()
+                return (session, transcriber.name, failures)
             } catch {
                 // URLSession reports a cancelled download as URLError(.cancelled),
                 // not CancellationError, so the task is asked instead.
@@ -138,7 +146,7 @@ struct MeetingProcessor {
         } catch {
             NSLog("Ku-Ka: could not move meeting audio to the Trash: \(error)")
         }
-        let transcript = try meeting.read(.transcript)
+        let transcript = Transcript.contentForSummary(try meeting.read(.transcript))
         switch await summarizer.summarize(transcript: transcript) {
         case .written(let markdown, let cli, let earlier):
             try meeting.write(SummaryDocument.markdown(title: meeting.title, body: markdown, by: cli, after: earlier),

@@ -54,6 +54,12 @@ enum Transcript {
     /// "okay" or "yes please" often shares its words with the other side.
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
+    private static let speakerLegend = "\"Me\" is the person who recorded the meeting. \"Them\" is everyone else on the call."
+
+    static func contentForSummary(_ markdown: String) -> String {
+        guard let boundary = markdown.range(of: speakerLegend + "\n\n") else { return markdown }
+        return String(markdown[boundary.upperBound...])
+    }
 
     static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval,
                          by transcriber: String, after failures: [TranscriberFailure]) -> String {
@@ -67,7 +73,7 @@ enum Transcript {
 
         \(byline)
 
-        "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+        \(speakerLegend)
 
 
         """
