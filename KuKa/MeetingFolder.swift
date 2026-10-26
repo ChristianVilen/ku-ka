@@ -163,22 +163,38 @@ struct MeetingFolder: Hashable {
         try trash(audioFolder)
     }
 
-    /// Nil when a recorder or processor already holds the folder, in this
-    /// process or another Ku-Ka, or when the folder is gone. The system
-    /// releases the lock when the process ends, so a crash leaves no stale
-    /// lock behind.
-    func lock() -> MeetingLock? {
+    /// Throws `MeetingLockError.held` when a recorder or processor already
+    /// holds the folder, in this process or another Ku-Ka, and `.failed`
+    /// when the folder cannot be locked at all: it is gone, read-only, or
+    /// on a file system without `flock`. The system releases the lock when
+    /// the process ends, so a crash leaves no stale lock behind.
+    func lock() throws -> MeetingLock {
         let descriptor = open(url.appendingPathComponent(".lock").path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
-        guard descriptor >= 0 else { return nil }
+        guard descriptor >= 0 else { throw MeetingLockError.failed(self, reason: String(cString: strerror(errno))) }
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let code = errno
             close(descriptor)
-            return nil
+            throw code == EWOULDBLOCK ? MeetingLockError.held(self) : .failed(self, reason: String(cString: strerror(code)))
         }
         return MeetingLock(descriptor: descriptor)
     }
 
     private var audioFolder: URL {
         url.appendingPathComponent("audio", isDirectory: true)
+    }
+}
+
+enum MeetingLockError: LocalizedError, Equatable {
+    case held(MeetingFolder)
+    case failed(MeetingFolder, reason: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .held(let meeting):
+            return "Another Ku-Ka is using the meeting folder \(meeting.url.path)."
+        case .failed(let meeting, let reason):
+            return "Ku-Ka could not lock the meeting folder \(meeting.url.path): \(reason)."
+        }
     }
 }
 

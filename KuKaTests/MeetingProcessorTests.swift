@@ -186,6 +186,17 @@ final class MeetingProcessorTests: XCTestCase {
         otherWriter.release()
     }
 
+    func testAMeetingFolderThatCannotBeLockedFailsWithTheReason() async throws {
+        let meeting = try makeMeeting()
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: meeting.url.path)
+        addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: meeting.url.path) }
+
+        let outcome = await process(meeting)
+
+        XCTAssertEqual(outcome, .failed(.transcribe, message: "Ku-Ka could not lock the meeting folder \(meeting.url.path): Permission denied."))
+        XCTAssertEqual(steps, [])
+    }
+
     func testASummaryFailureKeepsTheTranscriptAndListsEachCLI() async throws {
         let meeting = try makeMeeting()
         runner.results["agy"] = .success(CommandResult(termination: .exited(1), stdout: "", stderr: "authentication failed"))

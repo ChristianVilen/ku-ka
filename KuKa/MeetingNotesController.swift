@@ -132,7 +132,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         do {
             let meeting = try MeetingFolder.create(in: root(), startingAt: startedAt)
             do {
-                guard let lock = meeting.lock() else { throw CocoaError(.fileLocking) }
+                let lock = try meeting.lock()
                 let handle = try await capture.start(into: meeting) { [weak self] reason in
                     self?.handleInterruption(of: meeting, reason: reason)
                 }

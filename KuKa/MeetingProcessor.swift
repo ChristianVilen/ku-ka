@@ -35,7 +35,18 @@ struct MeetingProcessor {
     /// the transcription can start.
     func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
                  onDownload: () -> Void = {}) async -> MeetingOutcome {
-        guard let lock = meeting.lock() else { return meeting.stage() == nil ? .gone : .busy }
+        let lock: MeetingLock
+        do {
+            lock = try meeting.lock()
+        } catch MeetingLockError.held {
+            return .busy
+        } catch {
+            switch meeting.stage() {
+            case nil: return .gone
+            case .done?: return .done(summary: meeting.url(for: .summary))
+            case .pending(let step)?, .failed(let step)?: return fail(meeting, at: step, message: error.localizedDescription)
+            }
+        }
         defer { lock.release() }
         while true {
             if Task.isCancelled { return .cancelled }
