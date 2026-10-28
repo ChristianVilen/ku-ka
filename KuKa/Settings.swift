@@ -63,6 +63,28 @@ final class Settings {
         return Locale(identifier: tag)
     }
 
+    /// The meeting pill's top-right corner in global NS coordinates, stored as [x, y]. Nil
+    /// means the default corner.
+    var meetingControlsTopRight: CGPoint? {
+        get {
+            guard let xy = defaults.array(forKey: "meetingControlsTopRight") as? [Double], xy.count == 2 else { return nil }
+            return CGPoint(x: xy[0], y: xy[1])
+        }
+        set {
+            if let newValue {
+                defaults.set([Double(newValue.x), Double(newValue.y)], forKey: "meetingControlsTopRight")
+            } else {
+                defaults.removeObject(forKey: "meetingControlsTopRight")
+            }
+        }
+    }
+
+    /// The live transcript drawer's height in points.
+    var meetingTranscriptHeight: Double {
+        get { defaults.object(forKey: "meetingTranscriptHeight") as? Double ?? Double(MeetingPanelPlacement.defaultDrawerHeight) }
+        set { defaults.set(newValue, forKey: "meetingTranscriptHeight") }
+    }
+
     var didShowScreenshotShortcutSetup: Bool {
         get { defaults.bool(forKey: "didShowScreenshotShortcutSetup") }
         set { defaults.set(newValue, forKey: "didShowScreenshotShortcutSetup") }

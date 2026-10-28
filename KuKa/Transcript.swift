@@ -21,7 +21,8 @@ enum Transcript {
     static func merge(_ tracks: [MeetingTrack: TrackTranscript], joinGap: TimeInterval = 2) -> [TranscriptLine] {
         let them = tracks[.system]?.segments ?? []
         let me = (tracks[.microphone]?.segments ?? []).filter { mic in !them.contains { isEcho(mic, of: $0) } }
-        let spoken = (them.map { (speaker: Speaker.them, segment: $0) } + me.map { (speaker: Speaker.me, segment: $0) })
+        let spoken = [(MeetingTrack.system, them), (.microphone, me)]
+            .flatMap { track, segments in segments.map { (speaker: track.speaker, segment: $0) } }
             .filter { !$0.segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             // sorted(by:) is stable, so Them, listed first, stays first on an equal start.
             .sorted { $0.segment.start < $1.segment.start }

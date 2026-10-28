@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import KuKa
 
 // MARK: - Mock FileManager
@@ -255,12 +256,24 @@ class FakeActiveRecording: ActiveRecording {
     var endReason: String?
     var levels = RecordingAudioLevels.silent
     private(set) var stopCount = 0
+    /// Every clock the controller handed over, in order.
+    private(set) var appliedClocks: [RecordingClock] = []
+    /// Real feeds: a test offers audio to them, and `stop()` finishes them.
+    let feeds = Dictionary(uniqueKeysWithValues: MeetingTrack.allCases.map { ($0, LiveAudioFeed()) })
+
+    var writtenAudio: [MeetingTrack: AsyncStream<WrittenAudio>] { feeds.mapValues(\.audio) }
 
     @MainActor
     func audioLevels() -> RecordingAudioLevels { levels }
 
+    @MainActor
+    func apply(_ clock: RecordingClock) {
+        appliedClocks.append(clock)
+    }
+
     func stop() {
         stopCount += 1
+        for feed in feeds.values { feed.finish() }
     }
 }
 
@@ -269,11 +282,14 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
     /// Ends the capture with this reason before `start` returns.
     var endsWhileStarting: String?
     private(set) var recordings: [FakeActiveRecording] = []
+    /// The clock of each start, in order.
+    private(set) var clocks: [RecordingClock] = []
     private var interruptHandler: (@MainActor (String) -> Void)?
 
     @MainActor
-    func start(into meeting: MeetingFolder,
+    func start(into meeting: MeetingFolder, clock: RecordingClock,
                onInterrupted: @escaping @MainActor (String) -> Void) async throws -> ActiveRecording {
+        clocks.append(clock)
         if let startError { throw startError }
         for track in MeetingTrack.allCases {
             FileManager.default.createFile(atPath: meeting.audioURL(track).path, contents: Data())
@@ -291,6 +307,29 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
     @MainActor
     func interrupt(reason: String) {
         interruptHandler?(reason)
+    }
+}
+
+/// Hands out one update stream per start, which the test sends on.
+class FakeLiveTranscriber: LiveTranscribing {
+    private(set) var starts: [(locale: String, audio: [MeetingTrack: AsyncStream<WrittenAudio>])] = []
+    private var continuation: AsyncStream<LiveUpdate>.Continuation?
+    private let terminated = OSAllocatedUnfairLock(initialState: 0)
+
+    /// Update streams that ended because their reader went away.
+    var terminations: Int { terminated.withLock { $0 } }
+
+    func updates(locale: Locale, audio: [MeetingTrack: AsyncStream<WrittenAudio>]) -> AsyncStream<LiveUpdate> {
+        starts.append((locale.identifier(.bcp47), audio))
+        let (updates, continuation) = AsyncStream.makeStream(of: LiveUpdate.self)
+        continuation.onTermination = { [terminated] _ in terminated.withLock { $0 += 1 } }
+        self.continuation = continuation
+        return updates
+    }
+
+    /// Sends on the latest start's stream.
+    func send(_ update: LiveUpdate) {
+        continuation?.yield(update)
     }
 }
 

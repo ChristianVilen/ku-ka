@@ -175,18 +175,34 @@ final class StatusMenuTests: XCTestCase {
     // MARK: - Icon
 
     func testIconDiffersWhenKeepAwakeIsActive() {
-        let plain = sut.icon(keepAwakeActive: false, recording: false, warning: nil)
-        let badged = sut.icon(keepAwakeActive: true, recording: false, warning: nil)
+        let plain = sut.icon(keepAwakeActive: false, recording: nil, warning: nil)
+        let badged = sut.icon(keepAwakeActive: true, recording: nil, warning: nil)
         XCTAssertNotEqual(plain.tiffRepresentation, badged.tiffRepresentation)
     }
 
     func testRecordingAddsItsOwnDotNextToTheOthers() {
-        let plain = sut.icon(keepAwakeActive: false, recording: false, warning: nil)
-        let recording = sut.icon(keepAwakeActive: false, recording: true, warning: nil)
-        let others = sut.icon(keepAwakeActive: true, recording: false, warning: .shortcutsUnavailable)
-        let all = sut.icon(keepAwakeActive: true, recording: true, warning: .shortcutsUnavailable)
+        let plain = sut.icon(keepAwakeActive: false, recording: nil, warning: nil)
+        let recording = sut.icon(keepAwakeActive: false, recording: .recording, warning: nil)
+        let others = sut.icon(keepAwakeActive: true, recording: nil, warning: .shortcutsUnavailable)
+        let all = sut.icon(keepAwakeActive: true, recording: .recording, warning: .shortcutsUnavailable)
 
         XCTAssertNotEqual(plain.tiffRepresentation, recording.tiffRepresentation)
         XCTAssertNotEqual(others.tiffRepresentation, all.tiffRepresentation)
+    }
+
+    func testThePausedMarkDiffersFromTheRecordingMarkAndFromNoMark() {
+        let plain = sut.icon(keepAwakeActive: false, recording: nil, warning: nil)
+        let recording = sut.icon(keepAwakeActive: false, recording: .recording, warning: nil)
+        let paused = sut.icon(keepAwakeActive: false, recording: .paused, warning: nil)
+
+        XCTAssertNotEqual(paused.tiffRepresentation, recording.tiffRepresentation)
+        XCTAssertNotEqual(paused.tiffRepresentation, plain.tiffRepresentation)
+    }
+
+    func testAMeetingThatIsStartingShowsTheIdleIcon() {
+        let starting = sut.icon(keepAwakeActive: false, recording: RecorderPhase.starting.recordingMark, warning: nil)
+        let idle = sut.icon(keepAwakeActive: false, recording: RecorderPhase.idle.recordingMark, warning: nil)
+
+        XCTAssertEqual(starting.tiffRepresentation, idle.tiffRepresentation)
     }
 }

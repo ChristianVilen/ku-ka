@@ -18,7 +18,7 @@ A lightweight macOS menu bar app that replaces the default `Shift+Command+4` scr
 - Keep Awake — stop the Mac from sleeping while a long task (such as an AI coding agent) runs, with a menu-bar toggle and timed sessions
 - Window tiling — hotkeys to snap the active window to the left half, right half, or full screen of its display
 - Clipboard history — `Shift+Command+C` opens a searchable list of what you've copied, text and images, and pastes the item you choose back into the app you were using
-- Meeting notes. Record a call from the menu bar, and Ku-Ka writes a transcript and a summary as Markdown files. Transcription runs on your Mac.
+- Meeting notes. Record a call from the menu bar, and Ku-Ka writes a transcript and a summary as Markdown files. Transcription runs on your Mac. A floating panel lets you pause and stop the recording and shows a live draft of the transcript.
 - Runs as a menu bar agent (no Dock icon)
 
 ## Keep Awake
@@ -55,9 +55,19 @@ The whole feature can be turned on and off with the **Clipboard History** checkb
 
 ## Meeting Notes
 
-When a call starts, open the Ku-Ka menu and choose **Start Recording Meeting**. Ku-Ka records your microphone and the sound your Mac plays, so any call app works. While Ku-Ka records, its menu bar icon shows a red record mark (a red dot with a white centre) in its top-right corner, and a stop button appears next to it. When the call ends, click the stop button or choose **Stop Recording Meeting**. If Start cannot record, for example because a permission is missing, an alert says why.
+When a call starts, open the Ku-Ka menu and choose **Start Recording Meeting**. Ku-Ka records your microphone and the sound your Mac plays, so any call app works. If Start cannot record, for example because a permission is missing, an alert says why.
 
-While recording, open the menu to check the **Microphone** and **Mac audio** meters below the timer. Each meter shows the sound level on that track. An empty meter can mean silence or that no audio is arriving. A reading clears after half a second without new audio. The meters update only while the menu is open.
+While Ku-Ka records, a small panel floats near the top-right corner of the screen. It shows the recorded time and has a pause button, a stop button, and a button that opens the live transcript. A click on the panel does not take the keyboard away from your call app. To move the panel, drag it. Ku-Ka remembers where you put it, and **Restore Default Position** in the menu puts it back. **Hide panel** in the header of the live transcript hides it while the recording goes on, and **Show Meeting Controls** in the menu brings it back. The menu bar icon also shows a red dot in its top-right corner, with a white centre while Ku-Ka records and two white bars while the recording is paused.
+
+When the call ends, click the stop button in the panel or choose **Stop Recording Meeting**. The panel says "Recording saved" for a few seconds. If the recording stops by itself, for example because a display went away, the panel says why and stays until you close it.
+
+To leave part of a call out of the notes, click the pause button or choose **Pause Recording**. Ku-Ka saves no audio until you click **Resume** or choose **Resume Recording**. The timer stands still while the recording is paused. The macOS microphone indicator stays on during a pause, because Ku-Ka keeps the capture running so that Resume always works. In the transcript, each pause becomes 3 seconds of silence. So a time in `transcript.md` is 3 seconds later than the timer showed for each earlier pause.
+
+To read along, click the transcript button. A drawer opens with a live transcript that shows "Me", "Them", and the recorded time. It is a rough draft. Ku-Ka never saves it, and it is gone when you stop. The full transcript that Ku-Ka writes after you stop replaces it. Other people can see the panel when you share your screen, so the drawer starts closed in every meeting. If the draft is 4 seconds or more behind the call, the drawer says by how much. If you scroll back, the drawer stops following new text, and **Return to live** shows how many new rows are waiting.
+
+The live transcript uses Apple's speech recognition, and only for a language whose Apple speech model is already on your Mac. Ku-Ka never downloads a model for it. On a new Mac only the English models are installed, so the default, US English, works. Another language that Apple supports works after its model is on your Mac, for example after Ku-Ka used Apple's speech recognition for a meeting in that language. Finnish and other languages that Apple does not support get no live transcript, and the drawer says so. Ku-Ka still records both sides and writes the full transcript after you stop.
+
+While recording, open the menu to check the **Microphone** and **Mac audio** meters below the timer. Each meter shows the sound level on that track. An empty meter can mean silence, that no audio is arriving, or that the recording is paused. A reading clears after half a second without new audio. The meters update only while the menu is open.
 
 Ku-Ka then transcribes the call on your Mac with Whisper (the `large-v3-v20240930_turbo` model, through WhisperKit) and asks an AI command-line tool for a summary. It tries Antigravity (`agy`) first and Claude Code (`claude`) if that fails. Install at least one of them in `/opt/homebrew/bin`, `/usr/local/bin`, or `~/.local/bin`, and log in to it once in Terminal. A notification tells you when the notes are ready; click it to open the summary. Ku-Ka asks for notification permission the first time you start a recording. Each meeting gets its own folder, for example `~/Meetings/2026-10-23_14-02/`, with `transcript.md` and `summary.md`.
 
@@ -192,7 +202,8 @@ The folder is created automatically if it doesn't exist.
 - **Clipboard History** — Turn clipboard recording and the `Shift+Command+C` hotkey on or off (remembered across restarts)
 - **Thumbnail Duration** — Choose how long the floating thumbnail stays visible: 3 seconds, 5 seconds, 15 seconds, or Forever (until dismissed)
 - **Keep Awake** — Keep the Mac from sleeping for a preset time (30 minutes, 1, 2, or 4 hours, or until turned off), with a "Keep display awake" checkbox
-- **Start Recording Meeting** and **Stop Recording Meeting** start and stop a meeting recording. While Ku-Ka records, a line above them shows the elapsed time. While Ku-Ka makes notes, a line shows the step and how many meetings wait.
+- **Start Recording Meeting** and **Stop Recording Meeting** start and stop a meeting recording. While Ku-Ka records, a line above them shows the recorded time, and "Paused" while the recording is paused. While Ku-Ka makes notes, a line shows the step and how many meetings wait.
+- **Pause Recording** or **Resume Recording**, **Show Meeting Controls**, and **Restore Default Position** appear while a meeting records or is paused.
 - **Retry Failed Meeting** appears when a meeting's transcription or summary failed.
 - **Open Meetings Folder** opens the folder that holds the meeting notes.
 - **Quit Ku-Ka** — Exit the app
@@ -246,6 +257,9 @@ KuKa/
 - Some windows can't be tiled — apps that don't let their windows be moved or resized through the Accessibility API, and Ku-Ka's own windows. The hotkey then does nothing; there is no error message.
 - Meeting Notes transcribes one language per meeting, set with `meetingLocale` (US English by default), and it labels speakers only as "Me" and "Them".
 - On speakers, a repeated line of fewer than 3 words can stay in the transcript as yours.
+- The live transcript works only for a language whose Apple speech model is already on your Mac. There is none for Finnish.
+- The macOS microphone indicator stays on while a meeting recording is paused.
+- Other people can see the meeting panel when you share your screen. macOS has no supported way to keep a window out of a screen share.
 - A meeting recording is tied to a display. If that display goes away (for example, the external monitor of a closed laptop), the recording stops, Ku-Ka says so, and it makes notes from what it recorded.
 - While `agy` is not logged in, it waits about 60 seconds before it fails, so the summary comes later. The summary's last lines say why `agy` was skipped.
 - `agy` has no option that turns its tools off. Ku-Ka runs it with `--sandbox` and tells it not to use tools or follow instructions in the transcript, but only your own `agy` configuration (for example a pre-tool hook) can block its tools. `claude` runs with every tool turned off.
@@ -272,9 +286,9 @@ Tests cover:
 - Tiling layout math and the maximize/restore toggle, including apps that snap window sizes
 - Screen-picking and windows-per-screen rules, plus the tiling controller's saved-frame handling
 - Shortcut registration, feature toggles, action delivery, conflict detection, partial failure recovery, wake renewal, stale callback rejection, and cleanup
-- Meeting notes: the stage rule and folder rules on a real temporary folder, the transcript merge and echo rule, the transcriber fallback from Whisper to Apple, the Whisper model install, language codes, and silence filter against a fake WhisperKit, the summary fallback from `agy` to `claude`, child processes with real executables, recovery and retry from each step, and the recording controller with a fake capture
+- Meeting notes: the stage rule and folder rules on a real temporary folder, the transcript merge and echo rule, the transcriber fallback from Whisper to Apple, the Whisper model install, language codes, and silence filter against a fake WhisperKit, the summary fallback from `agy` to `claude`, child processes with real executables, recovery and retry from each step, the recording controller with a fake capture, Pause and Resume on synthetic audio, the live transcript model, and the meeting controls panel
 
-Unit tests never download or load the Whisper model. `RealMeetingAudioTests` runs the real model on your own meeting audio, and it is skipped unless you set its environment variables. `AGENTS.md` describes how to run it.
+Unit tests never download or load the Whisper model. `RealMeetingAudioTests` runs the real model on your own meeting audio, and it is skipped unless you set its environment variables. `RealLiveTranscriptTests` runs Apple's installed live model on audio you choose in the same way. `AGENTS.md` describes how to run them.
 
 ### Test-Mode Guard
 

@@ -10,6 +10,13 @@ enum MeetingTrack: CaseIterable, Hashable {
         case .system: return "them.caf"
         }
     }
+
+    var speaker: Speaker {
+        switch self {
+        case .microphone: return .me
+        case .system: return .them
+        }
+    }
 }
 
 enum Speaker: String {
