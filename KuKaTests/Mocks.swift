@@ -386,6 +386,39 @@ class FakeTranscriber: Transcribing {
     }
 }
 
+/// `label` returns `result`. The default result keeps every transcript as it was before room labels.
+class FakeRoomLabeller: RoomLabelling {
+    var result: RoomLabels = .notDiarized
+    var modelIsMissing = false
+    /// `download` throws it after it starts.
+    var downloadError: Error?
+    /// `label` cancels the calling task before it returns, as a quit during labelling does.
+    var cancelsItsTask = false
+    /// Runs when `download` ends, so a test can see what happened before and after it.
+    var onDownloadEnd: (() -> Void)?
+    /// Runs at the start of `label`, so a test can see what happened before it.
+    var onLabel: (() -> Void)?
+    /// "download", or "label" and the audio file name.
+    private(set) var calls: [String] = []
+
+    var needsDownload: Bool { modelIsMissing }
+
+    func download(onStart: @MainActor () -> Void) async throws {
+        calls.append("download")
+        await onStart()
+        defer { onDownloadEnd?() }
+        if let downloadError { throw downloadError }
+        modelIsMissing = false
+    }
+
+    func label(_ microphone: URL) async -> RoomLabels {
+        onLabel?()
+        calls.append("label \(microphone.lastPathComponent)")
+        if cancelsItsTask { withUnsafeCurrentTask { $0?.cancel() } }
+        return result
+    }
+}
+
 class FakeCommandRunner: CommandRunning {
     var results: [String: Result<CommandResult, Error>] = [:]
     private(set) var calls: [(executable: URL, arguments: [String], input: String?, searchPath: [String])] = []

@@ -140,7 +140,8 @@ struct LiveTranscript: Equatable {
         var spoken = finals
         for (track, tail) in tails where tail.isSettled { spoken[track, default: []].append(contentsOf: tail.phrases) }
         // merge reads only the segments, so the duration is a placeholder.
-        finalLines = Transcript.merge(spoken.mapValues { TrackTranscript(segments: $0, duration: 0) }, joinGap: nil)
+        finalLines = Transcript.merge(spoken.mapValues { TrackTranscript(segments: $0, duration: 0) },
+                                      rooms: .notDiarized, joinGap: nil)
     }
 
     /// Rows in recorded time through `clock`, with one row per pause of `clock`. Each unsettled

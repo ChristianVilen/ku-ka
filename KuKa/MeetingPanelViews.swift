@@ -60,7 +60,7 @@ extension MeetingControlsPanel {
         static let buttonPressed = dynamic(light: NSColor.black.withAlphaComponent(0.16),
                                            dark: NSColor.white.withAlphaComponent(0.21))
 
-        static func speaker(_ speaker: Speaker) -> NSColor { speaker == .me ? me : them }
+        static func speaker(_ speaker: Speaker) -> NSColor { speaker.track == .microphone ? me : them }
 
         private static func dynamic(light: NSColor, dark: NSColor) -> NSColor {
             NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
@@ -305,7 +305,7 @@ final class TranscriptSpeechCell: NSTableCellView {
     override var isFlipped: Bool { true }
 
     func configure(speaker: Speaker, at time: TimeInterval, text: String, isFinal: Bool, isContinuation: Bool) {
-        speakerLabel.stringValue = speaker.rawValue
+        speakerLabel.stringValue = speaker.label
         speakerLabel.textColor = MeetingControlsPanel.Colors.speaker(speaker)
         timeLabel.stringValue = MeetingNotesController.formatElapsed(time)
         speakerLabel.isHidden = isContinuation

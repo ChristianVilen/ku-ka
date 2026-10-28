@@ -19,9 +19,27 @@ enum MeetingTrack: CaseIterable, Hashable {
     }
 }
 
-enum Speaker: String {
-    case me = "Me"
-    case them = "Them"
+/// Only `Transcript.merge` makes `.room`. In one transcript the room numbers run 1...N in the
+/// order of each voice's first line, and the microphone lines are all `.me` or all `.room`.
+enum Speaker: Hashable, Sendable {
+    case me
+    case them
+    case room(Int)
+
+    var label: String {
+        switch self {
+        case .me: return "Me"
+        case .them: return "Them"
+        case .room(let number): return "Room \(number)"
+        }
+    }
+
+    var track: MeetingTrack {
+        switch self {
+        case .me, .room: return .microphone
+        case .them: return .system
+        }
+    }
 }
 
 enum MeetingDocument: String, CaseIterable {
@@ -45,6 +63,19 @@ enum MeetingStep: Equatable {
         switch self {
         case .transcribe: return "Transcription Failed"
         case .summarize: return "Summary Failed"
+        }
+    }
+}
+
+/// A model that the transcribe step downloads before its first use.
+enum MeetingModel: Equatable {
+    case speech
+    case speaker
+
+    var downloadTitle: String {
+        switch self {
+        case .speech: return "Downloading speech model"
+        case .speaker: return "Downloading speaker model"
         }
     }
 }
@@ -164,6 +195,28 @@ struct MeetingFolder: Hashable {
         guard FileManager.default.fileExists(atPath: failure.path) else { return }
         try FileManager.default.removeItem(at: failure)
     }
+
+    /// True while the room labeller loads its model and diarizes. Left behind, it means that an
+    /// earlier attempt stopped there, for example in a crash. `stage()` never reads it.
+    var roomLabelsStarted: Bool {
+        FileManager.default.fileExists(atPath: roomLabelsMarker.path)
+    }
+
+    func markRoomLabelsStarted() throws {
+        try Data(Self.thisProcess.utf8).write(to: roomLabelsMarker, options: .atomic)
+    }
+
+    /// Removes only a marker that this process wrote, so a quit keeps the marker that a crash left.
+    func clearRoomLabelsStarted() throws {
+        guard (try? Data(contentsOf: roomLabelsMarker)) == Data(Self.thisProcess.utf8) else { return }
+        try FileManager.default.removeItem(at: roomLabelsMarker)
+    }
+
+    private var roomLabelsMarker: URL {
+        url.appendingPathComponent(".room-labels-started")
+    }
+
+    private static let thisProcess = UUID().uuidString
 
     func discardAudio(trash: (URL) throws -> Void) throws {
         guard FileManager.default.fileExists(atPath: audioFolder.path) else { return }

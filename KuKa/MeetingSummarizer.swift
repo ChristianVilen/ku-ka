@@ -123,11 +123,14 @@ struct Summarizer {
 enum SummaryPrompt {
     static func make(transcript: String) -> String {
         """
-        You are writing meeting notes from the transcript below. "Me" is the microphone of the Mac \
-        that recorded the meeting. It hears the person who recorded the meeting and anyone in the \
-        same room, so "Me" can be several people. "Them" is everyone else on the call. The transcript \
-        does not tell apart the people under one label. A "Me" line can sometimes repeat a "Them" line \
-        because of echo.
+        You are writing meeting notes from the transcript below. Each line starts with a time and a speaker \
+        label. "Me" and "Room" labels come from the microphone of the Mac that recorded the meeting. That \
+        microphone hears the person who recorded the meeting and anyone in the same room. "Me" is the whole \
+        microphone, so "Me" can be several people. "Room 1", "Room 2", and so on are different voices on that \
+        microphone. Software told the voices apart by their sound, so two people can share one Room label, and \
+        one person can have two Room labels. No label tells which person recorded the meeting. A transcript has \
+        "Me" or Room labels, not both. "Them" is everyone else on the call, and the transcript does not tell \
+        those people apart. A "Me" or "Room" line can sometimes repeat a "Them" line because of echo.
 
         Write Markdown with exactly these sections:
         ## Summary
@@ -136,8 +139,8 @@ enum SummaryPrompt {
         A bullet list. Write "None recorded." if there are none.
         ## Action items
         A checklist in the form "- [ ] Owner: task". The owner is a person's name only when the \
-        transcript says who will do the task. Otherwise the owner is "Unclear". Never use "Me" or \
-        "Them" as an owner.
+        transcript says who will do the task. Otherwise the owner is "Unclear". Never use a speaker \
+        label, such as "Me", "Them", or "Room 1", as an owner.
         ## Key points
         A bullet list.
 

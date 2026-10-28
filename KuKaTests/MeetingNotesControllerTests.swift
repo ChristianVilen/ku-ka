@@ -16,6 +16,7 @@ final class MeetingNotesControllerTests: XCTestCase {
     private var meetingLocale = Locale(identifier: "en-US")
     private var liveTranscriber: FakeLiveTranscriber!
     private var transcriber: Transcribing!
+    private var roomLabeller: FakeRoomLabeller!
     private var runner: FakeCommandRunner!
     private var clock = localDate(2026, 10, 23, 14, 2)
     private var hostTime = HostTime(seconds: 1_000)
@@ -40,6 +41,7 @@ final class MeetingNotesControllerTests: XCTestCase {
         fakeTranscriber.byFileName["them.caf"] = .success(TrackTranscript(
             segments: [TranscriptSegment(start: 1, end: 3, text: "Let's ship on Friday")], duration: 60))
         transcriber = fakeTranscriber
+        roomLabeller = FakeRoomLabeller()
         runner = FakeCommandRunner()
         runner.results["agy"] = .success(CommandResult(termination: .exited(0), stdout: "## Summary\nShip Friday.", stderr: ""))
         notifier = FakeNotifier()
@@ -65,6 +67,7 @@ final class MeetingNotesControllerTests: XCTestCase {
             liveTranscriber: liveTranscriber,
             processor: MeetingProcessor(
                 transcribers: [transcriber],
+                roomLabeller: roomLabeller,
                 summarizer: Summarizer(runner: runner, home: URL(fileURLWithPath: "/Users/test"), isExecutable: { _ in true }),
                 trash: { try FileManager.default.removeItem(at: $0) },
                 now: { localDate(2026, 10, 23, 15, 0) }),
@@ -934,6 +937,45 @@ final class MeetingNotesControllerTests: XCTestCase {
         XCTAssertEqual(notifications, [])
     }
 
+    func testQuittingWhileLabellingRoomsRemovesTheMarkerSoTheNextRunLabelsTheMeeting() async throws {
+        try XCTUnwrap(transcriber as? FakeTranscriber).byFileName["me.caf"] = .success(TrackTranscript(
+            segments: [TranscriptSegment(start: 4, end: 5, text: "Sounds good")], duration: 59))
+        roomLabeller = WaitingRoomLabeller()
+        sut = makeController()
+        let meeting = try leftoverMeeting(at: localDate(2026, 10, 22, 9, 0))
+        FileManager.default.createFile(atPath: meeting.audioURL(.microphone).path, contents: Data())
+        sut.resumeUnfinished()
+        await waitUntil { [unowned self] in roomLabeller.calls == ["label me.caf"] }
+        XCTAssertTrue(meeting.roomLabelsStarted)
+
+        sut.shutDown()
+
+        XCTAssertFalse(meeting.roomLabelsStarted, "the process ends before the processor removes the marker")
+        await sut.waitUntilIdle()
+        roomLabeller = FakeRoomLabeller()
+        sut = makeController()
+        sut.resumeUnfinished()
+        await sut.waitUntilIdle()
+        XCTAssertEqual(roomLabeller.calls, ["label me.caf"])
+        XCTAssertFalse(try meeting.read(.transcript).contains("There are no room labels"))
+    }
+
+    func testQuittingWhileTranscribingKeepsTheMarkerThatACrashLeft() async throws {
+        transcriber = SuspendedTranscriber()
+        sut = makeController()
+        let meeting = try leftoverMeeting(at: localDate(2026, 10, 22, 9, 0))
+        FileManager.default.createFile(atPath: meeting.url.appendingPathComponent(".room-labels-started").path,
+                                       contents: Data())
+        sut.resumeUnfinished()
+        await waitUntil { visibleTitles.count > 4 }
+        XCTAssertNotNil(item(titled: "Transcribing: Meeting on 2026-10-22 at 09:00"))
+
+        sut.shutDown()
+        await sut.waitUntilIdle()
+
+        XCTAssertTrue(meeting.roomLabelsStarted, "the next run must still skip room labels")
+    }
+
     func testOpenMeetingsFolderCreatesAndOpensTheConfiguredFolder() throws {
         let open = try XCTUnwrap(item(titled: "Open Meetings Folder"))
 
@@ -954,5 +996,14 @@ private final class SuspendedTranscriber: FakeTranscriber {
     override func transcribe(_ audio: URL) async throws -> TrackTranscript {
         try await Task.sleep(for: .seconds(60))
         return TrackTranscript(segments: [], duration: 0)
+    }
+}
+
+/// `label` waits until its task is cancelled.
+private final class WaitingRoomLabeller: FakeRoomLabeller {
+    override func label(_ microphone: URL) async -> RoomLabels {
+        let result = await super.label(microphone)
+        try? await Task.sleep(for: .seconds(60))
+        return result
     }
 }

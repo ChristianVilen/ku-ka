@@ -115,7 +115,7 @@ final class RealLiveTranscriptTests: XCTestCase {
         if let script { report += turnReport(rows: rows, script: script) }
         report += rows.compactMap { row in
             guard case .speech(let speaker, let text, _) = row.content else { return nil }
-            return String(format: "[%6.1f] %@: %@", row.at, speaker.rawValue, text)
+            return String(format: "[%6.1f] %@: %@", row.at, speaker.label, text)
         }
         print(report.joined(separator: "\n"))
     }
@@ -203,7 +203,7 @@ final class RealLiveTranscriptTests: XCTestCase {
             let text: String
 
             func isOnTrack(of speaker: Speaker) -> Bool {
-                (track ?? self.speaker) == speaker.rawValue.lowercased()
+                (track ?? self.speaker) == speaker.label.lowercased()
             }
         }
         let utterances: [Utterance]

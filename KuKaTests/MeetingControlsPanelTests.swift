@@ -56,6 +56,7 @@ final class MeetingControlsPanelTests: XCTestCase {
             liveTranscriber: liveTranscriber,
             processor: MeetingProcessor(
                 transcribers: [FakeTranscriber()],
+                roomLabeller: FakeRoomLabeller(),
                 summarizer: Summarizer(runner: FakeCommandRunner(), home: URL(fileURLWithPath: "/Users/test"),
                                        isExecutable: { _ in true }),
                 trash: { try FileManager.default.removeItem(at: $0) },

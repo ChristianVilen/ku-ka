@@ -14,17 +14,22 @@ enum MeetingOutcome: Equatable {
 @MainActor
 struct MeetingProcessor {
     private let transcribers: [Transcribing]
+    private let roomLabeller: RoomLabelling
     private let summarizer: Summarizer
     private let locale: () -> Locale
     private let trash: (URL) throws -> Void
     private let now: () -> Date
 
+    /// `roomLabeller` has no default value, so a test that forgets the fake does not compile
+    /// instead of downloading a model.
     init(transcribers: [Transcribing] = [WhisperKitTranscriber(), SpeechTranscriberAdapter()],
+         roomLabeller: RoomLabelling,
          summarizer: Summarizer = Summarizer(),
          locale: @escaping () -> Locale = { Locale(identifier: "en-US") },
          trash: @escaping (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
          now: @escaping () -> Date = { Date() }) {
         self.transcribers = transcribers
+        self.roomLabeller = roomLabeller
         self.summarizer = summarizer
         self.locale = locale
         self.trash = trash
@@ -32,7 +37,7 @@ struct MeetingProcessor {
     }
 
     func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
-                 onDownload: () -> Void = {}) async -> MeetingOutcome {
+                 onDownload: (MeetingModel) -> Void = { _ in }) async -> MeetingOutcome {
         let lock: FileLock
         do {
             lock = try meeting.lock()
@@ -84,15 +89,11 @@ struct MeetingProcessor {
     /// False when nobody spoke. The meeting is then done, and its audio stays
     /// in the folder.
     private func transcribe(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
-                            onDownload: () -> Void) async throws -> Bool {
-        let (session, transcriber, failures) = try await startTranscriber(onStep: onStep, onDownload: onDownload)
+                            onDownload: (MeetingModel) -> Void) async throws -> Bool {
+        let (tracks, transcriber, failures) = try await transcribeTracks(meeting, onStep: onStep, onDownload: onDownload)
+        let rooms = try await labelRooms(meeting, tracks: tracks, onStep: onStep, onDownload: onDownload)
         try Task.checkCancellation()
-        var tracks: [MeetingTrack: TrackTranscript] = [:]
-        for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {
-            tracks[track] = try await session.transcribe(meeting.audioURL(track))
-            try Task.checkCancellation()
-        }
-        let lines = Transcript.merge(tracks)
+        let lines = Transcript.merge(tracks, rooms: rooms)
         let duration = tracks.values.map(\.duration).max() ?? 0
         if lines.isEmpty {
             // Summary first: it marks the meeting done, so a crash before the
@@ -101,11 +102,50 @@ struct MeetingProcessor {
             try meeting.write(SummaryDocument.noSpeech(title: meeting.title), to: .summary)
         }
         try meeting.write(Transcript.markdown(lines, title: meeting.title, duration: duration,
-                                              by: transcriber, after: failures), to: .transcript)
+                                              by: transcriber, after: failures, rooms: rooms), to: .transcript)
         return !lines.isEmpty
     }
 
-    private func startTranscriber(onStep: (MeetingStep) -> Void, onDownload: () -> Void) async throws
+    /// The session lives only in here, so the Whisper model is released
+    /// before the room labeller loads its own model.
+    private func transcribeTracks(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void, onDownload: (MeetingModel) -> Void)
+        async throws -> (tracks: [MeetingTrack: TrackTranscript], transcriber: String, failures: [TranscriberFailure]) {
+        let (session, transcriber, failures) = try await startTranscriber(onStep: onStep, onDownload: onDownload)
+        try Task.checkCancellation()
+        var tracks: [MeetingTrack: TrackTranscript] = [:]
+        for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {
+            tracks[track] = try await session.transcribe(meeting.audioURL(track))
+            try Task.checkCancellation()
+        }
+        return (tracks, transcriber, failures)
+    }
+
+    /// Without a microphone segment that the transcript keeps, nothing is downloaded or diarized.
+    /// Throws only when the meeting folder cannot be written.
+    private func labelRooms(_ meeting: MeetingFolder, tracks: [MeetingTrack: TrackTranscript],
+                            onStep: (MeetingStep) -> Void, onDownload: (MeetingModel) -> Void) async throws -> RoomLabels {
+        guard !Transcript.microphoneSpeech(tracks).isEmpty else { return .notDiarized }
+        guard !meeting.roomLabelsStarted else { return .failed(.earlierAttemptStopped) }
+        guard (tracks[.microphone]?.duration ?? 0) <= RoomLabelFailure.longestTrack else { return .failed(.tooLong) }
+        if roomLabeller.needsDownload {
+            var started = false
+            do {
+                defer { if started { onStep(.transcribe) } }
+                try await roomLabeller.download {
+                    started = true
+                    onDownload(.speaker)
+                }
+            } catch {
+                return .failed(.download(error.localizedDescription))
+            }
+        }
+        try meeting.markRoomLabelsStarted()
+        let rooms = await roomLabeller.label(meeting.audioURL(.microphone))
+        try meeting.clearRoomLabelsStarted()
+        return rooms
+    }
+
+    private func startTranscriber(onStep: (MeetingStep) -> Void, onDownload: (MeetingModel) -> Void) async throws
         -> (session: any TranscriptionSession, transcriber: String, failures: [TranscriberFailure]) {
         let locale = self.locale()
         var failures: [TranscriberFailure] = []
@@ -117,7 +157,7 @@ struct MeetingProcessor {
                 try Task.checkCancellation()
                 if needsDownload {
                     stage = .download
-                    onDownload()
+                    onDownload(.speech)
                     defer { onStep(.transcribe) }
                     try await transcriber.download(for: locale)
                 }

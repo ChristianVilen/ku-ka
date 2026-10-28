@@ -179,7 +179,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
          locale: @escaping () -> Locale = { Locale(identifier: "en-US") },
          capture: MeetingAudioCapturing = ScreenCaptureMeetingAudio(),
          liveTranscriber: LiveTranscribing = AppleLiveTranscriber(),
-         processor: MeetingProcessor = MeetingProcessor(),
+         processor: MeetingProcessor,
          notifier: Notifying = SystemNotifier.shared,
          alertStartFailure: @escaping @MainActor (String, Bool) -> Bool = MeetingNotesController.showStartFailureAlert,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
@@ -271,6 +271,13 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         }
         recorder = .idle(notice: nil)
         processingTask?.cancel()
+        // The process ends before the processor resumes to remove the marker, and the next run
+        // would read the marker as a crash during labelling.
+        do {
+            try current?.meeting.clearRoomLabelsStarted()
+        } catch {
+            NSLog("Ku-Ka: could not remove the room-labels marker: \(error)")
+        }
     }
 
     func waitUntilIdle() async {
@@ -469,8 +476,8 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
             let outcome = await processor.process(meeting, onStep: { [weak self] step in
                 self?.current = (meeting, step.progressVerb)
                 self?.updateMenu()
-            }, onDownload: { [weak self] in
-                self?.current = (meeting, "Downloading speech model")
+            }, onDownload: { [weak self] model in
+                self?.current = (meeting, model.downloadTitle)
                 self?.updateMenu()
             })
             current = nil

@@ -23,7 +23,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         permissions: permissions,
         root: { [settings] in settings.meetingsFolder },
         locale: { [settings] in settings.meetingLocale },
-        processor: MeetingProcessor(locale: { [settings] in settings.meetingLocale })
+        processor: MeetingProcessor(roomLabeller: SpeakerKitRoomLabeller(),
+                                    locale: { [settings] in settings.meetingLocale })
     )
     private lazy var meetingControlsPanel = MeetingControlsPanel(controller: meetingNotes, settings: settings)
     private lazy var statusMenu = StatusMenu(settings: settings, sections: [keepAwake, meetingNotes])

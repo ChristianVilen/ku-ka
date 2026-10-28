@@ -85,6 +85,25 @@ final class MeetingFolderTests: XCTestCase {
         XCTAssertNil(meeting.stage(), "the lock file does not make a folder a meeting")
     }
 
+    func testTheRoomLabelsMarkerDoesNotChangeTheStage() throws {
+        let meeting = try MeetingFolder.create(in: try makeTemporaryDirectory(), startingAt: localDate(2026, 10, 23, 14, 2))
+
+        try meeting.markRoomLabelsStarted()
+        XCTAssertTrue(meeting.roomLabelsStarted)
+        XCTAssertNil(meeting.stage(), "the marker does not make a folder a meeting")
+
+        FileManager.default.createFile(atPath: meeting.audioURL(.microphone).path, contents: Data())
+        XCTAssertEqual(meeting.stage(), .pending(.transcribe))
+
+        try meeting.write("# Transcript", to: .transcript)
+        XCTAssertEqual(meeting.stage(), .pending(.summarize))
+
+        try meeting.clearRoomLabelsStarted()
+        try meeting.clearRoomLabelsStarted()
+        XCTAssertFalse(meeting.roomLabelsStarted)
+        XCTAssertEqual(meeting.stage(), .pending(.summarize))
+    }
+
     func testClearFailureCanRunTwice() throws {
         let meeting = try MeetingFolder.create(in: try makeTemporaryDirectory(), startingAt: localDate(2026, 10, 23, 14, 2))
         try meeting.write("# Transcript", to: .transcript)
