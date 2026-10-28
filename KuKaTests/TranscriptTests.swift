@@ -100,13 +100,36 @@ final class TranscriptTests: XCTestCase {
 
         Transcript by Whisper large-v3-v20240930_turbo.
 
-        "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
 
         **[00:00:01] Them:** Let's ship on Friday
 
         **[01:00:04] Me:** Sounds good
 
         """)
+    }
+
+    func testSummaryContentStartsAfterTheCurrentOrTheOlderSpeakerLegend() {
+        let legends: [(name: String, text: String)] = [
+            ("current", "\"Me\" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. \"Them\" is everyone else on the call."),
+            ("older", "\"Me\" is the person who recorded the meeting. \"Them\" is everyone else on the call."),
+        ]
+        for (name, legend) in legends {
+            let markdown = """
+            # Meeting on 2026-10-23 at 14:02
+
+            Duration: 00:01:00
+
+            Transcript by Whisper large-v3-v20240930_turbo.
+
+            \(legend)
+
+            **[00:00:01] Them:** Let's ship on Friday
+
+            """
+
+            XCTAssertEqual(Transcript.contentForSummary(markdown), "**[00:00:01] Them:** Let's ship on Friday\n", name)
+        }
     }
 
     func testMarkdownListsWhatFailedBeforeTheTranscriberThatWroteIt() {
@@ -125,7 +148,7 @@ final class TranscriptTests: XCTestCase {
 
         - Whisper large-v3-v20240930_turbo could not download its model: The Internet connection appears to be offline.
 
-        "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
 
         **[00:00:01] Them:** Let's ship on Friday
 

@@ -72,7 +72,7 @@ final class MeetingProcessorTests: XCTestCase {
 
         Transcript by Whisper.
 
-        "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
 
         **[00:00:01] Them:** Let's ship on Friday
 
@@ -152,7 +152,7 @@ final class MeetingProcessorTests: XCTestCase {
 
             \(row.bullet)
 
-            "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+            "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
 
             **[00:00:01] Them:** Let's ship on Friday
 
@@ -272,7 +272,7 @@ final class MeetingProcessorTests: XCTestCase {
 
         Transcript by Whisper.
 
-        "Me" is the person who recorded the meeting. "Them" is everyone else on the call.
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
 
         No speech was detected.
 

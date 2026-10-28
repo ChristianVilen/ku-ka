@@ -310,6 +310,15 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
     }
 }
 
+extension LiveResult {
+    /// A result whose text is one phrase over the whole range.
+    init(track: MeetingTrack, start: TimeInterval, end: TimeInterval, text: String, isFinal: Bool,
+         finalizedThrough: TimeInterval) {
+        self.init(track: track, start: start, end: end, phrases: [TranscriptSegment(start: start, end: end, text: text)],
+                  isFinal: isFinal, finalizedThrough: finalizedThrough)
+    }
+}
+
 /// Hands out one update stream per start, which the test sends on.
 class FakeLiveTranscriber: LiveTranscribing {
     private(set) var starts: [(locale: String, audio: [MeetingTrack: AsyncStream<WrittenAudio>])] = []

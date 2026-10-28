@@ -21,6 +21,10 @@ final class LiveTranscriptTests: XCTestCase {
         .result(LiveResult(track: track, start: start, end: end, text: text, isFinal: true, finalizedThrough: end))
     }
 
+    private func phrase(_ start: TimeInterval, _ end: TimeInterval, _ text: String) -> TranscriptSegment {
+        TranscriptSegment(start: start, end: end, text: text)
+    }
+
     private func speech(_ speaker: Speaker, _ at: TimeInterval, _ text: String, isFinal: Bool = true) -> LiveRow {
         LiveRow(at: at, content: .speech(speaker, text: text, isFinal: isFinal))
     }
@@ -83,15 +87,39 @@ final class LiveTranscriptTests: XCTestCase {
         XCTAssertEqual(rows, [speech(.them, 10, "We should move the launch to Friday")])
     }
 
-    func testFinalRowsComeInStartOrderThemFirstOnATieAndJoinWithinTwoSeconds() {
+    func testFinalRowsComeInStartOrderWithThemFirstOnATie() {
         apply(final(.microphone, 4, 5, "Sounds good."),
               final(.microphone, 8, 9, "Right on time."),
-              final(.system, 1, 2, "Hello"),
-              final(.system, 2.5, 3, "everyone."),
+              final(.system, 1, 3, "Hello everyone."),
               final(.system, 8, 10, "Starting now, team."))
 
         XCTAssertEqual(rows, [speech(.them, 1, "Hello everyone."), speech(.me, 4, "Sounds good."),
                               speech(.them, 8, "Starting now, team."), speech(.me, 8, "Right on time.")])
+    }
+
+    /// Several people in one room share the microphone track, so a short gap can be a new speaker.
+    func testFinalsOfOneTrackHalfASecondApartShowAsTwoRows() {
+        apply(final(.microphone, 1, 3, "I think we should wait."), final(.microphone, 3.5, 5, "No, let's ship it."))
+
+        XCTAssertEqual(rows, [speech(.me, 1, "I think we should wait."), speech(.me, 3.5, "No, let's ship it.")])
+    }
+
+    func testEachPhraseOfAFinalResultIsARowAtTheTimeItStarted() {
+        apply(.result(LiveResult(track: .microphone, start: 1, end: 6,
+                                 phrases: [phrase(1.2, 3, "I think we should wait."), phrase(3.4, 5.8, "No, let's ship it.")],
+                                 isFinal: true, finalizedThrough: 6)))
+
+        XCTAssertEqual(rows, [speech(.me, 1.2, "I think we should wait."), speech(.me, 3.4, "No, let's ship it.")])
+    }
+
+    func testAVolatileResultShowsARowPerPhraseAndTheNextOneReplacesThemAll() {
+        apply(.result(LiveResult(track: .microphone, start: 1, end: 5,
+                                 phrases: [phrase(1, 2.5, "I think we wait."), phrase(3, 4.8, "No, we")],
+                                 isFinal: false, finalizedThrough: 0)))
+        XCTAssertEqual(rows, [speech(.me, 1, "I think we wait.", isFinal: false), speech(.me, 3, "No, we", isFinal: false)])
+
+        apply(volatile(.microphone, 1, 6, "I think we wait, now we ship"))
+        XCTAssertEqual(rows, [speech(.me, 1, "I think we wait, now we ship", isFinal: false)])
     }
 
     func testAVolatileTailTakesItsPlaceByStartAmongTheFinalRows() {
@@ -112,6 +140,16 @@ final class LiveTranscriptTests: XCTestCase {
         live.settleTails()
 
         XCTAssertEqual(rows, [speech(.them, 50, "So the plan is"), speech(.me, 55, "Right")])
+    }
+
+    func testSettleTailsShowsEveryPhraseOfATailAsFinal() {
+        apply(.result(LiveResult(track: .microphone, start: 50, end: 56,
+                                 phrases: [phrase(50, 52, "That works for me."), phrase(53, 55.5, "Not for me")],
+                                 isFinal: false, finalizedThrough: 0)))
+
+        live.settleTails()
+
+        XCTAssertEqual(rows, [speech(.me, 50, "That works for me."), speech(.me, 53, "Not for me")])
     }
 
     /// At Pause the analyzer can still hold audio from before the pause, so results for the

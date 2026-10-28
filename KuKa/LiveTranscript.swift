@@ -5,7 +5,8 @@ struct LiveResult: Equatable, Sendable {
     let track: MeetingTrack
     let start: TimeInterval
     let end: TimeInterval
-    let text: String
+    /// The text in the order spoken, each phrase with its own times.
+    let phrases: [TranscriptSegment]
     let isFinal: Bool
     /// The analyzer will not change results before this file position
     /// (`resultsFinalizationTime`).
@@ -49,9 +50,11 @@ struct LivePreview: Equatable {
 /// The live text of one meeting. In memory only, never on disk. A pure value: tests feed it
 /// literal results.
 ///
-/// Per track: the final segments and at most one volatile tail, in file positions. The final
-/// rows come from `Transcript.merge`, so their order, join, and echo rule are the ones in
-/// `transcript.md`. Volatile tails are not echo-checked: they change, and the final decides.
+/// Per track: the final phrases and at most one volatile tail, in file positions. The final
+/// rows come from `Transcript.merge`, so their order and echo rule are the ones in
+/// `transcript.md`. Unlike `transcript.md`, rows never join: one microphone track can carry
+/// several people in one room, and a short gap can be a new speaker. Volatile tails are not
+/// echo-checked: they change, and the final decides.
 struct LiveTranscript: Equatable {
     enum Status: Equatable {
         case preparing
@@ -72,8 +75,11 @@ struct LiveTranscript: Equatable {
     /// Recorded seconds between the newest result's end and the moment it arrived.
     private var lag: TimeInterval = 0
 
+    /// The newest volatile result of a track, replaced as a whole by the next one.
     private struct Tail: Equatable {
-        let segment: TranscriptSegment
+        let start: TimeInterval
+        let end: TimeInterval
+        let phrases: [TranscriptSegment]
         /// Shows as final. A later result for the same audio still replaces it.
         var isSettled = false
     }
@@ -99,19 +105,21 @@ struct LiveTranscript: Equatable {
 
     private mutating func add(_ result: LiveResult) {
         let track = result.track
-        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let segment = TranscriptSegment(start: result.start, end: result.end, text: text)
+        let phrases = result.phrases.compactMap { phrase -> TranscriptSegment? in
+            let text = phrase.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : TranscriptSegment(start: phrase.start, end: phrase.end, text: text)
+        }
         let oldTail = tails[track]
         if result.isFinal {
-            if let oldTail, oldTail.segment.start < result.end { tails[track] = nil }
+            if let oldTail, oldTail.start < result.end { tails[track] = nil }
             // The real final of a tail kept below replaces it.
             finals[track, default: []].removeAll { $0.start < result.end && result.start < $0.end }
-            finals[track, default: []].append(segment)
+            finals[track, default: []].append(contentsOf: phrases)
         } else {
-            tails[track] = text.isEmpty ? nil : Tail(segment: segment)
+            tails[track] = phrases.isEmpty ? nil : Tail(start: result.start, end: result.end, phrases: phrases)
             // Apple may never send a final for a volatile text that stopped changing. Keep it.
-            if let oldTail, oldTail.segment.end <= result.finalizedThrough {
-                finals[track, default: []].append(oldTail.segment)
+            if let oldTail, oldTail.end <= result.finalizedThrough {
+                finals[track, default: []].append(contentsOf: oldTail.phrases)
             } else if oldTail?.isSettled != true {
                 // An unsettled tail is not among the final lines, so they did not change.
                 return
@@ -130,9 +138,9 @@ struct LiveTranscript: Equatable {
 
     private mutating func mergeFinalLines() {
         var spoken = finals
-        for (track, tail) in tails where tail.isSettled { spoken[track, default: []].append(tail.segment) }
+        for (track, tail) in tails where tail.isSettled { spoken[track, default: []].append(contentsOf: tail.phrases) }
         // merge reads only the segments, so the duration is a placeholder.
-        finalLines = Transcript.merge(spoken.mapValues { TrackTranscript(segments: $0, duration: 0) })
+        finalLines = Transcript.merge(spoken.mapValues { TrackTranscript(segments: $0, duration: 0) }, joinGap: nil)
     }
 
     /// Rows in recorded time through `clock`, with one row per pause of `clock`. Each unsettled
@@ -142,9 +150,11 @@ struct LiveTranscript: Equatable {
                                             content: .speech($0.speaker, text: $0.text, isFinal: true)) }
         for track in [MeetingTrack.system, .microphone] {
             guard let tail = tails[track], !tail.isSettled else { continue }
-            let row = LiveRow(at: clock.recordedTime(atFilePosition: tail.segment.start),
-                              content: .speech(track.speaker, text: tail.segment.text, isFinal: false))
-            rows.insert(row, at: rows.firstIndex { $0.at > row.at } ?? rows.endIndex)
+            for phrase in tail.phrases {
+                let row = LiveRow(at: clock.recordedTime(atFilePosition: phrase.start),
+                                  content: .speech(track.speaker, text: phrase.text, isFinal: false))
+                rows.insert(row, at: rows.firstIndex { $0.at > row.at } ?? rows.endIndex)
+            }
         }
         // Before speech at the same time: speech in the resume gap maps to the pause's time.
         for pause in clock.pauses {

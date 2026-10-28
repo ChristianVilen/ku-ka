@@ -18,7 +18,9 @@ struct TranscriptLine: Equatable {
 }
 
 enum Transcript {
-    static func merge(_ tracks: [MeetingTrack: TrackTranscript], joinGap: TimeInterval = 2) -> [TranscriptLine] {
+    /// Joins a speaker's segments while the gap between them is under `joinGap`. With nil, each
+    /// segment is a line of its own.
+    static func merge(_ tracks: [MeetingTrack: TrackTranscript], joinGap: TimeInterval? = 2) -> [TranscriptLine] {
         let them = tracks[.system]?.segments ?? []
         let me = (tracks[.microphone]?.segments ?? []).filter { mic in !them.contains { isEcho(mic, of: $0) } }
         let spoken = [(MeetingTrack.system, them), (.microphone, me)]
@@ -31,7 +33,7 @@ enum Transcript {
         var lastEnd = -TimeInterval.infinity
         for (speaker, segment) in spoken {
             let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let last = lines.last, last.speaker == speaker, segment.start - lastEnd < joinGap {
+            if let joinGap, let last = lines.last, last.speaker == speaker, segment.start - lastEnd < joinGap {
                 lines[lines.count - 1] = TranscriptLine(speaker: speaker, start: last.start, text: last.text + " " + text)
             } else {
                 lines.append(TranscriptLine(speaker: speaker, start: segment.start, text: text))
@@ -55,11 +57,18 @@ enum Transcript {
     /// "okay" or "yes please" often shares its words with the other side.
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
-    private static let speakerLegend = "\"Me\" is the person who recorded the meeting. \"Them\" is everyone else on the call."
+    /// `markdown` writes the first legend. The older ones stay so that `contentForSummary` still finds
+    /// the content of a transcript that waits for its summary across an app update.
+    private static let speakerLegends = [
+        "\"Me\" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. \"Them\" is everyone else on the call.",
+        "\"Me\" is the person who recorded the meeting. \"Them\" is everyone else on the call.",
+    ]
 
     static func contentForSummary(_ markdown: String) -> String {
-        guard let boundary = markdown.range(of: speakerLegend + "\n\n") else { return markdown }
-        return String(markdown[boundary.upperBound...])
+        for legend in speakerLegends {
+            if let boundary = markdown.range(of: legend + "\n\n") { return String(markdown[boundary.upperBound...]) }
+        }
+        return markdown
     }
 
     static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval,
@@ -74,7 +83,7 @@ enum Transcript {
 
         \(byline)
 
-        \(speakerLegend)
+        \(speakerLegends[0])
 
 
         """

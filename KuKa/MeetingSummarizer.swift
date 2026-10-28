@@ -123,9 +123,11 @@ struct Summarizer {
 enum SummaryPrompt {
     static func make(transcript: String) -> String {
         """
-        You are writing meeting notes from the transcript below. "Me" is the person who \
-        recorded the meeting. "Them" is everyone else on the call, and the transcript does \
-        not tell those people apart. A "Me" line can sometimes repeat a "Them" line because of echo.
+        You are writing meeting notes from the transcript below. "Me" is the microphone of the Mac \
+        that recorded the meeting. It hears the person who recorded the meeting and anyone in the \
+        same room, so "Me" can be several people. "Them" is everyone else on the call. The transcript \
+        does not tell apart the people under one label. A "Me" line can sometimes repeat a "Them" line \
+        because of echo.
 
         Write Markdown with exactly these sections:
         ## Summary
@@ -133,7 +135,9 @@ enum SummaryPrompt {
         ## Decisions
         A bullet list. Write "None recorded." if there are none.
         ## Action items
-        A checklist in the form "- [ ] Owner: task". The owner is Me, Them, or a name said in the meeting.
+        A checklist in the form "- [ ] Owner: task". The owner is a person's name only when the \
+        transcript says who will do the task. Otherwise the owner is "Unclear". Never use "Me" or \
+        "Them" as an owner.
         ## Key points
         A bullet list.
 

@@ -9,10 +9,10 @@ protocol LiveTranscribing {
     func updates(locale: Locale, audio: [MeetingTrack: AsyncStream<WrittenAudio>]) -> AsyncStream<LiveUpdate>
 }
 
-/// Apple `SpeechTranscriber` with the progressive preset, one `SpeechAnalyzer` per track. Runs
-/// only for a locale whose model is already installed, and never downloads or reserves one.
-/// When the audio streams finish, the last text is finalized; when the reader goes away, the
-/// analyzers are cancelled.
+/// Apple `SpeechTranscriber` with the time-indexed progressive preset, one `SpeechAnalyzer` per
+/// track. Runs only for a locale whose model is already installed, and never downloads or
+/// reserves one. When the audio streams finish, the last text is finalized; when the reader goes
+/// away, the analyzers are cancelled.
 struct AppleLiveTranscriber: LiveTranscribing {
     func updates(locale: Locale, audio: [MeetingTrack: AsyncStream<WrittenAudio>]) -> AsyncStream<LiveUpdate> {
         // Unbounded: speech limits the rate to a few results a second, and a dropped final
@@ -97,7 +97,8 @@ private struct TrackAnalysis {
     init(track: MeetingTrack, audio: AsyncStream<WrittenAudio>, locale: Locale) {
         self.track = track
         self.audio = audio
-        transcriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        // The time-indexed preset gives each word its audio time, so a result splits into phrases.
+        transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
         analyzer = SpeechAnalyzer(modules: [transcriber])
     }
 
@@ -132,7 +133,41 @@ extension LiveResult {
     /// "Equivalent to resultsFinalizationTime >= range.end".
     init(track: MeetingTrack, range: CMTimeRange, finalizationTime: CMTime, text: AttributedString) {
         self.init(track: track, start: range.start.seconds, end: range.end.seconds,
-                  text: String(text.characters), isFinal: finalizationTime >= range.end,
-                  finalizedThrough: finalizationTime.seconds)
+                  phrases: Self.phrases(of: text, in: range),
+                  isFinal: finalizationTime >= range.end, finalizedThrough: finalizationTime.seconds)
+    }
+
+    /// A pause between two words at least this long starts a new phrase.
+    static let phrasePause: TimeInterval = 0.7
+
+    /// Apple cuts a result at a pause, not at a new voice, so one result can hold the sentences
+    /// of two people in one room. A phrase ends after a sentence or at a `phrasePause`, and runs
+    /// from its first timed word to its last. Text without word times is one phrase over `range`.
+    private static func phrases(of text: AttributedString, in range: CMTimeRange) -> [TranscriptSegment] {
+        var phrases: [TranscriptSegment] = []
+        var words = ""
+        var times: (start: TimeInterval, end: TimeInterval)?
+        func endPhrase() {
+            let phrase = words.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !phrase.isEmpty {
+                phrases.append(TranscriptSegment(start: times?.start ?? range.start.seconds,
+                                                 end: times?.end ?? range.end.seconds, text: phrase))
+            }
+            words = ""
+            times = nil
+        }
+        for run in text.runs {
+            if let time = run.audioTimeRange {
+                if let times, time.start.seconds - times.end >= phrasePause || endsSentence(words) { endPhrase() }
+                times = (times?.start ?? time.start.seconds, time.end.seconds)
+            }
+            words += String(text[run.range].characters)
+        }
+        endPhrase()
+        return phrases
+    }
+
+    private static func endsSentence(_ words: String) -> Bool {
+        words.trimmingCharacters(in: .whitespacesAndNewlines).last.map { ".?!".contains($0) } ?? false
     }
 }

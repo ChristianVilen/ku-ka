@@ -153,4 +153,15 @@ final class MeetingSummarizerTests: XCTestCase {
 
         XCTAssertTrue(prompt.hasSuffix("Transcript:\n\n**[00:00:01] Them:** Let's ship on Friday"), prompt)
     }
+
+    func testPromptExplainsTheSpeakerLabelsAndNeverMakesThemOwners() {
+        XCTAssertTrue(prompt.contains("""
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded \
+        the meeting and anyone in the same room, so "Me" can be several people. "Them" is everyone else on the call.
+        """), prompt)
+        XCTAssertTrue(prompt.contains("""
+        The owner is a person's name only when the transcript says who will do the task. \
+        Otherwise the owner is "Unclear". Never use "Me" or "Them" as an owner.
+        """), prompt)
+    }
 }

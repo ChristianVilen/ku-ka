@@ -77,21 +77,20 @@ final class RealLiveTranscriptTests: XCTestCase {
 
         let script = try self.script(in: folder)
         var report = [String(format: "RealLiveTranscriptTests: %.1f s per track fed at real-time pace in 20 ms buffers.", audioSeconds)]
-        let firstText = results.first { !$0.result.text.trimmingCharacters(in: .whitespaces).isEmpty }
+        let firstText = results.first { !text(of: $0.result).isEmpty }
         report.append(String(format: "Started at %.2f s. First text at %.2f s. Last update at %.1f s. Updates finished at %.1f s.",
                              events.first?.at ?? -1, firstText?.at ?? -1, events.last?.at ?? -1, finishedAt))
         for track in MeetingTrack.allCases {
             let finals = results.filter { $0.result.track == track && $0.result.isFinal }
             let volatiles = results.filter { $0.result.track == track && !$0.result.isFinal }
             XCTAssertFalse(finals.isEmpty, "No final text for \(track.fileName).")
-            let text = finals.map { $0.result.text.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+            let text = finals.map { self.text(of: $0.result) }.joined(separator: " ")
             let lags = finals.map { $0.at - $0.result.end }.sorted()
             var line = String(format: "%@: %d volatile, %d final, final lag median %.2f s, max %.2f s",
                               track.fileName, volatiles.count, finals.count,
                               lags.isEmpty ? -1 : lags[lags.count / 2], lags.last ?? -1)
             if let script {
-                let wanted = words(script.utterances.filter { $0.speaker == track.speaker.rawValue.lowercased() }
-                    .map(\.text).joined(separator: " "))
+                let wanted = words(script.utterances.filter { $0.isOnTrack(of: track.speaker) }.map(\.text).joined(separator: " "))
                 let recall = Double(wanted.intersection(words(text)).count) / Double(max(wanted.count, 1))
                 XCTAssertGreaterThan(recall, 0.8, "Too few of the script's words in the final text of \(track.fileName).")
                 line += String(format: ", %.0f%% of the script's words", recall * 100)
@@ -99,7 +98,52 @@ final class RealLiveTranscriptTests: XCTestCase {
             report.append(line + ".")
             report.append("\(track.fileName) final text starts: \(text.prefix(300))")
         }
+
+        let outside = results.flatMap { item in
+            item.result.phrases.filter { $0.start < item.result.start || $0.end > item.result.end }
+        }
+        report.append("\(results.map(\.result.phrases.count).reduce(0, +)) phrases, \(outside.count) outside their result's range.")
+        let finalPhrases = { (track: MeetingTrack) in
+            results.filter { $0.result.isFinal && $0.result.track == track }.flatMap(\.result.phrases)
+        }
+        let echoes = finalPhrases(.microphone).filter { mic in finalPhrases(.system).contains { Transcript.isEcho(mic, of: $0) } }
+        report.append("\(echoes.count) microphone phrases hidden as echoes: \(echoes.map(\.text))")
+        var live = LiveTranscript()
+        let recording = RecordingClock(origin: HostTime(seconds: 0))
+        for event in events { live.apply(event.update, now: HostTime(seconds: event.at), clock: recording) }
+        let rows = live.preview(on: recording).rows
+        if let script { report += turnReport(rows: rows, script: script) }
+        report += rows.compactMap { row in
+            guard case .speech(let speaker, let text, _) = row.content else { return nil }
+            return String(format: "[%6.1f] %@: %@", row.at, speaker.rawValue, text)
+        }
         print(report.joined(separator: "\n"))
+    }
+
+    /// A turn that follows another person on the same track is where a join would hide a new
+    /// speaker. It started a row when a row of its track starts with its first word, within 1 s
+    /// of it. Word times can be half a second ahead of the script.
+    private func turnReport(rows: [LiveRow], script: Script) -> [String] {
+        let turns = script.utterances.sorted { $0.start < $1.start }
+        let changes = zip(turns, turns.dropFirst()).filter { previous, turn in
+            previous.track != nil && previous.track == turn.track && previous.speaker != turn.speaker
+        }.map(\.1)
+        let speech = rows.compactMap { row -> (at: Double, speaker: Speaker, text: String)? in
+            guard case .speech(let speaker, let text, _) = row.content else { return nil }
+            return (row.at, speaker, text)
+        }
+        let missed = changes.filter { turn in
+            !speech.contains { row in
+                turn.isOnTrack(of: row.speaker) && abs(row.at - turn.start) <= 1
+                    && firstWord(row.text) == firstWord(turn.text)
+            }
+        }
+        return ["\(changes.count - missed.count) of \(changes.count) turn changes within one track started a new row."]
+            + missed.map { turn in
+                let row = speech.last { turn.isOnTrack(of: $0.speaker) && $0.at <= turn.start + 1 }
+                return String(format: "Missed at %.1f s (%@): \"%@\" is in the row at %.1f s: \"%@\"", turn.start, turn.speaker,
+                              String(turn.text.prefix(40)), row?.at ?? -1, row?.text ?? "")
+            }
     }
 
     func testTheAnalyzersStopReadingWhenTheReaderGoesAway() async throws {
@@ -151,8 +195,16 @@ final class RealLiveTranscriptTests: XCTestCase {
     /// The generated test meeting has a manifest.json with its script. A recorded one has none.
     private struct Script: Decodable {
         struct Utterance: Decodable {
+            /// "me" or "them", or in a meeting with several people on one track, the person.
             let speaker: String
+            /// "me" or "them" when `speaker` is the person.
+            let track: String?
+            let start: TimeInterval
             let text: String
+
+            func isOnTrack(of speaker: Speaker) -> Bool {
+                (track ?? self.speaker) == speaker.rawValue.lowercased()
+            }
         }
         let utterances: [Utterance]
     }
@@ -183,6 +235,14 @@ final class RealLiveTranscriptTests: XCTestCase {
             chunks.append(WrittenAudio(buffer: buffer, filePosition: position, rms: 0))
         }
         return chunks
+    }
+
+    private func text(of result: LiveResult) -> String {
+        result.phrases.map { $0.text.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+    }
+
+    private func firstWord(_ text: String) -> String? {
+        text.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).first { !$0.isEmpty }
     }
 
     private func words(_ text: String) -> Set<String> {
