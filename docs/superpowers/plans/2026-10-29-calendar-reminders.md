@@ -35,11 +35,11 @@
 
 **Interfaces:** Provide `startRecording(title: String? = nil) async -> UUID?`, `activeSessionID: UUID?`, `displayTitle: String?`, and `stopRecording(ifSession: UUID)`. Keep existing toggle and Stop for manual callers. Provide `MeetingFolder.saveDisplayTitle(_:) throws` and have `title` prefer validated metadata. Title metadata is `meeting.json`, version 1, normalized single-line text capped at 300 characters, with a bounded 16 KiB read. Missing/bad metadata uses existing dated title.
 
-- [ ] Add failing tests for explicit start while busy, stale Stop, paused session identity, and shutdown across both permission and capture suspension. Watch assertion failures before implementation. Minimal compiling declarations may precede an assertion failure, but do not count compilation errors as the red test.
-- [ ] Implement a session-carrying Starting state and ActiveMeeting. Check the start attempt after each await. A late capture handle after shutdown is stopped and cannot replace a newer session. Preserve any recorded audio for normal recovery. Manual toggle uses the explicit start internally.
-- [ ] Add failing tests that title metadata survives folder reconstruction, preserves name/equality/stage/discovery, rejects oversized or invalid metadata, and handles newline/Markdown/path-like titles safely.
-- [ ] Write title metadata under the folder lock before capture. Store one normalized plain title. Escape Markdown heading syntax at heading output, so a title cannot inject extra headings or spoken lines. Keep summary CLI input unchanged.
-- [ ] Run recorder, folder, transcript, processor, and summary tests. Show output and record red/green evidence. Self-review and commit only task-owned changes, with no co-author.
+- [x] Add failing tests for explicit start while busy, stale Stop, paused session identity, and shutdown across both permission and capture suspension. Watch assertion failures before implementation. Minimal compiling declarations may precede an assertion failure, but do not count compilation errors as the red test.
+- [x] Implement a session-carrying Starting state and ActiveMeeting. Check the start attempt after each await. A late capture handle after shutdown is stopped and cannot replace a newer session. Preserve any recorded audio for normal recovery. Manual toggle uses the explicit start internally.
+- [x] Add failing tests that title metadata survives folder reconstruction, preserves name/equality/stage/discovery, rejects oversized or invalid metadata, and handles newline/Markdown/path-like titles safely.
+- [x] Write title metadata under the folder lock before capture. Store one normalized plain title. Escape Markdown heading syntax at heading output, so a title cannot inject extra headings or spoken lines. Keep summary CLI input unchanged.
+- [x] Run recorder, folder, transcript, processor, and summary tests. Show output and record red/green evidence. Self-review and commit only task-owned changes, with no co-author.
 
 ### Task 2: Calendar reminder decisions and Settings interface
 
@@ -47,12 +47,12 @@
 
 **Interfaces:** Consume Task 1 explicit start/session APIs. Define `CalendarEventSource`, `CalendarReminderNotifying`, `CalendarReminderRecording`, and an injected timer/wake boundary. A real recorder conformance may live in the calendar file. Provide `setEnabled(_:) async`, `resume() async`, `refresh() async`, `recorderDidChange()`, `shutDown()`, `status`, and `onStatusChange`. Inject Settings or closures with isolated defaults in tests. Publish concrete adapter signatures in the report for Task 3.
 
-- [ ] Add failing behavior tests for start delivery at the event start, two-minute wake grace, action valid until end, eligibility exclusions, one offer across refreshes, restart receipts, edited event, and distinct recurring occurrences.
-- [ ] Implement one controller-owned typed reminder state. Tokens refer to exact event revisions and session IDs. Prefer one controller over a reducer plus an equivalent mutable state copy. Persist bounded consumed receipts without event titles. Seven-day expiry and 2,048 receipt cap are sufficient.
-- [ ] Add failing tests for simultaneous and staggered overlap, manual/busy start, paused end, Continue without resume, late Stop after a different recording, changed end, deleted/cancelled/declined event, and read failure. Keep at most one valid start offer visible. Consume new overlapping starts while that offer remains valid.
-- [ ] Implement guarded actions. Refresh exact event before acting, consume token before awaits, and rely on the recorder's atomic session guards. Stop never toggles. Continue suppresses end reminders for that session.
-- [ ] Add failing tests for default-off launch, saved enabled launch without prompt, denied/revoked access, disable during permission request, stale async snapshot, and late notification add after disable. Implement generation and cancellation rules.
-- [ ] Run focused calendar tests and Task 1 recorder tests. Record red/green evidence, exact Settings API, and any design deviations. Self-review and commit only task-owned files.
+- [x] Add failing behavior tests for start delivery at the event start, two-minute wake grace, action valid until end, eligibility exclusions, one offer across refreshes, restart receipts, edited event, and distinct recurring occurrences.
+- [x] Implement one controller-owned typed reminder state. Tokens refer to exact event revisions and session IDs. Prefer one controller over a reducer plus an equivalent mutable state copy. Persist bounded consumed receipts without event titles. Seven-day expiry and 2,048 receipt cap are sufficient.
+- [x] Add failing tests for simultaneous and staggered overlap, manual/busy start, paused end, Continue without resume, late Stop after a different recording, changed end, deleted/cancelled/declined event, and read failure. Keep at most one valid start offer visible. Consume new overlapping starts while that offer remains valid.
+- [x] Implement guarded actions. Refresh exact event before acting, consume token before awaits, and rely on the recorder's atomic session guards. Stop never toggles. Continue suppresses end reminders for that session.
+- [x] Add failing tests for default-off launch, saved enabled launch without prompt, denied/revoked access, disable during permission request, stale async snapshot, and late notification add after disable. Implement generation and cancellation rules.
+- [x] Run focused calendar tests and Task 1 recorder tests. Record red/green evidence, exact Settings API, and any design deviations. Self-review and commit only task-owned files.
 
 ### Task 3: EventKit, native notification actions, and app wiring
 
