@@ -51,8 +51,8 @@ enum MeetingDocument: String, CaseIterable {
     case heardTranscript = ".transcript-as-heard.md"
     /// The questions about suspect words. Only the summarize step writes it, before `summary.md`.
     case questions = "review.json"
-    /// The answers to the questions. Only `saveAnswer` writes it, after `summary.md`.
-    case answers = "review-answers.json"
+    /// The questions that the user skipped. Only `saveSkip` writes it, after `summary.md`.
+    case skipped = "review-skipped.json"
 }
 
 enum MeetingStep: Equatable {

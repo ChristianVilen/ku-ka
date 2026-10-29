@@ -1037,8 +1037,8 @@ final class MeetingNotesControllerTests: XCTestCase {
         try meeting.write("# \(meeting.title)\n\nAsk the vendors.\n", to: .summary)
         let questions = heard.map { #"{"heard": "\#($0)", "kind": "company", "quote": "\#(askTheVendors)"}"# }
         try meeting.write(#"{"questions": [\#(questions.joined(separator: ", "))]}"#, to: .questions)
-        let answers = heard.prefix(skipped).map { #"{"heard": "\#($0)", "answer": "skipped"}"# }
-        try meeting.write(#"{"answers": [\#(answers.joined(separator: ", "))]}"#, to: .answers)
+        let skips = heard.prefix(skipped).map { #""\#($0)""# }
+        try meeting.write(#"{"skipped": [\#(skips.joined(separator: ", "))]}"#, to: .skipped)
         return meeting
     }
 

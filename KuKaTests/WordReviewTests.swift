@@ -89,7 +89,7 @@ final class WordReviewTests: XCTestCase {
         XCTAssertEqual(questions.map(\.reason), ["first"])
     }
 
-    func testPunctuationAroundAHeardFormMakesNoSecondQuestionAndAnAnswerToOneClosesTheOther() throws {
+    func testPunctuationAroundAHeardFormMakesNoSecondQuestionAndASkipOfOneClosesTheOther() throws {
         let questions = select([
             suspect("Convio", quote: "We should ask Convio about the rollout.", reason: "first"),
             suspect("Convio,", quote: "We should ask Convio about the rollout.", reason: "second"),
@@ -99,7 +99,7 @@ final class WordReviewTests: XCTestCase {
 
         let meeting = try makeMeeting()
         try meeting.saveQuestions([try question("Convio")])
-        try meeting.saveAnswer(.skipped, to: try question("Convio,", quote: "Then Convio, Yuri, and Aino can start."))
+        try meeting.saveSkip(try question("Convio,", quote: "Then Convio, Yuri, and Aino can start."))
 
         XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.isFinished, true)
     }
@@ -153,68 +153,76 @@ final class WordReviewTests: XCTestCase {
 
     // MARK: - The review
 
-    func testAnsweredAndSkippedQuestionsAreNotOpenAndOnlyNonSkipAnswersCount() throws {
+    func testSkippedAndKnownQuestionsAreNotOpenAndOnlyKnownOnesCountAsLearned() throws {
         let questions = try ["Convio", "Yuri", "Kworix"].map { try question($0) }
         let meeting = try makeMeeting()
-        func review(_ answers: [String: WordAnswer]) -> WordReview {
-            WordReview(meeting: meeting, questions: questions, answers: answers, known: [])
+        func review(skipped: [Int] = [], known: [Int] = []) -> WordReview {
+            WordReview(meeting: meeting, questions: questions, skipped: Set(skipped.map { questions[$0].key }),
+                       known: Set(known.map { questions[$0].key }))
         }
 
-        XCTAssertEqual(review([:]).openQuestions.map(\.heard), ["Convio", "Yuri", "Kworix"])
-        XCTAssertFalse(review([:]).isFinished)
-        XCTAssertFalse(review([:]).hasAnswers)
+        XCTAssertEqual(review().openQuestions.map(\.heard), ["Convio", "Yuri", "Kworix"])
+        XCTAssertFalse(review().isFinished)
+        XCTAssertFalse(review().hasLearnedWords)
 
-        let skipped = review([questions[1].key: .skipped])
+        let skipped = review(skipped: [1])
         XCTAssertEqual(skipped.openQuestions.map(\.heard), ["Convio", "Kworix"])
-        XCTAssertFalse(skipped.hasAnswers, "Skip changes nothing")
+        XCTAssertFalse(skipped.hasLearnedWords, "Skip changes nothing")
 
-        let all = review([questions[0].key: .skipped, questions[1].key: .skipped, questions[2].key: .skipped])
+        let all = review(skipped: [0, 1, 2])
         XCTAssertTrue(all.isFinished)
-        XCTAssertFalse(all.hasAnswers)
+        XCTAssertFalse(all.hasLearnedWords)
 
-        let answered = review([questions[0].key: .rightWord("Konvio"), questions[1].key: .skipped,
-                               questions[2].key: .correctAsHeard])
-        XCTAssertTrue(answered.isFinished)
-        XCTAssertTrue(answered.hasAnswers)
-        XCTAssertTrue(review([questions[2].key: .correctAsHeard]).hasAnswers)
+        let learned = review(skipped: [1], known: [0, 2])
+        XCTAssertTrue(learned.isFinished)
+        XCTAssertTrue(learned.hasLearnedWords)
+        XCTAssertTrue(review(skipped: [2], known: [2]).hasLearnedWords, "a skip does not hide a word that the list learned")
     }
 
-    func testQuestionsAndAnswersSurviveAWriteAndARead() throws {
+    func testQuestionsAndSkipsSurviveAWriteAndARead() throws {
         let meeting = try makeMeeting()
         let questions = try [question("Convio"), question("Yuri"), question("Kworix")]
 
         try meeting.saveQuestions(questions)
-        try meeting.saveAnswer(.rightWord("Konvio"), to: questions[0])
-        try meeting.saveAnswer(.correctAsHeard, to: questions[1])
+        try meeting.saveSkip(questions[0])
+        try meeting.saveSkip(questions[1])
 
         let review = try XCTUnwrap(meeting.wordReview(knownWords: .empty))
         XCTAssertEqual(review.meeting, meeting)
         XCTAssertEqual(review.questions, questions)
-        XCTAssertEqual(review.answers, [questions[0].key: .rightWord("Konvio"), questions[1].key: .correctAsHeard])
+        XCTAssertEqual(review.skipped, [questions[0].key, questions[1].key])
         XCTAssertEqual(review.openQuestions, [questions[2]])
     }
 
-    func testAnAnswerMatchesItsQuestionWhateverTheCaseOfTheHeardForm() throws {
+    func testASkipMatchesItsQuestionWhateverTheCaseOfTheHeardForm() throws {
         let meeting = try makeMeeting()
         try meeting.saveQuestions([try question("Convio")])
 
-        try meeting.saveAnswer(.skipped, to: try question("CONVIO"))
+        try meeting.saveSkip(try question("CONVIO"))
 
         let review = try XCTUnwrap(meeting.wordReview(knownWords: .empty))
         XCTAssertTrue(review.isFinished)
-        XCTAssertEqual(Array(review.answers.values), [.skipped])
+        XCTAssertEqual(review.skipped, ["convio"])
     }
 
-    func testSaveAnswerKeepsTheOtherAnswersAndReplacesAnEarlierAnswerToTheSameQuestion() throws {
+    func testSaveSkipKeepsTheOtherSkipsAndASecondSkipOfAQuestionWritesNothing() throws {
         let meeting = try makeMeeting()
         let questions = try [question("Convio"), question("Yuri")]
         try meeting.saveQuestions(questions)
 
-        try meeting.saveAnswer(.skipped, to: questions[0])
-        try meeting.saveAnswer(.rightWord("Jyri"), to: questions[1])
-        try meeting.saveAnswer(.rightWord("Konvio"), to: questions[0])
+        try meeting.saveSkip(questions[0])
+        try meeting.saveSkip(questions[1])
+        try meeting.saveSkip(try question("CONVIO"))
 
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, [questions[0].key: .rightWord("Konvio"), questions[1].key: .rightWord("Jyri")])
+        XCTAssertEqual(try meeting.read(.skipped), """
+        {
+          "skipped" : [
+            "Convio",
+            "Yuri"
+          ]
+        }
+
+        """)
     }
 
     func testSavingNoQuestionsRemovesAnOldReviewFile() throws {
@@ -238,22 +246,15 @@ final class WordReviewTests: XCTestCase {
           {"heard": "QX", "kind": "term", "quote": "QX is late."}
         ]}
         """, to: .questions)
-        try meeting.write("""
-        {"answers": [
-          {"heard": "convio", "answer": "right word", "word": "Konvio"},
-          {"heard": "Aino", "answer": "correct as heard"},
-          {"heard": "Brytlane", "answer": "skipped"}
-        ]}
-        """, to: .answers)
+        try meeting.write(#"{"skipped": ["convio", "Brytlane"]}"#, to: .skipped)
 
         let review = try XCTUnwrap(meeting.wordReview(knownWords: .empty))
 
         XCTAssertEqual(review.questions.map(\.heard), ["Convio", "Aino", "QX"])
         XCTAssertEqual(review.questions.map(\.place), ["Them at 00:12:31", nil, nil])
         XCTAssertEqual(review.questions[1].suggestion, nil)
-        XCTAssertEqual(review.answers, ["convio": .rightWord("Konvio"), "aino": .correctAsHeard],
-                       "an answer without its question is left out")
-        XCTAssertEqual(review.openQuestions.map(\.heard), ["QX"])
+        XCTAssertEqual(review.skipped, ["convio"], "a skip without its question is left out")
+        XCTAssertEqual(review.openQuestions.map(\.heard), ["Aino", "QX"])
     }
 
     func testAMeetingWithoutReadableQuestionsHasNoReview() throws {
@@ -267,38 +268,16 @@ final class WordReviewTests: XCTestCase {
         XCTAssertNil(meeting.wordReview(knownWords: .empty), "broken JSON")
     }
 
-    func testAnUnreadableAnswersFileMeansNoAnswers() throws {
+    func testAnUnreadableSkipFileMeansNoSkips() throws {
         let meeting = try makeMeeting()
         let convio = try question("Convio")
         try meeting.saveQuestions([convio])
-        try meeting.write("not JSON", to: .answers)
+        try meeting.write("not JSON", to: .skipped)
 
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, [:])
+        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.skipped, [])
 
-        try meeting.saveAnswer(.skipped, to: convio)
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, [convio.key: .skipped])
-    }
-
-    func testAnAnswerThatDoesNotReadIsSkippedAndTheOtherAnswersStayAlsoAfterASave() throws {
-        let meeting = try makeMeeting()
-        let questions = try [question("Convio"), question("Yuri"), question("Kworix")]
-        try meeting.saveQuestions(questions)
-        try meeting.write("""
-        {"answers": [
-          {"heard": "Convio", "answer": "right word", "word": "Konvio"},
-          {"heard": "Yuri", "answer": "ask me later"},
-          {"heard": 7, "answer": "skipped"},
-          "skipped"
-        ]}
-        """, to: .answers)
-
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, [questions[0].key: .rightWord("Konvio")])
-
-        try meeting.saveAnswer(.skipped, to: questions[2])
-
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers,
-                       [questions[0].key: .rightWord("Konvio"), questions[2].key: .skipped])
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.openQuestions.map(\.heard), ["Yuri"])
+        try meeting.saveSkip(convio)
+        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.skipped, [convio.key])
     }
 
     func testUnfinishedListsOnlyDoneMeetingsWithOpenQuestionsOldestFirst() throws {
@@ -309,7 +288,7 @@ final class WordReviewTests: XCTestCase {
             try meeting.write("# Transcript", to: .transcript)
             if done { try meeting.write("# Summary", to: .summary) }
             try meeting.saveQuestions(questions)
-            if answered { try meeting.saveAnswer(.skipped, to: convio) }
+            if answered { try meeting.saveSkip(convio) }
             return meeting
         }
         let later = try meeting(day: 24, done: true, questions: [convio])
@@ -325,7 +304,7 @@ final class WordReviewTests: XCTestCase {
         XCTAssertEqual(WordReview.unfinished(in: root.appendingPathComponent("missing"), knownWords: .empty), [])
     }
 
-    func testAQuestionWhoseWordTheListLearnedSinceIsNotOpenAndIsNotAnAnswer() throws {
+    func testAQuestionWhoseWordTheListLearnedSinceIsNotOpenAndCountsAsLearned() throws {
         let root = try makeTemporaryDirectory()
         let meeting = try makeMeeting(in: root)
         try meeting.write("# Summary", to: .summary)
@@ -336,15 +315,15 @@ final class WordReviewTests: XCTestCase {
 
         let review = try XCTUnwrap(meeting.wordReview(knownWords: list))
         XCTAssertEqual(review.openQuestions.map(\.heard), ["Yuri"])
-        XCTAssertEqual(review.answers, [:])
-        XCTAssertFalse(review.hasAnswers)
+        XCTAssertEqual(review.skipped, [])
+        XCTAssertTrue(review.hasLearnedWords)
         XCTAssertEqual(WordReview.unfinished(in: root, knownWords: list).map(\.openQuestions.count), [1])
 
-        try meeting.saveAnswer(.skipped, to: questions[1])
+        try meeting.saveSkip(questions[1])
 
         let finished = try XCTUnwrap(meeting.wordReview(knownWords: list))
         XCTAssertTrue(finished.isFinished)
-        XCTAssertFalse(finished.hasAnswers, "a word that the list learned elsewhere is not an answer")
+        XCTAssertTrue(finished.hasLearnedWords, "a word that the list learned elsewhere is a word of this meeting too")
         XCTAssertEqual(WordReview.unfinished(in: root, knownWords: list), [])
         XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.openQuestions.map(\.heard), ["Convio"],
                        "derived when read, so nothing was written")

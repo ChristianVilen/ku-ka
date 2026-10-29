@@ -47,7 +47,7 @@ final class WordReviewWindowTests: XCTestCase {
     // MARK: - Helpers
 
     /// A done meeting on that day of October 2026 whose `review.json` asks `questions`, with the
-    /// heard forms in `skipped` already answered with Skip.
+    /// heard forms in `skipped` already skipped.
     @discardableResult
     private func reviewedMeeting(on day: Int, asking questions: [[String: String]],
                                  skipped: [String] = []) throws -> MeetingFolder {
@@ -57,7 +57,7 @@ final class WordReviewWindowTests: XCTestCase {
         let json = try JSONSerialization.data(withJSONObject: ["questions": questions])
         try meeting.write(String(decoding: json, as: UTF8.self), to: .questions)
         for question in try XCTUnwrap(meeting.wordReview(knownWords: .empty)).questions where skipped.contains(question.heard) {
-            try meeting.saveAnswer(.skipped, to: question)
+            try meeting.saveSkip(question)
         }
         return meeting
     }
@@ -146,7 +146,7 @@ final class WordReviewWindowTests: XCTestCase {
     }
 
     func testTheFieldStartsWithTheSuggestionAndSaveSendsItsText() throws {
-        let meeting = try reviewedMeeting(on: 23, asking: [convio, yuri])
+        try reviewedMeeting(on: 23, asking: [convio, yuri])
         sut.show(nil)
         XCTAssertEqual(field?.stringValue, "Konvio")
         XCTAssertEqual(button("Save")?.keyEquivalent, "\r", "Save is the default button")
@@ -156,7 +156,6 @@ final class WordReviewWindowTests: XCTestCase {
         click("Save")
 
         XCTAssertEqual(list?.hasSuffix("- Convio → **Konvia** ✓ confirmed 2026-10-28 by Ku-Ka\n"), true, list ?? "no list")
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, ["convio": .rightWord("Konvia")])
         XCTAssertEqual(field?.stringValue, "Jyri", "the next question starts with its own suggestion")
     }
 
@@ -172,16 +171,17 @@ final class WordReviewWindowTests: XCTestCase {
     }
 
     func testReturnInTheFieldSavesAndEscClosesTheWindow() throws {
-        let meeting = try reviewedMeeting(on: 23, asking: [convio, yuri])
+        try reviewedMeeting(on: 23, asking: [convio, yuri])
         sut.show(nil)
+        let saved = "- Convio → **Konvio** ✓ confirmed 2026-10-28 by Ku-Ka\n"
 
         XCTAssertTrue(command(#selector(NSResponder.insertNewline(_:))))
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, ["convio": .rightWord("Konvio")])
+        XCTAssertEqual(list?.hasSuffix(saved), true, list ?? "no list")
 
         XCTAssertTrue(command(#selector(NSResponder.cancelOperation(_:))))
         XCTAssertEqual(sut.window?.isVisible, false)
         XCTAssertNil(controller.screen)
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, ["convio": .rightWord("Konvio")], "saved answers stay")
+        XCTAssertEqual(list?.hasSuffix(saved), true, "saved answers stay")
     }
 
     func testReturnWithAnEmptyFieldSavesNothing() throws {
@@ -190,7 +190,7 @@ final class WordReviewWindowTests: XCTestCase {
 
         command(#selector(NSResponder.insertNewline(_:)))
 
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, [:])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: meeting.url(for: .skipped).path))
         XCTAssertNil(list)
     }
 
@@ -199,10 +199,10 @@ final class WordReviewWindowTests: XCTestCase {
         sut.show(nil)
 
         click("Skip")
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, ["convio": .skipped])
+        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.skipped, ["convio"])
         click("It Is Correct as Heard")
 
-        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.answers, ["convio": .skipped, "yuri": .correctAsHeard])
+        XCTAssertEqual(meeting.wordReview(knownWords: .empty)?.skipped, ["convio"])
         XCTAssertEqual(list?.hasSuffix("- **Yuri** (correct as heard; added by Ku-Ka 2026-10-28)\n"), true, list ?? "no list")
     }
 

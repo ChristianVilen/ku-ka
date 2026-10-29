@@ -57,7 +57,7 @@ struct MeetingProcessor {
     }
 
     /// Makes `transcript.md` and `summary.md` of a done meeting again, with the list as it is now.
-    /// Asks no new questions, and leaves `review.json` and `review-answers.json` alone.
+    /// Asks no new questions, and leaves `review.json` and `review-skipped.json` alone.
     func updateNotes(_ meeting: MeetingFolder) async -> NotesUpdateOutcome {
         let lock: FileLock
         do {

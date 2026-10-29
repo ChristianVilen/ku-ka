@@ -34,7 +34,7 @@ struct WordReviewScreen: Equatable {
 
     struct FinishedPage: Equatable {
         let meetingTitle: String
-        /// At least one answer is not Skip, and Update Notes was not asked yet in this window.
+        /// The list learned a word of this meeting, and Update Notes was not asked yet in this window.
         let canUpdateNotes: Bool
         /// Update Notes was asked in this window. The page says that a notification follows.
         let isUpdating: Bool
@@ -61,11 +61,10 @@ extension WordReviewScreen.HighlightedQuote {
 /// The review window's state and every write it makes. The window renders `screen` and calls the
 /// actions, and keeps no state of its own, like `ClipboardPanel` with `ClipboardHistoryController`.
 ///
-/// - The open meeting's questions and answers, and the list, are read from disk for each action and
+/// - The open meeting's questions and skips, and the list, are read from disk for each action and
 ///   each screen, never kept apart from it. A question whose word the list knows is not open.
-/// - An answer writes the list first and the answer second. When the list write fails, nothing
-///   else is written and the question stays open. When the answer write fails, the list already
-///   knows the word, so the question is closed without an answer, and the page shows the error.
+/// - A right word or "correct as heard" writes only the list, and Skip writes only the meeting's
+///   skip file. When the write fails, the question stays open and the page shows the error.
 @MainActor
 final class WordReviewController {
     /// Nil while the window is closed.
@@ -111,27 +110,29 @@ final class WordReviewController {
     /// without it when the question is not a name and its heard form is ordinary words.
     func save(rightWord text: String) {
         let word = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        answerOpenQuestion { question in
-            if word == question.heard { return (try .correctAsHeard(question.heard), .correctAsHeard) }
-            return (try .replacement(heard: question.heard, right: word, confirmed: !isOrdinaryWords(question)),
-                    .rightWord(word))
+        answerOpenQuestion { _, question in
+            if word == question.heard {
+                try knownWords.add(.correctAsHeard(question.heard))
+            } else {
+                try knownWords.add(.replacement(heard: question.heard, right: word, confirmed: !isOrdinaryWords(question)))
+            }
         }
     }
 
     func keepAsHeard() {
-        answerOpenQuestion { question in (try .correctAsHeard(question.heard), .correctAsHeard) }
+        answerOpenQuestion { _, question in try knownWords.add(.correctAsHeard(question.heard)) }
     }
 
-    /// Saves only the answer. The list does not change.
+    /// The list does not change.
     func skip() {
-        answerOpenQuestion { _ in (nil, .skipped) }
+        answerOpenQuestion { meeting, question in try meeting.saveSkip(question) }
     }
 
-    /// Asks for Update Notes once, on the finished page of a meeting with an answer that is not Skip.
+    /// Asks for Update Notes once, on the finished page of a meeting whose words the list learned.
     func updateNotes() {
         error = nil
         let list = knownWords.read()
-        if let meeting, !isUpdating, let review = meeting.wordReview(knownWords: list), review.isFinished, review.hasAnswers {
+        if let meeting, !isUpdating, let review = meeting.wordReview(knownWords: list), review.isFinished, review.hasLearnedWords {
             isUpdating = true
             requestUpdate(meeting)
         }
@@ -163,13 +164,11 @@ final class WordReviewController {
         screen = nil
     }
 
-    private func answerOpenQuestion(_ answer: (WordQuestion) throws -> (KnownWordAddition?, WordAnswer)) {
+    private func answerOpenQuestion(_ write: (MeetingFolder, WordQuestion) throws -> Void) {
         error = nil
         if let meeting, let question = meeting.wordReview(knownWords: knownWords.read())?.openQuestions.first {
             do {
-                let (addition, answer) = try answer(question)
-                if let addition { try knownWords.add(addition) }
-                try meeting.saveAnswer(answer, to: question)
+                try write(meeting, question)
             } catch {
                 self.error = error.localizedDescription
             }
@@ -186,7 +185,7 @@ final class WordReviewController {
         guard let question = review.openQuestions.first else {
             // The open meeting has no open question, so every unfinished meeting is another one.
             screen = WordReviewScreen(
-                page: .finished(.init(meetingTitle: meeting.title, canUpdateNotes: review.hasAnswers && !isUpdating,
+                page: .finished(.init(meetingTitle: meeting.title, canUpdateNotes: review.hasLearnedWords && !isUpdating,
                                       isUpdating: isUpdating,
                                       otherMeetings: WordReview.unfinished(in: root(), knownWords: list).count)),
                 error: error)

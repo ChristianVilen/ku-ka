@@ -925,9 +925,9 @@ final class MeetingProcessorTests: XCTestCase {
     func testUpdateNotesMakesTheNotesAgainWithTheListAsItIsNowAndKeepsTheReviewFiles() async throws {
         let meeting = try await makeDoneMeeting()
         let questions = #"{"questions": [{"heard": "Convio", "kind": "company", "quote": "Let's ask Convio and Yuri about Friday"}]}"#
-        let answers = #"{"answers": [{"heard": "Convio", "answer": "right word", "word": "Konvio"}]}"#
+        let skips = #"{"skipped": ["Convio"]}"#
         try meeting.write(questions, to: .questions)
-        try meeting.write(answers, to: .answers)
+        try meeting.write(skips, to: .skipped)
         knownWords = KnownWordsList(markdown: "- Convio → **Konvio** ✓\n")
         runner.results["agy"] = reply("""
         ## Summary
@@ -945,7 +945,7 @@ final class MeetingProcessorTests: XCTestCase {
         XCTAssertEqual(try promptTranscript(), correctedLines)
         XCTAssertEqual(try meeting.read(.summary), "# Meeting on 2026-10-23 at 14:02\n\n## Summary\nAsk Konvio.\n")
         XCTAssertEqual(try meeting.read(.questions), questions)
-        XCTAssertEqual(try meeting.read(.answers), answers)
+        XCTAssertEqual(try meeting.read(.skipped), skips)
         XCTAssertEqual(meeting.stage(), .done)
         XCTAssertFalse(exists(.failure, in: meeting))
     }

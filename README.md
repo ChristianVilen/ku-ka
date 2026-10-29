@@ -105,7 +105,7 @@ defaults write com.kuka.screenshot knownWordsFile ~/path/to/list.md
 
 Each line of the list is the wrong form, an arrow, and the right form in bold, for example `- Convio → **Konvio** ✓`. Ku-Ka replaces a wrong form in the transcript only when its line has ✓, and the end of the transcript lists what it replaced. Lines without ✓ only help the summary. Ku-Ka reads the list each time it makes notes. It only adds lines to the list. It never changes or removes a line that is already there.
 
-The AI tool also tells Ku-Ka which words it thinks speech recognition got wrong. Ku-Ka asks you about up to 5 of them for each meeting, and never about a word that the list already has. When you answer a word in one meeting, Ku-Ka stops asking about it in the other meetings too. The notification then says how many words there are to check. Click it, or choose **Check Words** in the menu, to open the review window. For each word, type the right word and click **Save**, or click **It Is Correct as Heard** or **Skip**. Your answers go into the list. The answer for a name always gets ✓. When the wrong form of another word is ordinary words of the meeting language, for example "my key", the answer has no ✓, so that Ku-Ka does not replace those words in every transcript. After the last word, **Update Notes** makes the transcript and the summary again with your answers.
+The AI tool also tells Ku-Ka which words it thinks speech recognition got wrong. Ku-Ka asks you about up to 5 of them for each meeting, and never about a word that the list already has. When you answer a word in one meeting, Ku-Ka stops asking about it in the other meetings too. The notification then says how many words there are to check. Click it, or choose **Check Words** in the menu, to open the review window. For each word, type the right word and click **Save**, or click **It Is Correct as Heard** or **Skip**. Your answers go into the list. When you remove a line from the list, Ku-Ka asks about its word again. The answer for a name always gets ✓. When the wrong form of another word is ordinary words of the meeting language, for example "my key", the answer has no ✓, so that Ku-Ka does not replace those words in every transcript. After the last word, **Update Notes** makes the transcript and the summary again with your answers. A meeting that asked about a word that you answered in another meeting also offers **Update Notes**.
 
 Update Notes makes `transcript.md` again from the text that speech recognition wrote and from the list. So a change that you made to `transcript.md` by hand is lost. To fix a word, add it to the list instead.
 
@@ -264,7 +264,7 @@ KuKa/
 ├── Corrector.swift           # Finds and replaces the confirmed wrong forms of known words
 ├── KnownWords.swift          # Reads the list of known words and adds a line to it
 ├── KnownWordsFile.swift      # The list of known words on disk, written under a lock
-├── WordReview.swift          # Which suspect words become questions, and a meeting's questions and answers
+├── WordReview.swift          # Which suspect words become questions, and a meeting's questions and skips
 ├── WordReviewController.swift # The review window's state and its writes
 ├── WordReviewWindow.swift    # The review window (Check Words)
 ├── Info.plist           # App config (LSUIElement, screen capture and microphone usage)

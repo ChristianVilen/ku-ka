@@ -114,7 +114,7 @@ final class MeetingFolderTests: XCTestCase {
             (.failed(.summarize), [.transcript, .failure], false),
             (.done, [.transcript, .summary], false),
         ]
-        let extras: [[MeetingDocument]] = [[.heardTranscript], [.questions], [.answers], [.heardTranscript, .questions, .answers]]
+        let extras: [[MeetingDocument]] = [[.heardTranscript], [.questions], [.skipped], [.heardTranscript, .questions, .skipped]]
         var minute = 0
         for (stage, documents, hasAudio) in stages {
             for extra in extras {
