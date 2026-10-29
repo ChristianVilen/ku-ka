@@ -50,7 +50,7 @@ xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
 
 ## Test results and method
 
-The B1 host regression first failed against `02ed968` with `XCTAssertFalse failed - XCTest must not construct the production AppDelegate`. After host separation and the S1 thumbnail refactor, the focused `AppLaunchModeTests` and `SettingsWindowControllerTests` run passed 17 tests with no failures. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-28-14-+0200.xcresult`. S1 used the existing native-action and saved-custom-value tests, with literal menu labels instead of row-index and tag assumptions. The earlier full-suite results below remain historical; the parent task runs the final full suite.
+The B1 host regression first failed against `02ed968` with `XCTAssertFalse failed - XCTest must not construct the production AppDelegate`. After host separation and the S1 thumbnail refactor, the focused `AppLaunchModeTests` and `SettingsWindowControllerTests` run passed 17 tests with no failures. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-28-14-+0200.xcresult`. S1 used the existing native-action and saved-custom-value tests, with literal menu labels instead of row-index and tag assumptions.
 
 The final full KuKaTests run at `c30fcba` passed 820 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-34-15-+0200.xcresult`. Earlier full runs at `18593df` and `3a7037b` passed 818 and 817 tests, respectively.
 
@@ -87,4 +87,4 @@ The before state is the source inventory above. The earlier live baseline attemp
 
 Independent task reviews approved the summary policy and the Settings migration. The whole-branch review found no Critical or Important issues and requested two minor fixes. Commit `18593df` clears stale login feedback on reopen and corrects the fallback wording in AGENTS.md. The scoped fix review approved both changes with no new findings. The comment review found no added comments or suppressions to remove.
 
-The evidence audit used gpt-6.1-sol and found no material inconsistencies against the supplied session digest. Its remaining flags are the real-world checks above and the documented retrospective menu check. No app was installed, no branch was pushed or merged, and no pull request or issue update was published.
+The evidence audit used gpt-6.1-sol and found no material inconsistencies against the supplied session digest. Its remaining flags are the real-world checks above and the documented retrospective menu check.
