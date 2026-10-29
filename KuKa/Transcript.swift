@@ -19,17 +19,28 @@ struct TranscriptLine: Equatable {
 
 /// A transcript after known words, with what changed.
 struct CorrectedTranscript: Equatable, Sendable {
-    let markdown: String
+    /// The corrected text without the known-words note. It ends with a line break when a note
+    /// follows it.
+    let body: String
     let applied: [AppliedCorrection]
+
+    /// `body`, then a note that lists each replacement once, when there is one.
+    var markdown: String {
+        guard !applied.isEmpty else { return body }
+        let pairs = applied.map { "\($0.heard) → \($0.right) (\($0.count))" }.joined(separator: ", ")
+        return body + Self.noteStart + pairs + ".\n"
+    }
+
+    fileprivate static let noteStart = "\n---\n\nKnown words applied: "
 }
 
 enum Transcript {
     /// Joins a speaker's segments while the gap between them is under `joinGap`. With nil, each
     /// segment is a line of its own. With `.voices`, the microphone lines get room labels: see
     /// `microphoneLines`.
-    static func merge(_ tracks: [MeetingTrack: TrackTranscript], rooms: RoomLabels,
+    static func merge(_ tracks: [MeetingTrack: [TranscriptSegment]], rooms: RoomLabels,
                       joinGap: TimeInterval? = 2) -> [TranscriptLine] {
-        let them = withText(tracks[.system]?.segments ?? [])
+        let them = withText(tracks[.system] ?? [])
         // sorted(by:) is stable, so Them, listed first, stays first on an equal start.
         let spoken = (them.map { (speaker: Speaker.them, segment: $0) }
             + microphoneLines(microphoneSpeech(tracks), them: them, rooms: rooms))
@@ -51,9 +62,9 @@ enum Transcript {
 
     /// The microphone segments that `merge` keeps, in time order: each has text and is no echo of
     /// a "Them" segment.
-    static func microphoneSpeech(_ tracks: [MeetingTrack: TrackTranscript]) -> [TranscriptSegment] {
-        let them = tracks[.system]?.segments ?? []
-        return withText(tracks[.microphone]?.segments ?? [])
+    static func microphoneSpeech(_ tracks: [MeetingTrack: [TranscriptSegment]]) -> [TranscriptSegment] {
+        let them = tracks[.system] ?? []
+        return withText(tracks[.microphone] ?? [])
             .filter { mic in !them.contains { isEcho(mic, of: $0) } }
             .sorted { $0.start < $1.start }
     }
@@ -71,14 +82,13 @@ enum Transcript {
     private static func microphoneLines(_ me: [TranscriptSegment], them: [TranscriptSegment], rooms: RoomLabels)
         -> [(speaker: Speaker, segment: TranscriptSegment)] {
         guard case .voices(let voices) = rooms else { return me.map { (.me, $0) } }
-        let voiceOfSegment = me.map(voices.voice(for:))
-        let echoes = echoVoices(me, voices: voiceOfSegment, them: them)
-        let kept = zip(me, voiceOfSegment).filter { !echoes.contains($0.1) }
+        let voiced = me.map { (segment: $0, voice: voices.voice(for: $0)) }
+        let stats = voiceStats(voiced, them: them)
+        let echoes = Set(stats.filter { $0.value.isEcho }.keys)
+        let kept = voiced.filter { !echoes.contains($0.voice) }
 
-        var wordCount: [Int: Int] = [:]
-        for (segment, voice) in kept { wordCount[voice, default: 0] += words(segment.text).count }
-        let counted = Set(wordCount.keys.filter { wordCount[$0]! >= minimumRoomVoiceWords })
-        guard counted.count > 1, let countedVoices = voices.keeping(counted) else { return kept.map { (.me, $0.0) } }
+        let counted = Set(stats.filter { !$0.value.isEcho && $0.value.words >= minimumRoomVoiceWords }.keys)
+        guard counted.count > 1, let countedVoices = voices.keeping(counted) else { return kept.map { (.me, $0.segment) } }
         var numbers: [Int: Int] = [:]
         return kept.map { segment, voice in
             let room = counted.contains(voice) ? voice : countedVoices.voice(for: segment)
@@ -87,24 +97,36 @@ enum Transcript {
         }
     }
 
-    /// `voices[i]` is the voice of `me[i]`.
-    private static func echoVoices(_ me: [TranscriptSegment], voices: [Int], them: [TranscriptSegment]) -> Set<Int> {
-        var time: [Int: TimeInterval] = [:]
-        var overlap: [Int: TimeInterval] = [:]
-        var wordCount: [Int: Int] = [:]
-        var repeated: [Int: Int] = [:]
-        for (segment, (voice, shared)) in zip(me, zip(voices, timeOverlapping(them, for: me))) {
-            time[voice, default: 0] += segment.end - segment.start
-            overlap[voice, default: 0] += shared
+    /// What one voice said on the microphone track, added up over its segments.
+    private struct VoiceStats {
+        var time: TimeInterval = 0
+        /// The part of `time` during "Them" speech.
+        var overlap: TimeInterval = 0
+        var words = 0
+        /// The words that are also in the "Them" segments near their own segment.
+        var repeated = 0
+
+        var isEcho: Bool {
+            time > 0 && overlap >= Transcript.echoVoiceTimeShare * time
+                && Double(repeated) >= Transcript.echoVoiceWordShare * Double(words)
+        }
+    }
+
+    /// One pass over the microphone segments, which are in time order.
+    private static func voiceStats(_ voiced: [(segment: TranscriptSegment, voice: Int)],
+                                   them: [TranscriptSegment]) -> [Int: VoiceStats] {
+        var stats: [Int: VoiceStats] = [:]
+        for ((segment, voice), overlap) in zip(voiced, timeOverlapping(them, for: voiced.map(\.segment))) {
             let heard = Set(them.filter { nearInTime(segment, $0) }.flatMap { words($0.text) })
             let said = words(segment.text)
-            wordCount[voice, default: 0] += said.count
-            repeated[voice, default: 0] += said.filter(heard.contains).count
+            var sum = stats[voice, default: VoiceStats()]
+            sum.time += segment.end - segment.start
+            sum.overlap += overlap
+            sum.words += said.count
+            sum.repeated += said.filter(heard.contains).count
+            stats[voice] = sum
         }
-        return Set(time.keys.filter {
-            time[$0]! > 0 && overlap[$0]! >= echoVoiceTimeShare * time[$0]!
-                && Double(repeated[$0]!) >= echoVoiceWordShare * Double(wordCount[$0]!)
-        })
+        return stats
     }
 
     /// Short echoes pass the echo rule, and diarization can give them a voice of their own. A person
@@ -154,16 +176,15 @@ enum Transcript {
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
 
-    /// Everything after the speaker legend and before the known-words note, so the summary CLI gets
-    /// no header, no failure lines, and no list of corrections.
+    /// Everything after the speaker legend, so the summary CLI gets no header and no failure lines.
+    /// `markdown` has no known-words note: it is a `CorrectedTranscript.body`.
     static func contentForSummary(_ markdown: String) -> String {
-        let content = withoutCorrectionNote(markdown)
         for legend in Legend.allCases {
-            if let boundary = content.range(of: legend.rawValue + "\n\n") {
-                return String(content[boundary.upperBound...])
+            if let boundary = markdown.range(of: legend.rawValue + "\n\n") {
+                return String(markdown[boundary.upperBound...])
             }
         }
-        return content
+        return markdown
     }
 
     /// Applies `corrector` to the spoken text of each transcript line, after `**[hh:mm:ss] Label:** `.
@@ -181,16 +202,15 @@ enum Transcript {
             return line[..<spoken.text.startIndex] + corrected.text
         }
         let applied = summed(found)
-        guard !applied.isEmpty else { return CorrectedTranscript(markdown: heard, applied: []) }
+        guard !applied.isEmpty else { return CorrectedTranscript(body: heard, applied: []) }
         var text = lines.joined(separator: "\n")
         if !text.hasSuffix("\n") { text += "\n" }
-        let pairs = applied.map { "\($0.heard) → \($0.right) (\($0.count))" }.joined(separator: ", ")
-        return CorrectedTranscript(markdown: text + correctionNoteStart + pairs + ".\n", applied: applied)
+        return CorrectedTranscript(body: text, applied: applied)
     }
 
     /// `markdown` without the note that `corrected` adds.
     static func withoutCorrectionNote(_ markdown: String) -> String {
-        guard let note = markdown.range(of: correctionNoteStart, options: .backwards) else { return markdown }
+        guard let note = markdown.range(of: CorrectedTranscript.noteStart, options: .backwards) else { return markdown }
         return String(markdown[..<note.lowerBound])
     }
 
@@ -206,8 +226,6 @@ enum Transcript {
         }
         return nil
     }
-
-    private static let correctionNoteStart = "\n---\n\nKnown words applied: "
 
     /// Each pair once, in the order of its first use, with its counts added up.
     private static func summed(_ corrections: [AppliedCorrection]) -> [AppliedCorrection] {

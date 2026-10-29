@@ -144,6 +144,18 @@ struct RecordingClock: Equatable, Sendable {
     }
 }
 
+/// A recorded time as the menu, the panel, and its rows write it: "4:05", or "1:02:09" from an hour.
+enum RecordedTime {
+    static func format(_ interval: TimeInterval) -> String {
+        let seconds = Int(max(0, interval))
+        let hours = seconds / 3600
+        let minutes = seconds / 60 % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, seconds % 60)
+            : String(format: "%d:%02d", minutes, seconds % 60)
+    }
+}
+
 /// What `RecordingClock.cut` decided for one buffer. Only the clock can make one (the
 /// initializers are fileprivate), so no other code can decide which frames to keep.
 struct BufferCut: Equatable {

@@ -170,6 +170,12 @@ final class RecordingClockTests: XCTestCase {
         XCTAssertEqual(clock.pauses.map(\.duration), [30, 45])
     }
 
+    func testRecordedTimeShowsHoursOnlyWhenNeeded() {
+        XCTAssertEqual(RecordedTime.format(0), "0:00")
+        XCTAssertEqual(RecordedTime.format(245), "4:05")
+        XCTAssertEqual(RecordedTime.format(3729), "1:02:09")
+    }
+
     private func assertFilePositions(_ cut: BufferCut, _ expected: [TimeInterval],
                                      file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertEqual(cut.pieces.count, expected.count, "pieces", file: file, line: line)

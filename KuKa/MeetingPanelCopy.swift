@@ -24,7 +24,7 @@ enum MeetingPanelCopy {
     }
 
     static func timeLabel(_ recorded: TimeInterval) -> String {
-        "Recorded time \(MeetingRecorder.formatElapsed(recorded))"
+        "Recorded time \(RecordedTime.format(recorded))"
     }
 
     static func note(for status: MeetingControls.Status) -> String? {
@@ -95,8 +95,8 @@ enum MeetingPanelCopy {
     }
 
     static func pauseRow(at recorded: TimeInterval, duration: TimeInterval?) -> String {
-        let at = "Paused at \(MeetingRecorder.formatElapsed(recorded))"
-        return duration.map { "\(at) for \(MeetingRecorder.formatElapsed($0))" } ?? at
+        let at = "Paused at \(RecordedTime.format(recorded))"
+        return duration.map { "\(at) for \(RecordedTime.format($0))" } ?? at
     }
 
     static func returnToLive(newRows: Int) -> String {

@@ -50,7 +50,7 @@ final class RealMeetingAudioTests: XCTestCase {
             timings.append("room labels: \(seconds(clock.now - start)) s" + (downloads ? " with a download" : ""))
         }
 
-        let lines = Transcript.merge(tracks, rooms: rooms)
+        let lines = Transcript.merge(tracks.mapValues(\.segments), rooms: rooms)
         let markdown = Transcript.markdown(lines, title: "Meeting audio in \(audio.lastPathComponent)",
                                            duration: tracks.values.map(\.duration).max() ?? 0,
                                            by: transcriber.name, after: [], rooms: rooms)

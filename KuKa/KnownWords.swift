@@ -59,6 +59,8 @@ struct KnownWordsList: Equatable, Sendable {
     let correctAsHeard: [Phrase]
     /// Every line of the text with its own ending, so `adding` can insert by position.
     private let lines: [Line]
+    /// The tokens of every right form, heard form, and correct-as-heard word, for `knows`.
+    private let knownTokens: Set<[String]>
 
     init(markdown: String) {
         lines = Self.lines(of: markdown)
@@ -71,6 +73,7 @@ struct KnownWordsList: Equatable, Sendable {
             correctAsHeard.append(word)
         }
         self.correctAsHeard = correctAsHeard
+        knownTokens = Set((words.flatMap(Self.phrases) + correctAsHeard).map(\.tokens))
     }
 
     /// Two lists are equal when they say the same words. The text they come from can differ in line
@@ -108,7 +111,7 @@ struct KnownWordsList: Equatable, Sendable {
     /// right form, or correct as heard. Case is ignored. Ku-Ka never asks about such a word.
     func knows(_ heard: String) -> Bool {
         guard let tokens = Phrase(heard)?.tokens else { return false }
-        return (words.flatMap(Self.phrases) + correctAsHeard).contains { $0.tokens == tokens }
+        return knownTokens.contains(tokens)
     }
 
     /// The words whose right form or any heard form occurs in `text` as whole tokens, and the

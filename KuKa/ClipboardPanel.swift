@@ -131,11 +131,7 @@ final class ClipboardPanel: FloatingPanel {
         makeFirstResponder(searchField)
 
         guard shouldFade, alphaValue < 1 else { return }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Metrics.fadeDuration
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            animator().alphaValue = 1
-        }
+        fadeIn(duration: Metrics.fadeDuration, timingFunction: CAMediaTimingFunction(name: .easeOut))
     }
 
     /// Hides the panel at once. No fade out: a paste dismisses the panel
@@ -156,16 +152,6 @@ final class ClipboardPanel: FloatingPanel {
 
     private var shouldFade: Bool {
         !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }
-
-    /// Writes alpha through a zero-duration animation, which also replaces
-    /// any fade still in flight. A plain `alphaValue =` would be overwritten
-    /// by the running animation on its next tick.
-    private func setAlphaImmediately(_ value: CGFloat) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            animator().alphaValue = value
-        }
     }
 
     /// Horizontally centered on the screen under the pointer, with the top
@@ -194,12 +180,10 @@ final class ClipboardPanel: FloatingPanel {
     /// caps out at `ClipboardHistory.maxItems` rows.
     func reload() {
         if case .chooser(let item) = controller.mode {
-            headerLabel.isHidden = false
-            headerLabel.stringValue = Self.headerText(for: item)
+            headerLabel.show(Self.headerText(for: item))
             scrollTopConstraint.constant = Metrics.chooserTopGap
         } else {
-            headerLabel.isHidden = true
-            headerLabel.stringValue = ""
+            headerLabel.show(nil)
             scrollTopConstraint.constant = Metrics.listTopGap
         }
 

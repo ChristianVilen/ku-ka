@@ -55,20 +55,20 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
 
     private let meetingLabel = NSTextField(labelWithString: "")
     private let positionLabel = NSTextField(labelWithString: "")
-    private let placeLabel = makeLabel(color: .secondaryLabelColor)
-    private let quoteLabel = makeLabel()
-    private let reasonLabel = makeLabel(color: .secondaryLabelColor)
+    private let placeLabel = NSTextField.makeWrappingLabel(size: 13, color: .secondaryLabelColor)
+    private let quoteLabel = NSTextField.makeWrappingLabel(size: 13)
+    private let reasonLabel = NSTextField.makeWrappingLabel(size: 13, color: .secondaryLabelColor)
     private let field = NSTextField()
-    private let ordinaryNoteLabel = makeLabel(color: .secondaryLabelColor)
-    private let questionErrorLabel = makeLabel(color: .systemRed)
+    private let ordinaryNoteLabel = NSTextField.makeWrappingLabel(size: 13, color: .secondaryLabelColor)
+    private let questionErrorLabel = NSTextField.makeWrappingLabel(size: 13, color: .systemRed)
     private lazy var skipButton = makeButton(WordReviewCopy.skip, #selector(skipClicked))
     private lazy var correctAsHeardButton = makeButton(WordReviewCopy.correctAsHeard, #selector(correctAsHeardClicked))
     private lazy var saveButton = makeButton(WordReviewCopy.save, #selector(saveClicked))
     private lazy var questionPage = makeQuestionPage()
 
-    private let finishedLabel = makeLabel(weight: .bold)
-    private let explanationLabel = makeLabel(color: .secondaryLabelColor)
-    private let finishedErrorLabel = makeLabel(color: .systemRed)
+    private let finishedLabel = NSTextField.makeWrappingLabel(size: 13, weight: .bold)
+    private let explanationLabel = NSTextField.makeWrappingLabel(size: 13, color: .secondaryLabelColor)
+    private let finishedErrorLabel = NSTextField.makeWrappingLabel(size: 13, color: .systemRed)
     private lazy var openSummaryButton = makeButton(WordReviewCopy.openSummary, #selector(openSummaryClicked))
     private lazy var updateNotesButton = makeButton(WordReviewCopy.updateNotes, #selector(updateNotesClicked))
     private lazy var nextMeetingButton = makeButton(WordReviewCopy.nextMeeting, #selector(nextMeetingClicked))
@@ -142,11 +142,11 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         install(questionPage)
         meetingLabel.stringValue = page.meetingTitle
         positionLabel.stringValue = WordReviewCopy.position(page.number, of: page.count)
-        Self.show(page.place, in: placeLabel)
+        placeLabel.show(page.place)
         quoteLabel.attributedStringValue = Self.attributedQuote(page.quote)
-        Self.show(page.reason.map(WordReviewCopy.reason), in: reasonLabel)
-        Self.show(page.isOrdinary ? WordReviewCopy.ordinaryNote(page.heard) : nil, in: ordinaryNoteLabel)
-        Self.show(error, in: questionErrorLabel)
+        reasonLabel.show(page.reason.map(WordReviewCopy.reason))
+        ordinaryNoteLabel.show(page.isOrdinary ? WordReviewCopy.ordinaryNote(page.heard) : nil)
+        questionErrorLabel.show(error)
         field.setAccessibilityLabel(WordReviewCopy.rightWordField(page.heard))
         if page != questionInField {
             questionInField = page
@@ -164,8 +164,8 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         finishedLabel.stringValue = WordReviewCopy.finished(page.meetingTitle)
         let explanation = page.isUpdating ? WordReviewCopy.updating
             : page.canUpdateNotes ? WordReviewCopy.updateExplanation : nil
-        Self.show(explanation, in: explanationLabel)
-        Self.show(error, in: finishedErrorLabel)
+        explanationLabel.show(explanation)
+        finishedErrorLabel.show(error)
         updateNotesButton.isHidden = !page.canUpdateNotes
         nextMeetingButton.isHidden = page.otherMeetings == 0
         fitWindow()
@@ -308,14 +308,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         return button
     }
 
-    private static func makeLabel(weight: NSFont.Weight = .regular, color: NSColor = .labelColor) -> NSTextField {
-        let label = NSTextField(wrappingLabelWithString: "")
-        label.font = .systemFont(ofSize: 13, weight: weight)
-        label.textColor = color
-        label.isSelectable = false
-        return label
-    }
-
     private static func row(_ views: [NSView]) -> NSStackView {
         let row = NSStackView(views: views)
         row.orientation = .horizontal
@@ -329,11 +321,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         return spacer
-    }
-
-    private static func show(_ text: String?, in label: NSTextField) {
-        label.stringValue = text ?? ""
-        label.isHidden = text == nil
     }
 
     /// The quote in quotation marks with the heard form in bold. The plain text is the same, so

@@ -474,10 +474,4 @@ final class MeetingRecorderTests: XCTestCase {
         XCTAssertEqual(capture.recordings.count, 0)
         XCTAssertEqual(alerts, ["Ku-Ka needs Microphone permission to record your side of the call."])
     }
-
-    func testElapsedTimeShowsHoursOnlyWhenNeeded() {
-        XCTAssertEqual(MeetingRecorder.formatElapsed(0), "0:00")
-        XCTAssertEqual(MeetingRecorder.formatElapsed(245), "4:05")
-        XCTAssertEqual(MeetingRecorder.formatElapsed(3729), "1:02:09")
-    }
 }

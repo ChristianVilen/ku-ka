@@ -156,7 +156,7 @@ final class SpeakerKitRoomLabellerTests: XCTestCase {
         otherKuKa.release()
     }
 
-    func testAfterTheWaitAModelThatAnotherKuKaInstalledIsUsedEvenWhileItHoldsTheLock() async throws {
+    func testAModelThatAnotherKuKaInstalledIsUsedAtOnceEvenWhileItHoldsTheLock() async throws {
         let otherKuKa = try lockAsAnotherKuKa()
         try FileManager.default.createDirectory(at: root.appendingPathComponent("speakerkit-coreml-556fc52a"),
                                                 withIntermediateDirectories: false)

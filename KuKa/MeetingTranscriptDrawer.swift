@@ -22,10 +22,10 @@ final class MeetingTranscriptDrawer: NSView {
     private let pillEdge = MeetingPanelFill(color: .separatorColor, rounded: .none)
     private let header = NSStackView()
     private let behindChip = MeetingPanelFill(color: Colors.button, radius: 6)
-    private let behindLabel = MeetingPanelLabel(size: 11, weight: .semibold, digits: true)
+    private let behindLabel = NSTextField.makeLabel(size: 11, weight: .semibold, digits: true)
     private lazy var hideButton = NSButton(title: "", target: self, action: #selector(hideClicked))
-    private let messageTitle = MeetingPanelLabel(size: 13, weight: .semibold)
-    private let messageBody = MeetingPanelLabel(wrapping: .systemFont(ofSize: 12.5), color: .secondaryLabelColor)
+    private let messageTitle = NSTextField.makeLabel(size: 13, weight: .semibold)
+    private let messageBody = NSTextField.makeWrappingLabel(size: 12.5, color: .secondaryLabelColor)
     private let messageStack = NSStackView()
     private let tableView = NSTableView()
     private let scrollView = NSScrollView()
@@ -180,9 +180,9 @@ final class MeetingTranscriptDrawer: NSView {
     // MARK: - Building
 
     private func build() {
-        let title = MeetingPanelLabel(size: 12, weight: .semibold)
+        let title = NSTextField.makeLabel(size: 12, weight: .semibold)
         title.stringValue = MeetingPanelCopy.transcriptTitle
-        let draft = MeetingPanelLabel(size: 11.5, color: .secondaryLabelColor)
+        let draft = NSTextField.makeLabel(size: 11.5, color: .secondaryLabelColor)
         draft.stringValue = MeetingPanelCopy.draftNote
         draft.toolTip = MeetingPanelCopy.draftTooltip
         draft.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

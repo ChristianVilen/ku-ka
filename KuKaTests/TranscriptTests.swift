@@ -8,10 +8,7 @@ final class TranscriptTests: XCTestCase {
 
     private func merge(me: [TranscriptSegment] = [], them: [TranscriptSegment] = [],
                        rooms: RoomLabels = .notDiarized) -> [TranscriptLine] {
-        Transcript.merge([
-            .microphone: TrackTranscript(segments: me, duration: 60),
-            .system: TrackTranscript(segments: them, duration: 60),
-        ], rooms: rooms)
+        Transcript.merge([.microphone: me, .system: them], rooms: rooms)
     }
 
     private func voices(_ turns: (voice: Int, start: TimeInterval, end: TimeInterval)...) -> RoomLabels {
@@ -497,7 +494,8 @@ final class TranscriptTests: XCTestCase {
 
         let corrected = Transcript.corrected(heard, by: corrector("- Whisper / meeting → **Quorix** ✓\n- Convio → **Konvio**\n"))
 
-        XCTAssertEqual(corrected, CorrectedTranscript(markdown: heard, applied: []))
+        XCTAssertEqual(corrected, CorrectedTranscript(body: heard, applied: []))
+        XCTAssertEqual(corrected.markdown, heard)
     }
 
     /// Without the line break, "---" would turn the last line into a heading.
@@ -516,14 +514,15 @@ final class TranscriptTests: XCTestCase {
         XCTAssertEqual(Transcript.withoutCorrectionNote(heard), heard)
     }
 
-    func testSummaryContentLeavesOutTheKnownWordsNoteAfterEveryLegendAndWithoutOne() {
+    func testTheSummaryContentOfTheCorrectedBodyHasNoKnownWordsNoteAfterEveryLegendAndWithoutOne() {
         let header = "# Meeting on 2026-10-23 at 14:02\n\nDuration: 00:01:00\n\nTranscript by Whisper large-v3-v20240930_turbo.\n\n"
         let cases = legends.map { (name: $0.name, header: header + $0.text + "\n\n") } + [("no legend", "")]
         for (name, header) in cases {
             let heard = header + "**[00:00:01] Them:** Let's ship Convio on Friday\n"
-            let markdown = Transcript.corrected(heard, by: corrector("- Convio → **Konvio** ✓\n")).markdown
+            let corrected = Transcript.corrected(heard, by: corrector("- Convio → **Konvio** ✓\n"))
 
-            XCTAssertEqual(Transcript.contentForSummary(markdown), "**[00:00:01] Them:** Let's ship Konvio on Friday\n", name)
+            XCTAssertEqual(corrected.body, Transcript.withoutCorrectionNote(corrected.markdown), name)
+            XCTAssertEqual(Transcript.contentForSummary(corrected.body), "**[00:00:01] Them:** Let's ship Konvio on Friday\n", name)
         }
     }
 

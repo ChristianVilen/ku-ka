@@ -40,7 +40,7 @@ extension MeetingControlsPanel {
         static let returnToLiveBottom: CGFloat = 10
         static var transcriptTextWidth: CGFloat { openWidth - 2 * rowInset - speakerColumn - columnGap }
 
-        static let textFont = NSFont.systemFont(ofSize: 13)
+        static let textSize: CGFloat = 13
         static let fadeDuration: TimeInterval = 0.15
         static let resizeDuration: TimeInterval = 0.2
     }
@@ -291,9 +291,9 @@ final class MeetingDrawerGrip: MeetingPanelDragView {
 final class TranscriptSpeechCell: NSTableCellView {
     private typealias Layout = MeetingControlsPanel.Layout
 
-    private let speakerLabel = MeetingPanelLabel(size: 11.5, weight: .semibold)
-    private let timeLabel = MeetingPanelLabel(size: 10.5, weight: .medium, color: .tertiaryLabelColor, digits: true)
-    private let speechLabel = MeetingPanelLabel(wrapping: Layout.textFont)
+    private let speakerLabel = NSTextField.makeLabel(size: 11.5, weight: .semibold)
+    private let timeLabel = NSTextField.makeLabel(size: 10.5, weight: .medium, color: .tertiaryLabelColor, digits: true)
+    private let speechLabel = NSTextField.makeWrappingLabel(size: Layout.textSize)
     private var topGap = Layout.rowTopGap
 
     init() {
@@ -308,7 +308,7 @@ final class TranscriptSpeechCell: NSTableCellView {
     func configure(speaker: Speaker, at time: TimeInterval, text: String, isFinal: Bool, isContinuation: Bool) {
         speakerLabel.stringValue = speaker.label
         speakerLabel.textColor = MeetingControlsPanel.Colors.speaker(speaker)
-        timeLabel.stringValue = MeetingRecorder.formatElapsed(time)
+        timeLabel.stringValue = RecordedTime.format(time)
         speakerLabel.isHidden = isContinuation
         timeLabel.isHidden = isContinuation
         speechLabel.stringValue = MeetingPanelCopy.speech(text, isFinal: isFinal)
@@ -335,12 +335,12 @@ final class TranscriptSpeechCell: NSTableCellView {
         return top + ceil(max(textHeight, labels)) + Layout.rowBottomGap
     }
 
-    private static let measuring = MeetingPanelLabel(wrapping: Layout.textFont)
+    private static let measuring = NSTextField.makeWrappingLabel(size: Layout.textSize)
 }
 
 /// A pause in the recording, as a divider with its time.
 final class TranscriptPauseCell: NSTableCellView {
-    private let label = MeetingPanelLabel(size: 11, weight: .semibold, color: .secondaryLabelColor, digits: true)
+    private let label = NSTextField.makeLabel(size: 11, weight: .semibold, color: .secondaryLabelColor, digits: true)
 
     init() {
         super.init(frame: .zero)
@@ -367,36 +367,5 @@ final class TranscriptPauseCell: NSTableCellView {
         NSColor.separatorColor.setFill()
         NSRect(x: inset, y: y, width: max(0, label.frame.minX - 8 - inset), height: 0.5).fill()
         NSRect(x: label.frame.maxX + 8, y: y, width: max(0, bounds.width - inset - label.frame.maxX - 8), height: 0.5).fill()
-    }
-}
-
-/// A label that can never be selected or edited: nothing in the panel is copied from.
-final class MeetingPanelLabel: NSTextField {
-    init(size: CGFloat, weight: NSFont.Weight = .regular, color: NSColor = .labelColor, digits: Bool = false) {
-        super.init(frame: .zero)
-        setUp(font: digits ? .monospacedDigitSystemFont(ofSize: size, weight: weight) : .systemFont(ofSize: size, weight: weight))
-        textColor = color
-        maximumNumberOfLines = 1
-        lineBreakMode = .byTruncatingTail
-    }
-
-    init(wrapping font: NSFont, color: NSColor = .labelColor) {
-        super.init(frame: .zero)
-        setUp(font: font)
-        textColor = color
-        maximumNumberOfLines = 0
-        lineBreakMode = .byWordWrapping
-        cell?.wraps = true
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    private func setUp(font: NSFont) {
-        self.font = font
-        isEditable = false
-        isSelectable = false
-        isBezeled = false
-        isBordered = false
-        drawsBackground = false
     }
 }

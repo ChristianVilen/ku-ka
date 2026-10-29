@@ -24,14 +24,16 @@ struct ModelInstall {
     func install(using download: (URL) async throws -> Void) async throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         excludeFromBackup()
-        let lock = try await acquireLock()
-        defer { lock?.release() }
+        guard let lock = try await acquireLock() else { return }
+        defer { lock.release() }
+        // Another Ku-Ka can install the model and release the lock before this one gets it.
         guard !isInstalled else { return }
         try await download(partial)
         try FileManager.default.moveItem(at: partial, to: folder)
     }
 
-    /// Nil when another Ku-Ka still holds the lock after `lockWait` but has installed the model.
+    /// Nil as soon as the model is installed while another Ku-Ka holds the lock: the other Ku-Ka
+    /// installed it, so there is nothing to wait for.
     private func acquireLock() async throws -> FileLock? {
         let clock = ContinuousClock()
         let deadline = clock.now + lockWait
@@ -39,8 +41,8 @@ struct ModelInstall {
             do {
                 return try FileLock.acquire(at: root.appendingPathComponent(".lock"))
             } catch FileLockError.held {
+                if isInstalled { return nil }
                 guard clock.now < deadline else {
-                    if isInstalled { return nil }
                     throw MeetingStepError("Another Ku-Ka is downloading the \(label) model.")
                 }
                 try await Task.sleep(for: .milliseconds(250))

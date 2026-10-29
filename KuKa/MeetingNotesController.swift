@@ -286,7 +286,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     /// Nil while idle.
     private var statusLine: String? {
         guard recorder.phase != .starting else { return "Starting Recording" }
-        guard let recorded = recorder.recordedTime.map(MeetingRecorder.formatElapsed) else { return nil }
+        guard let recorded = recorder.recordedTime.map(RecordedTime.format) else { return nil }
         return recorder.phase == .paused ? "Paused · \(recorded)" : "● Recording · \(recorded)"
     }
 

@@ -369,15 +369,6 @@ final class MeetingRecorder {
         displayTimer = timer
     }
 
-    nonisolated static func formatElapsed(_ interval: TimeInterval) -> String {
-        let seconds = Int(max(0, interval))
-        let hours = seconds / 3600
-        let minutes = seconds / 60 % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, seconds % 60)
-            : String(format: "%d:%02d", minutes, seconds % 60)
-    }
-
     static func afterSixSeconds(_ work: @escaping @MainActor () -> Void) {
         let timer = Timer(timeInterval: 6, repeats: false) { _ in
             MainActor.assumeIsolated { work() }

@@ -70,10 +70,15 @@ struct MeetingProcessor {
         defer { lock.release() }
         guard meeting.stage() == .done else { return .notReady }
         do {
-            try await writeNotes(meeting, asksQuestions: false)
+            switch try await correctAndSummarize(meeting).result {
+            case .written(let notes, _, _, _):
+                try meeting.write(SummaryDocument.markdown(title: meeting.title, body: notes), to: .summary)
+            case .failed(let failures):
+                if Task.isCancelled { return .cancelled }
+                return .summaryToolFailed(message: failures.map(\.description).joined(separator: "\n"))
+            }
         } catch {
             if Task.isCancelled { return .cancelled }
-            if error is SummaryToolError { return .summaryToolFailed(message: error.localizedDescription) }
             return .failed(message: error.localizedDescription)
         }
         return .updated(summary: meeting.url(for: .summary))
@@ -134,7 +139,7 @@ struct MeetingProcessor {
         let (tracks, transcriber, failures) = try await transcribeTracks(meeting, progress: progress)
         let rooms = try await labelRooms(meeting, tracks: tracks, progress: progress)
         try Task.checkCancellation()
-        let lines = Transcript.merge(tracks, rooms: rooms)
+        let lines = Transcript.merge(tracks.mapValues(\.segments), rooms: rooms)
         let duration = tracks.values.map(\.duration).max() ?? 0
         if lines.isEmpty {
             // Summary first: it marks the meeting done, so a crash before the
@@ -167,7 +172,7 @@ struct MeetingProcessor {
     /// Throws only when the meeting folder cannot be written.
     private func labelRooms(_ meeting: MeetingFolder, tracks: [MeetingTrack: TrackTranscript],
                             progress: (MeetingProgress) -> Void) async throws -> RoomLabels {
-        guard !Transcript.microphoneSpeech(tracks).isEmpty else { return .notDiarized }
+        guard !Transcript.microphoneSpeech(tracks.mapValues(\.segments)).isEmpty else { return .notDiarized }
         guard !meeting.roomLabelsStarted else { return .failed(.earlierAttemptStopped) }
         guard (tracks[.microphone]?.duration ?? 0) <= RoomLabelFailure.longestTrack else { return .failed(.tooLong) }
         if roomLabeller.needsDownload {
@@ -244,32 +249,35 @@ struct MeetingProcessor {
         } catch {
             NSLog("Ku-Ka: could not move meeting audio to the Trash: \(error)")
         }
-        try await writeNotes(meeting, asksQuestions: true)
+        let summary = try await correctAndSummarize(meeting)
+        switch summary.result {
+        case .written(let notes, let suspects, _, _):
+            // The questions, or the removal of old ones, go before `summary.md`, which marks the meeting done.
+            try meeting.saveQuestions(WordQuestions.select(suspects, in: summary.content, knownWords: summary.list))
+            try meeting.write(SummaryDocument.markdown(title: meeting.title, body: notes), to: .summary)
+        case .failed(let failures):
+            throw MeetingStepError(failures.map(\.description).joined(separator: "\n"))
+        }
     }
 
     /// The one place that applies known words. `transcript.md` is always made again from the heard
     /// copy and the list as it is now, so a second run gives the same file and a removed list line
-    /// undoes its replacement. Writes `transcript.md`, then with `asksQuestions` the questions (or
-    /// removes old ones), then `summary.md`, which marks the meeting done.
-    private func writeNotes(_ meeting: MeetingFolder, asksQuestions: Bool) async throws {
+    /// undoes its replacement. Then the CLI summarizes the corrected text. Throws only when the
+    /// meeting folder cannot be read or written; the caller decides what a failed CLI means and
+    /// writes `summary.md`.
+    private func correctAndSummarize(_ meeting: MeetingFolder) async throws
+        -> (result: SummaryResult, content: String, list: KnownWordsList) {
         let heard = try meeting.heardTranscript()
         let list = knownWords()
         let corrected = Transcript.corrected(heard, by: list.corrector)
         try meeting.write(corrected.markdown, to: .transcript)
-        let content = Transcript.contentForSummary(corrected.markdown)
-        switch await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content)) {
-        case .written(let notes, let suspects, let cli, let earlier):
-            if !earlier.isEmpty {
-                NSLog("Ku-Ka: %@ wrote the notes of %@. Tried first: %@", cli.rawValue, meeting.name,
-                      earlier.map(\.description).joined(separator: "; "))
-            }
-            if asksQuestions {
-                try meeting.saveQuestions(WordQuestions.select(suspects, in: content, knownWords: list))
-            }
-            try meeting.write(SummaryDocument.markdown(title: meeting.title, body: notes), to: .summary)
-        case .failed(let failures):
-            throw SummaryToolError(errorDescription: failures.map(\.description).joined(separator: "\n"))
+        let content = Transcript.contentForSummary(corrected.body)
+        let result = await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content))
+        if case .written(_, _, let cli, let earlier) = result, !earlier.isEmpty {
+            NSLog("Ku-Ka: %@ wrote the notes of %@. Tried first: %@", cli.rawValue, meeting.name,
+                  earlier.map(\.description).joined(separator: "; "))
         }
+        return (result, content, list)
     }
 
     static func failureText(step: MeetingStep, message: String, at date: Date) -> String {
@@ -292,9 +300,4 @@ struct MeetingProcessor {
 struct MeetingStepError: LocalizedError {
     let errorDescription: String?
     init(_ message: String) { errorDescription = message }
-}
-
-/// Every summary CLI failed. `writeNotes` throws it only after it wrote `transcript.md`.
-private struct SummaryToolError: LocalizedError {
-    let errorDescription: String?
 }

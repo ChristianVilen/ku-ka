@@ -53,14 +53,14 @@ final class MeetingControlsPanel: FloatingPanel {
     private let pill = MeetingPillView()
     private let spinner = NSProgressIndicator()
     private let mark = MeetingStatusMark()
-    private let timeLabel = MeetingPanelLabel(size: 13, weight: .semibold, digits: true)
-    private let wordLabel = MeetingPanelLabel(size: 13, weight: .semibold)
+    private let timeLabel = NSTextField.makeLabel(size: 13, weight: .semibold, digits: true)
+    private let wordLabel = NSTextField.makeLabel(size: 13, weight: .semibold)
     private lazy var pauseButton = MeetingPanelButton(target: self, action: #selector(pauseClicked))
     private lazy var stopButton = MeetingPanelButton(target: self, action: #selector(stopClicked))
     private lazy var closeButton = MeetingPanelButton(target: self, action: #selector(closeClicked))
     private lazy var transcriptButton = MeetingPanelButton(target: self, action: #selector(transcriptClicked))
     private let buttonSeparator = MeetingPanelFill(color: .separatorColor, rounded: .none)
-    private let noteLabel = MeetingPanelLabel(wrapping: .systemFont(ofSize: 12), color: .secondaryLabelColor)
+    private let noteLabel = NSTextField.makeWrappingLabel(size: 12, color: .secondaryLabelColor)
     private let drawer: MeetingTranscriptDrawer
 
     init(recorder: MeetingRecorder, settings: Settings, screens: Screens = SystemScreens(),
@@ -167,7 +167,7 @@ final class MeetingControlsPanel: FloatingPanel {
 
     private func renderTime(_ recorded: TimeInterval?) {
         guard let recorded else { return }
-        let time = MeetingRecorder.formatElapsed(recorded)
+        let time = RecordedTime.format(recorded)
         guard time != timeLabel.stringValue else { return }
         timeLabel.stringValue = time
         timeLabel.setAccessibilityLabel(MeetingPanelCopy.timeLabel(recorded))
@@ -186,9 +186,7 @@ final class MeetingControlsPanel: FloatingPanel {
 
         timeLabel.isHidden = !showsTime
         timeLabel.textColor = isPaused ? .secondaryLabelColor : .labelColor
-        let word = MeetingPanelCopy.word(for: status)
-        wordLabel.isHidden = word == nil
-        wordLabel.stringValue = word ?? ""
+        wordLabel.show(MeetingPanelCopy.word(for: status))
 
         for view in [pauseButton, stopButton, transcriptButton, buttonSeparator] { view.isHidden = !isRecorder }
         closeButton.isHidden = isRecorder
@@ -199,9 +197,7 @@ final class MeetingControlsPanel: FloatingPanel {
                                                : Self.symbol("pause.fill", size: 12, color: .labelColor),
                               copy: MeetingPanelCopy.pauseButton(isPaused: isPaused))
 
-        let note = MeetingPanelCopy.note(for: status)
-        noteLabel.isHidden = note == nil
-        noteLabel.stringValue = note ?? ""
+        noteLabel.show(MeetingPanelCopy.note(for: status))
 
         drawer.isHidden = !shape.isTranscriptOpen
         drawer.showMessage(for: shape.liveStatus)
@@ -273,10 +269,7 @@ final class MeetingControlsPanel: FloatingPanel {
     private func appear() {
         setAlphaImmediately(0)
         orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Layout.fadeDuration
-            animator().alphaValue = 1
-        }
+        fadeIn(duration: Layout.fadeDuration)
     }
 
     private func disappear() {
@@ -287,14 +280,6 @@ final class MeetingControlsPanel: FloatingPanel {
         dragCorner = nil
         resizeStart = nil
         resizeHeight = nil
-    }
-
-    /// A zero-length animation, so a fade still running cannot overwrite it.
-    private func setAlphaImmediately(_ value: CGFloat) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0
-            animator().alphaValue = value
-        }
     }
 
     private func handle(_ request: MeetingControlsRequest) {
