@@ -9,7 +9,7 @@ final class CalendarNativeTests: XCTestCase {
 
     private func fields(original: Date? = nil, recurring: Bool = false) -> CalendarEventFields {
         CalendarEventFields(calendar: "work", item: "series", originalOccurrence: original,
-                            recurring: recurring, title: "Planning", start: date, end: date.addingTimeInterval(600))
+                            recurring: recurring, source: "synthetic", title: "Planning", start: date, end: date.addingTimeInterval(600))
     }
 
     func testNormalizationPreservesOriginalRecurrenceAndEligibility() {

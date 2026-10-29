@@ -6,7 +6,7 @@ struct CalendarEventFields {
     var originalOccurrence: Date?
     var recurring = false
     var external: String?
-    var source = "synthetic"
+    var source: String
     var title: String
     var start: Date
     var end: Date
@@ -23,12 +23,13 @@ struct CalendarEventFields {
     }
 
     init(calendar: String, item: String, originalOccurrence: Date? = nil, recurring: Bool = false,
-         external: String? = nil, title: String, start: Date, end: Date) {
+         external: String? = nil, source: String, title: String, start: Date, end: Date) {
         self.calendar = calendar
         self.item = item
         self.originalOccurrence = originalOccurrence
         self.recurring = recurring
         self.external = external
+        self.source = source
         self.title = title
         self.start = start
         self.end = end
@@ -39,8 +40,8 @@ struct CalendarEventFields {
         self.init(calendar: calendar.calendarIdentifier, item: event.calendarItemIdentifier,
                   originalOccurrence: event.occurrenceDate,
                   recurring: event.hasRecurrenceRules || event.isDetached,
-                  external: event.calendarItemExternalIdentifier, title: event.title ?? "", start: start, end: end)
-        source = calendar.source.sourceIdentifier
+                  external: event.calendarItemExternalIdentifier, source: calendar.source.sourceIdentifier,
+                  title: event.title ?? "", start: start, end: end)
         allDay = event.isAllDay
         cancelled = event.status == .canceled
         declined = event.attendees?.contains { $0.isCurrentUser && $0.participantStatus == .declined } ?? false
