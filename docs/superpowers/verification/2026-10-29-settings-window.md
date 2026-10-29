@@ -36,6 +36,7 @@ Use one runner with DerivedData in `build/task-verification`:
 ```sh
 xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
   -derivedDataPath build/task-verification test \
+  -only-testing:KuKaTests/AppLaunchModeTests \
   -only-testing:KuKaTests/SettingsWindowControllerTests \
   -only-testing:KuKaTests/SettingsTests \
   -only-testing:KuKaTests/StatusMenuTests \
@@ -51,13 +52,22 @@ xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
 
 The B1 host regression first failed against `02ed968` with `XCTAssertFalse failed - XCTest must not construct the production AppDelegate`. After host separation and the S1 thumbnail refactor, the focused `AppLaunchModeTests` and `SettingsWindowControllerTests` run passed 17 tests with no failures. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-28-14-+0200.xcresult`. S1 used the existing native-action and saved-custom-value tests, with literal menu labels instead of row-index and tag assumptions. The earlier full-suite results below remain historical; the parent task runs the final full suite.
 
-The final full KuKaTests run at `18593df` passed 818 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-06-17-+0200.xcresult`. A prior full run at `3a7037b` passed 817 tests before the final regression test was added.
+The final full KuKaTests run at `c30fcba` passed 820 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-34-15-+0200.xcresult`. Earlier full runs at `18593df` and `3a7037b` passed 818 and 817 tests, respectively.
 
 The skipped tests are the optional meeting-panel image capture, two real live-transcript tests, the real Whisper audio test, and the real SpeakerKit test. They need explicit fixture or model paths and were not enabled. Xcode reported the existing CoreDevice and CoreSimulator mismatches, the Info.plist resource warning, and a thread-priority warning in WordReviewWindowTests. The run was successful, not warning-free.
 
 The summary-tool and native-control changes used observed red-green test cycles. The separate menu-migration red check was retrospective. It confirmed that the new test rejects the old menu, but it did not follow the planned test-before-migration order.
 
 The final login regression test failed before the fix with a visible old error and the text difference `"Could not change launch at login. Registration refused"` versus `""`. After the fix, 34 focused Settings tests passed. The final full suite includes that regression.
+
+### Judo review follow-up
+
+- B1 is addressed. `main.swift` selects the production delegate, the isolated Settings preview, or the passive XCTest host once. `AppDelegate` has no test-mode branches or test-only settings access. The new host test failed against the former production delegate before implementation, then passed with the passive host. The preview tests use isolated preferences and injected presentation and activation.
+- S1 is addressed. One table defines thumbnail titles and duration values. Refresh and native selection use those values, with no preset-count or row-index rule. Existing behavior tests cover every standard choice and the saved custom value. The form's labels and layout remain unchanged.
+
+Commit `015696c` implements these changes. Its 17 focused tests passed, but the first full run exposed two assertions in one preview test that required a missing preferences domain. macOS returned an empty dictionary instead. Commit `c30fcba` corrects the assertions to require no stored values and shares the native window-presentation operation between production and preview. The 17 focused tests and final full suite passed afterward.
+
+The independent scoped review accepted B1 and S1 and requested removal of the duplicated presentation closure. The correction review accepted that extraction and the empty-domain assertion fix with no new findings. The standalone debug app remained closed; the final process check found no worktree app or test host running.
 
 ## Native rendering evidence
 
