@@ -289,14 +289,20 @@ final class CalendarReminderTests: XCTestCase {
 
     func testLateNotificationAddAfterDisableIsRemoved() async {
         source.events = [event()]
+        let center = CalendarCenterFake()
+        let adapter = CalendarReminderNotifications(calls: center.calls)
+        sut = CalendarReminderController(source: source, notifications: adapter, recorder: recorder,
+            driver: driver, settings: settings, store: CalendarReminderStore(defaults: defaults), now: { self.time })
         var release: CheckedContinuation<Void, Never>?
-        notices.addWait = { await withCheckedContinuation { release = $0 } }
+        center.addWait = { await withCheckedContinuation { release = $0 } }
         let enabling = Task { await self.sut.setEnabled(true) }
         await waitUntil { release != nil }
         await sut.setEnabled(false)
         release?.resume()
         await enabling.value
-        XCTAssertTrue(notices.visible.isEmpty)
+        XCTAssertEqual(center.requests.count, 1)
+        XCTAssertTrue(center.pendingIDs.isEmpty)
+        XCTAssertTrue(center.deliveredIDs.isEmpty)
         XCTAssertEqual(sut.status, .off)
     }
 
@@ -531,12 +537,10 @@ private final class CalendarNoticesFake: CalendarReminderNotifying {
     var prompts = 0
     var added: [CalendarReminder] = []
     var visible: [CalendarReminder] = []
-    var addWait: (() async -> Void)?
     var authorizationWait: (() async -> Bool)?
     func authorizationGranted() async -> Bool { await authorizationWait?() ?? authorized }
     func requestAccess() async -> Bool { prompts += 1; return authorized }
     func add(_ reminder: CalendarReminder) async throws {
-        await addWait?()
         added.append(reminder)
         visible.append(reminder)
     }

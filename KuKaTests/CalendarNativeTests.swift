@@ -185,8 +185,38 @@ final class CalendarNativeTests: XCTestCase {
         continuation?.resume()
         try await operation.value
         XCTAssertEqual(center.requests.count, 1)
+        XCTAssertTrue(center.pendingIDs.isEmpty)
+        XCTAssertTrue(center.deliveredIDs.isEmpty)
         XCTAssertEqual(center.removedPending.filter { $0 == "calendar-recording.\(token.uuidString)" }.count, 2)
         XCTAssertEqual(center.removedDelivered.filter { $0 == "calendar-recording.\(token.uuidString)" }.count, 2)
+    }
+
+    func testFailedNativeAddRemovesPartiallyAddedRequest() async {
+        let center = CalendarCenterFake()
+        center.addFailure = NSError(domain: "test", code: 1)
+        let adapter = CalendarReminderNotifications(calls: center.calls)
+        let token = UUID()
+        do {
+            try await adapter.add(.init(token: token, kind: .start, title: "Planning"))
+            XCTFail("The native add must fail")
+        } catch {}
+        XCTAssertTrue(center.pendingIDs.isEmpty)
+        XCTAssertTrue(center.deliveredIDs.isEmpty)
+    }
+
+    func testCancellationDuringPreparationNeverAddsRequest() async throws {
+        let center = CalendarCenterFake()
+        var release: CheckedContinuation<Void, Never>?
+        center.prepareWait = { await withCheckedContinuation { release = $0 } }
+        let adapter = CalendarReminderNotifications(calls: center.calls)
+        let token = UUID()
+        let operation = Task { try await adapter.add(.init(token: token, kind: .start, title: "Planning")) }
+        for _ in 0..<100 where release == nil { await Task.yield() }
+        XCTAssertNotNil(release)
+        adapter.remove(tokens: [token])
+        release?.resume()
+        try await operation.value
+        XCTAssertTrue(center.requests.isEmpty)
     }
 
     func testNativeRequestsAndCategoriesContainOnlyTokenAndSafeActions() async throws {
@@ -311,7 +341,7 @@ final class CalendarNativeTests: XCTestCase {
 }
 
 @MainActor
-private final class CalendarCenterFake {
+final class CalendarCenterFake {
     var requests: [UNNotificationRequest] = []
     var registered: Set<UNNotificationCategory> = []
     var pendingIDs: [String] = []
@@ -319,11 +349,25 @@ private final class CalendarCenterFake {
     var removedPending: [String] = []
     var removedDelivered: [String] = []
     var addWait: (() async -> Void)?
+    var prepareWait: (() async -> Void)?
+    var addFailure: Error?
     var calls: CalendarReminderNotifications.Calls {
         .init(authorized: { true }, requestAccess: { true }, categories: {
-            [UNNotificationCategory(identifier: "other", actions: [], intentIdentifiers: [])]
+            await self.prepareWait?()
+            return [UNNotificationCategory(identifier: "other", actions: [], intentIdentifiers: [])]
         }, setCategories: { self.registered = $0 }, pending: { self.pendingIDs }, delivered: { self.deliveredIDs },
-        add: { request in await self.addWait?(); self.requests.append(request) },
-        removePending: { self.removedPending += $0 }, removeDelivered: { self.removedDelivered += $0 })
+        add: { request in
+            await self.addWait?()
+            self.requests.append(request)
+            self.pendingIDs.append(request.identifier)
+            self.deliveredIDs.append(request.identifier)
+            if let error = self.addFailure { throw error }
+        }, removePending: { ids in
+            self.removedPending += ids
+            self.pendingIDs.removeAll { ids.contains($0) }
+        }, removeDelivered: { ids in
+            self.removedDelivered += ids
+            self.deliveredIDs.removeAll { ids.contains($0) }
+        })
     }
 }

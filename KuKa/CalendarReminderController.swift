@@ -164,7 +164,7 @@ final class CalendarReminderController {
             let canOffer = recorder.activeSessionID == nil && offer == nil
             store.consume(due + events.filter { consumed.contains($0.id) }, at: current)
             if canOffer, let event = due.first {
-                await post(event: event, session: nil, stamp: stamp)
+                await post(event: event, session: nil)
             }
             guard valid(stamp), revision == refreshRevision, await accessIsReady(stamp),
                   revision == refreshRevision else { return }
@@ -172,7 +172,7 @@ final class CalendarReminderController {
                link.endReminder != .offered(link.event.end), link.event.end <= now(), offer == nil {
                 link.endReminder = .offered(link.event.end)
                 recordingLink = .associated(link)
-                await post(event: link.event, session: link.session, stamp: stamp)
+                await post(event: link.event, session: link.session)
             }
             guard valid(stamp), revision == refreshRevision else { return }
             let future = events.filter { $0.eligible && $0.start > now() }.map(\.start)
@@ -189,18 +189,14 @@ final class CalendarReminderController {
         }
     }
 
-    private func post(event: CalendarOccurrence, session: UUID?, stamp: UUID) async {
+    private func post(event: CalendarOccurrence, session: UUID?) async {
         let token = UUID()
         offer = Offer(token: token, kind: session.map { .end(event, session: $0) } ?? .start(event))
         do {
             try await notifications.add(CalendarReminder(token: token, kind: session == nil ? .start : .end,
                                                          title: event.displayTitle))
-            if !valid(stamp) || offer?.token != token {
-                notifications.remove(tokens: [token])
-            }
         } catch {
             if offer?.token == token { offer = nil }
-            notifications.remove(tokens: [token])
         }
     }
 

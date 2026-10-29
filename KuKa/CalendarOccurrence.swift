@@ -51,6 +51,7 @@ enum CalendarReminderAction { case start, stop, continueRecording, showControls,
 protocol CalendarReminderNotifying: AnyObject {
     func authorizationGranted() async -> Bool
     func requestAccess() async -> Bool
+    // Removing a token also cancels an add in progress. Failed adds leave no request behind.
     func add(_ reminder: CalendarReminder) async throws
     func remove(tokens: [UUID])
 }

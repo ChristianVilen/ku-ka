@@ -72,8 +72,13 @@ final class CalendarReminderNotifications: CalendarReminderNotifying {
         content.body = reminder.kind == .start ? "Record this calendar meeting?" : "The calendar meeting has ended."
         content.categoryIdentifier = reminder.kind == .start ? Self.startCategory : Self.endCategory
         content.userInfo = ["calendarToken": reminder.token.uuidString]
-        try await calls.add(UNNotificationRequest(identifier: Self.prefix + reminder.token.uuidString,
-                                                  content: content, trigger: nil))
+        do {
+            try await calls.add(UNNotificationRequest(identifier: Self.prefix + reminder.token.uuidString,
+                                                      content: content, trigger: nil))
+        } catch {
+            remove(tokens: [reminder.token])
+            throw error
+        }
         if invalidated.contains(reminder.token) { remove(tokens: [reminder.token]) }
     }
     func remove(tokens: [UUID]) {
