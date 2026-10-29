@@ -19,14 +19,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowTiling = WindowTilingController()
     private let clipboardHistory = ClipboardHistoryController()
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
+    private lazy var knownWords = KnownWordsFile(url: { [settings] in settings.knownWordsFile })
     private lazy var meetingNotes = MeetingNotesController(
         permissions: permissions,
         root: { [settings] in settings.meetingsFolder },
         locale: { [settings] in settings.meetingLocale },
         processor: MeetingProcessor(roomLabeller: SpeakerKitRoomLabeller(),
-                                    locale: { [settings] in settings.meetingLocale })
+                                    knownWords: { [knownWords] in knownWords.read() },
+                                    locale: { [settings] in settings.meetingLocale }),
+        knownWords: { [knownWords] in knownWords.read() }
     )
     private lazy var meetingControlsPanel = MeetingControlsPanel(controller: meetingNotes, settings: settings)
+    private lazy var wordReview = WordReviewController(
+        root: { [settings] in settings.meetingsFolder },
+        knownWords: knownWords,
+        isOrdinary: OrdinaryWords.spellChecker(language: { [settings] in settings.meetingLocale }),
+        requestUpdate: { [weak self] in self?.meetingNotes.updateNotes($0) }
+    )
+    private lazy var wordReviewWindow = WordReviewWindowController(controller: wordReview)
     private lazy var statusMenu = StatusMenu(settings: settings, sections: [keepAwake, meetingNotes])
     private let permissions = PermissionsManager()
     private var onboardingController: OnboardingWindowController?
@@ -62,6 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMeetingNotes()
         if !isTesting {
             UNUserNotificationCenter.current().delegate = SystemNotifier.shared
+            SystemNotifier.shared.onCheckWords = { [weak self] in self?.wordReviewWindow.show($0) }
             setupHotkey()
             setupPermissions()
             // Polling the real pasteboard during unit/UI test runs would
@@ -232,12 +243,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         keepAwake.onStateChange = { [weak self] in self?.updateStatus() }
     }
 
-    /// Not behind the `isTesting` gate: binding the panel touches no hardware and writes no
-    /// setting, and the panel stays hidden until a meeting starts.
+    /// Not behind the `isTesting` gate: binding the panel and the review window touches no
+    /// hardware and no disk and writes no setting, and both stay hidden until they are needed.
     private func setupMeetingNotes() {
         meetingNotes.onStateChange = { [weak self] in self?.updateStatus() }
         meetingNotes.onShowPermissions = { [weak self] in self?.showOnboarding() }
+        meetingNotes.onCheckWords = { [weak self] in self?.wordReviewWindow.show($0) }
         meetingControlsPanel.bindController()
+        wordReviewWindow.bindController()
     }
 
     private func openEditor(result: CaptureResult) {

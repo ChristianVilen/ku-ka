@@ -55,6 +55,15 @@ final class Settings {
         return URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
     }
 
+    /// The known-words list, set with `defaults write com.kuka.screenshot knownWordsFile <path>`
+    /// to use a list the user already keeps. Defaults to known-words.md in the meetings folder.
+    var knownWordsFile: URL {
+        guard let path = defaults.string(forKey: "knownWordsFile"), !path.isEmpty else {
+            return meetingsFolder.appendingPathComponent("known-words.md")
+        }
+        return URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+    }
+
     /// A BCP 47 tag such as "de-DE", set with `defaults write`.
     var meetingLocale: Locale {
         guard let tag = defaults.string(forKey: "meetingLocale"), !tag.isEmpty else {

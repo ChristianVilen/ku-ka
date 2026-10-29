@@ -17,6 +17,12 @@ struct TranscriptLine: Equatable {
     let text: String
 }
 
+/// A transcript after known words, with what changed.
+struct CorrectedTranscript: Equatable, Sendable {
+    let markdown: String
+    let applied: [AppliedCorrection]
+}
+
 enum Transcript {
     /// Joins a speaker's segments while the gap between them is under `joinGap`. With nil, each
     /// segment is a line of its own. With `.voices`, the microphone lines get room labels: see
@@ -148,14 +154,79 @@ enum Transcript {
     private static let minimumMicrophoneWords = 3
     private static let sharedWordFraction = 0.6
 
-    /// Everything after the speaker legend, so the summary CLI gets no header and no failure lines.
+    /// Everything after the speaker legend and before the known-words note, so the summary CLI gets
+    /// no header, no failure lines, and no list of corrections.
     static func contentForSummary(_ markdown: String) -> String {
+        let content = withoutCorrectionNote(markdown)
         for legend in Legend.allCases {
-            if let boundary = markdown.range(of: legend.rawValue + "\n\n") {
-                return String(markdown[boundary.upperBound...])
+            if let boundary = content.range(of: legend.rawValue + "\n\n") {
+                return String(content[boundary.upperBound...])
             }
         }
-        return markdown
+        return content
+    }
+
+    /// Applies `corrector` to the spoken text of each transcript line, after `**[hh:mm:ss] Label:** `.
+    /// The title, duration, byline, legend, and labels never change. With no replacement the result
+    /// is `heard` byte for byte. Otherwise a note at the end lists each replacement once, in the order
+    /// of its first use: "Known words applied: Convio → Konvio (3), Yuri → Jyri (1)."
+    ///
+    /// `heard` must be the text as the transcriber wrote it, so a replacement is never applied twice.
+    static func corrected(_ heard: String, by corrector: Corrector) -> CorrectedTranscript {
+        var found: [AppliedCorrection] = []
+        let lines = heard.components(separatedBy: "\n").map { line -> String in
+            guard let spoken = spokenLine(line[...]) else { return line }
+            let corrected = corrector.correct(String(spoken.text))
+            found += corrected.applied
+            return line[..<spoken.text.startIndex] + corrected.text
+        }
+        let applied = summed(found)
+        guard !applied.isEmpty else { return CorrectedTranscript(markdown: heard, applied: []) }
+        var text = lines.joined(separator: "\n")
+        if !text.hasSuffix("\n") { text += "\n" }
+        let pairs = applied.map { "\($0.heard) → \($0.right) (\($0.count))" }.joined(separator: ", ")
+        return CorrectedTranscript(markdown: text + correctionNoteStart + pairs + ".\n", applied: applied)
+    }
+
+    /// `markdown` without the note that `corrected` adds.
+    static func withoutCorrectionNote(_ markdown: String) -> String {
+        guard let note = markdown.range(of: correctionNoteStart, options: .backwards) else { return markdown }
+        return String(markdown[..<note.lowerBound])
+    }
+
+    /// "Them at 00:12:31": the label and time of the first transcript line whose spoken text has
+    /// `quote`, both folded with `Phrase.fold`. Nil when no line has it.
+    static func place(of quote: String, in markdown: String) -> String? {
+        let quote = Phrase.fold(quote)
+        guard !quote.isEmpty else { return nil }
+        for line in markdown.components(separatedBy: "\n") {
+            if let spoken = spokenLine(line[...]), Phrase.fold(String(spoken.text)).contains(quote) {
+                return "\(spoken.label) at \(spoken.time)"
+            }
+        }
+        return nil
+    }
+
+    private static let correctionNoteStart = "\n---\n\nKnown words applied: "
+
+    /// Each pair once, in the order of its first use, with its counts added up.
+    private static func summed(_ corrections: [AppliedCorrection]) -> [AppliedCorrection] {
+        var summed: [AppliedCorrection] = []
+        for correction in corrections {
+            if let index = summed.firstIndex(where: { $0.heard == correction.heard && $0.right == correction.right }) {
+                summed[index] = AppliedCorrection(heard: correction.heard, right: correction.right,
+                                                  count: summed[index].count + correction.count)
+            } else {
+                summed.append(correction)
+            }
+        }
+        return summed
+    }
+
+    /// The time, the label, and the spoken text of a line `**[00:12:31] Them:** text`.
+    private static func spokenLine(_ line: Substring) -> (time: Substring, label: Substring, text: Substring)? {
+        guard let prefix = line.prefixMatch(of: #/\*\*\[(\d{2,}:\d{2}:\d{2})\] ([^*\n]+):\*\* /#) else { return nil }
+        return (prefix.1, prefix.2, line[prefix.range.upperBound...])
     }
 
     static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval,

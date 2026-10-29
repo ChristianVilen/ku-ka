@@ -20,7 +20,9 @@ final class StatusMenuTests: XCTestCase {
                                             microphoneAccess: { .granted }),
             root: { [unowned self] in meetingsRoot },
             capture: FakeMeetingAudioCapture(),
-            processor: MeetingProcessor(transcribers: [FakeTranscriber()], roomLabeller: FakeRoomLabeller()),
+            processor: MeetingProcessor(transcribers: [FakeTranscriber()], roomLabeller: FakeRoomLabeller(),
+                                        knownWords: { .empty }),
+            knownWords: { .empty },
             notifier: FakeNotifier())
         sut = StatusMenu(settings: settings, sections: [KeepAwakeController(defaults: defaults), meetingNotes])
     }
@@ -113,6 +115,24 @@ final class StatusMenuTests: XCTestCase {
         sut.menuDidClose(sut.menu)
 
         XCTAssertEqual(item(titled: "Retry Failed Meeting")?.isHidden, false)
+    }
+
+    func testOpeningTheMenuShowsWordsToCheckFromDiskBeforeRetry() throws {
+        let failed = try MeetingFolder.create(in: meetingsRoot, startingAt: localDate(2026, 10, 22, 10, 0))
+        try failed.write("# Transcript", to: .transcript)
+        try failed.write("agy exited with status 1", to: .failure)
+        let reviewed = try MeetingFolder.create(in: meetingsRoot, startingAt: localDate(2026, 10, 23, 14, 2))
+        try reviewed.write("**[00:00:01] Them:** Ask Convio.\n", to: .transcript)
+        try reviewed.write("# Summary\n", to: .summary)
+        try reviewed.write(#"{"questions": [{"heard": "Convio", "kind": "company", "quote": "Ask Convio."}]}"#, to: .questions)
+
+        sut.menuWillOpen(sut.menu)
+        sut.menuDidClose(sut.menu)
+
+        let titles = menuItems.filter { !$0.isHidden }.map(\.title)
+        let header = try XCTUnwrap(titles.firstIndex(of: "Meeting Notes"))
+        XCTAssertEqual(Array(titles[header...(header + 4)]),
+                       ["Meeting Notes", "Start Recording Meeting", "Check Words (1)…", "Retry Failed Meeting", "Open Meetings Folder"])
     }
 
     // MARK: - Window tiling

@@ -240,15 +240,27 @@ class FakeKeystrokeSender: KeystrokeSending {
 }
 
 class FakeNotifier: Notifying {
+    struct Posted {
+        let title: String
+        let body: String
+        let click: NotificationClick?
+
+        /// The file or folder that a click opens.
+        var url: URL? {
+            guard case .open(let url)? = click else { return nil }
+            return url
+        }
+    }
+
     private(set) var permissionRequests = 0
-    private(set) var posted: [(title: String, body: String, url: URL?)] = []
+    private(set) var posted: [Posted] = []
 
     func requestPermission() {
         permissionRequests += 1
     }
 
-    func post(title: String, body: String, opening url: URL?) {
-        posted.append((title, body, url))
+    func post(title: String, body: String, onClick click: NotificationClick?) {
+        posted.append(Posted(title: title, body: body, click: click))
     }
 }
 

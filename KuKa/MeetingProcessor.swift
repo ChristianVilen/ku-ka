@@ -11,29 +11,72 @@ enum MeetingOutcome: Equatable {
     case gone
 }
 
+/// Update Notes never writes `error.md`: the meeting stays done, and its old `summary.md` stays
+/// when every CLI fails.
+enum NotesUpdateOutcome: Equatable {
+    case updated(summary: URL)
+    /// Every summary CLI failed. `transcript.md` was already written again, with the answers.
+    case summaryToolFailed(message: String)
+    /// Anything else failed, for example a read or a write in the meeting folder. `summary.md` did
+    /// not change, and `transcript.md` may or may not have.
+    case failed(message: String)
+    case cancelled
+    /// Another recorder or processor holds the folder's lock.
+    case busy
+    /// The meeting is not done, or its folder is gone.
+    case notReady
+}
+
 @MainActor
 struct MeetingProcessor {
     private let transcribers: [Transcribing]
     private let roomLabeller: RoomLabelling
     private let summarizer: Summarizer
+    private let knownWords: () -> KnownWordsList
     private let locale: () -> Locale
     private let trash: (URL) throws -> Void
     private let now: () -> Date
 
     /// `roomLabeller` has no default value, so a test that forgets the fake does not compile
-    /// instead of downloading a model.
+    /// instead of downloading a model. Nor has `knownWords`, so the app cannot forget the list. It is
+    /// read once for each summary, never kept.
     init(transcribers: [Transcribing] = [WhisperKitTranscriber(), SpeechTranscriberAdapter()],
          roomLabeller: RoomLabelling,
          summarizer: Summarizer = Summarizer(),
+         knownWords: @escaping () -> KnownWordsList,
          locale: @escaping () -> Locale = { Locale(identifier: "en-US") },
          trash: @escaping (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) },
          now: @escaping () -> Date = { Date() }) {
         self.transcribers = transcribers
         self.roomLabeller = roomLabeller
         self.summarizer = summarizer
+        self.knownWords = knownWords
         self.locale = locale
         self.trash = trash
         self.now = now
+    }
+
+    /// Makes `transcript.md` and `summary.md` of a done meeting again, with the list as it is now.
+    /// Asks no new questions, and leaves `review.json` and `review-answers.json` alone.
+    func updateNotes(_ meeting: MeetingFolder) async -> NotesUpdateOutcome {
+        let lock: FileLock
+        do {
+            lock = try meeting.lock()
+        } catch MeetingLockError.held {
+            return .busy
+        } catch {
+            return .notReady
+        }
+        defer { lock.release() }
+        guard meeting.stage() == .done else { return .notReady }
+        do {
+            try await writeNotes(meeting, asksQuestions: false)
+        } catch {
+            if Task.isCancelled { return .cancelled }
+            if error is SummaryToolError { return .summaryToolFailed(message: error.localizedDescription) }
+            return .failed(message: error.localizedDescription)
+        }
+        return .updated(summary: meeting.url(for: .summary))
     }
 
     func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
@@ -101,8 +144,10 @@ struct MeetingProcessor {
             // trash the audio.
             try meeting.write(SummaryDocument.noSpeech(title: meeting.title), to: .summary)
         }
-        try meeting.write(Transcript.markdown(lines, title: meeting.title, duration: duration,
-                                              by: transcriber, after: failures, rooms: rooms), to: .transcript)
+        let heard = Transcript.markdown(lines, title: meeting.title, duration: duration,
+                                        by: transcriber, after: failures, rooms: rooms)
+        try meeting.write(heard, to: .heardTranscript)
+        try meeting.write(heard, to: .transcript)
         return !lines.isEmpty
     }
 
@@ -186,13 +231,31 @@ struct MeetingProcessor {
         } catch {
             NSLog("Ku-Ka: could not move meeting audio to the Trash: \(error)")
         }
-        let transcript = Transcript.contentForSummary(try meeting.read(.transcript))
-        switch await summarizer.summarize(transcript: transcript) {
-        case .written(let markdown, let cli, let earlier):
-            try meeting.write(SummaryDocument.markdown(title: meeting.title, body: markdown, by: cli, after: earlier),
-                              to: .summary)
+        try await writeNotes(meeting, asksQuestions: true)
+    }
+
+    /// The one place that applies known words. `transcript.md` is always made again from the heard
+    /// copy and the list as it is now, so a second run gives the same file and a removed list line
+    /// undoes its replacement. Writes `transcript.md`, then with `asksQuestions` the questions (or
+    /// removes old ones), then `summary.md`, which marks the meeting done.
+    private func writeNotes(_ meeting: MeetingFolder, asksQuestions: Bool) async throws {
+        let heard = try meeting.heardTranscript()
+        let list = knownWords()
+        let corrected = Transcript.corrected(heard, by: list.corrector)
+        try meeting.write(corrected.markdown, to: .transcript)
+        let content = Transcript.contentForSummary(corrected.markdown)
+        switch await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content)) {
+        case .written(let notes, let suspects, let cli, let earlier):
+            if !earlier.isEmpty {
+                NSLog("Ku-Ka: %@ wrote the notes of %@. Tried first: %@", cli.rawValue, meeting.name,
+                      earlier.map(\.description).joined(separator: "; "))
+            }
+            if asksQuestions {
+                try meeting.saveQuestions(WordQuestions.select(suspects, in: content, knownWords: list))
+            }
+            try meeting.write(SummaryDocument.markdown(title: meeting.title, body: notes), to: .summary)
         case .failed(let failures):
-            throw MeetingStepError(failures.map(\.description).joined(separator: "\n"))
+            throw SummaryToolError(errorDescription: failures.map(\.description).joined(separator: "\n"))
         }
     }
 
@@ -216,4 +279,9 @@ struct MeetingProcessor {
 struct MeetingStepError: LocalizedError {
     let errorDescription: String?
     init(_ message: String) { errorDescription = message }
+}
+
+/// Every summary CLI failed. `writeNotes` throws it only after it wrote `transcript.md`.
+private struct SummaryToolError: LocalizedError {
+    let errorDescription: String?
 }

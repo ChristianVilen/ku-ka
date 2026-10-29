@@ -260,12 +260,13 @@ final class TranscriptTests: XCTestCase {
         """)
     }
 
+    private let legends: [(name: String, text: String)] = [
+        ("rooms", "\"Room 1\", \"Room 2\", and so on are voices on the microphone of the Mac that recorded the meeting. The microphone hears the person who recorded the meeting and anyone in the same room. Ku-Ka told the voices apart on this Mac and numbered them in the order they first spoke. Two people with similar voices can share one label, and one person can get two labels. No label tells which voice is the person who recorded the meeting. \"Them\" is everyone else on the call."),
+        ("current", "\"Me\" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. \"Them\" is everyone else on the call."),
+        ("older", "\"Me\" is the person who recorded the meeting. \"Them\" is everyone else on the call."),
+    ]
+
     func testSummaryContentStartsAfterTheCurrentOrTheOlderSpeakerLegend() {
-        let legends: [(name: String, text: String)] = [
-            ("rooms", "\"Room 1\", \"Room 2\", and so on are voices on the microphone of the Mac that recorded the meeting. The microphone hears the person who recorded the meeting and anyone in the same room. Ku-Ka told the voices apart on this Mac and numbered them in the order they first spoke. Two people with similar voices can share one label, and one person can get two labels. No label tells which voice is the person who recorded the meeting. \"Them\" is everyone else on the call."),
-            ("current", "\"Me\" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. \"Them\" is everyone else on the call."),
-            ("older", "\"Me\" is the person who recorded the meeting. \"Them\" is everyone else on the call."),
-        ]
         for (name, legend) in legends {
             let markdown = """
             # Meeting on 2026-10-23 at 14:02
@@ -427,5 +428,124 @@ final class TranscriptTests: XCTestCase {
                 XCTAssertEqual(Transcript.contentForSummary(markdown), content, "\(rooms), \(failures.count) failures")
             }
         }
+    }
+
+    // MARK: - Known words
+
+    private func corrector(_ list: String) -> Corrector {
+        KnownWordsList(markdown: list).corrector
+    }
+
+    private func heardTranscript(_ lines: [TranscriptLine]) -> String {
+        Transcript.markdown(lines, title: "Meeting on 2026-10-23 at 14:02", duration: 60, by: whisper, after: [],
+                            rooms: .notDiarized)
+    }
+
+    /// The forms on the list's last line occur only in the title, the byline, the legend, and the labels.
+    func testKnownWordsChangeOnlyTheSpokenTextAndEndWithOneNote() {
+        let heard = heardTranscript([
+            TranscriptLine(speaker: .them, start: 1, text: "Convio and Yuri joined. Convio's plan is ready."),
+            TranscriptLine(speaker: .me, start: 4, text: "I will send it to convio."),
+        ])
+
+        let corrected = Transcript.corrected(heard, by: corrector("""
+        - Convio → **Konvio** ✓
+        - Yuri → **Jyri** ✓
+        - Whisper / meeting / them / me → **Quorix** ✓
+        """))
+
+        XCTAssertEqual(corrected.markdown, """
+        # Meeting on 2026-10-23 at 14:02
+
+        Duration: 00:01:00
+
+        Transcript by Whisper large-v3-v20240930_turbo.
+
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
+
+        **[00:00:01] Them:** Konvio and Jyri joined. Konvio's plan is ready.
+
+        **[00:00:04] Me:** I will send it to Konvio.
+
+        ---
+
+        Known words applied: Convio → Konvio (3), Yuri → Jyri (1).
+
+        """)
+        XCTAssertEqual(corrected.applied, [AppliedCorrection(heard: "Convio", right: "Konvio", count: 3),
+                                           AppliedCorrection(heard: "Yuri", right: "Jyri", count: 1)])
+    }
+
+    func testKnownWordsChangeTheTextAfterAnyLabelButNeverTheLabel() {
+        let heard = heardTranscript([
+            TranscriptLine(speaker: .them, start: 1, text: "Is Convio in the room?"),
+            TranscriptLine(speaker: .room(1), start: 4, text: "Convio is here."),
+            TranscriptLine(speaker: .room(2), start: 6, text: "Room two agrees."),
+        ])
+
+        let corrected = Transcript.corrected(heard, by: corrector("- Convio → **Konvio** ✓\n- room → **Alpha Bay** ✓\n"))
+
+        XCTAssertEqual(corrected.markdown, heard
+            .replacingOccurrences(of: "Is Convio in the room?", with: "Is Konvio in the Alpha Bay?")
+            .replacingOccurrences(of: "Convio is here.", with: "Konvio is here.")
+            .replacingOccurrences(of: "Room two agrees.", with: "Alpha Bay two agrees.")
+            + "\n---\n\nKnown words applied: Convio → Konvio (2), room → Alpha Bay (2).\n")
+    }
+
+    func testWithoutAReplacementTheTranscriptIsTheHeardTextByteForByte() {
+        let heard = heardTranscript([TranscriptLine(speaker: .them, start: 1, text: "Let's  ship\tConvio on Friday ")])
+
+        let corrected = Transcript.corrected(heard, by: corrector("- Whisper / meeting → **Quorix** ✓\n- Convio → **Konvio**\n"))
+
+        XCTAssertEqual(corrected, CorrectedTranscript(markdown: heard, applied: []))
+    }
+
+    /// Without the line break, "---" would turn the last line into a heading.
+    func testTheNoteAfterTextWithoutAFinalLineBreakStartsAfterAnEmptyLine() {
+        let corrected = Transcript.corrected("**[00:00:07] Me:** Ask Convio.", by: corrector("- Convio → **Konvio** ✓\n"))
+
+        XCTAssertEqual(corrected.markdown, "**[00:00:07] Me:** Ask Konvio.\n\n---\n\nKnown words applied: Convio → Konvio (1).\n")
+    }
+
+    func testWithoutCorrectionNoteRemovesOnlyTheNote() {
+        let heard = heardTranscript([TranscriptLine(speaker: .them, start: 1, text: "Convio and Yuri joined.")])
+        let corrected = Transcript.corrected(heard, by: corrector("- Convio → **Konvio** ✓\n"))
+
+        XCTAssertEqual(Transcript.withoutCorrectionNote(corrected.markdown),
+                       heard.replacingOccurrences(of: "Convio and", with: "Konvio and"))
+        XCTAssertEqual(Transcript.withoutCorrectionNote(heard), heard)
+    }
+
+    func testSummaryContentLeavesOutTheKnownWordsNoteAfterEveryLegendAndWithoutOne() {
+        let header = "# Meeting on 2026-10-23 at 14:02\n\nDuration: 00:01:00\n\nTranscript by Whisper large-v3-v20240930_turbo.\n\n"
+        let cases = legends.map { (name: $0.name, header: header + $0.text + "\n\n") } + [("no legend", "")]
+        for (name, header) in cases {
+            let heard = header + "**[00:00:01] Them:** Let's ship Convio on Friday\n"
+            let markdown = Transcript.corrected(heard, by: corrector("- Convio → **Konvio** ✓\n")).markdown
+
+            XCTAssertEqual(Transcript.contentForSummary(markdown), "**[00:00:01] Them:** Let's ship Konvio on Friday\n", name)
+        }
+    }
+
+    func testThePlaceOfAQuoteIsTheLabelAndTimeOfTheFirstLineThatHasItComparedFolded() {
+        let markdown = heardTranscript([
+            TranscriptLine(speaker: .them, start: 751, text: "We should ask Convio about the rollout."),
+            TranscriptLine(speaker: .room(2), start: 760, text: "Jyri has  the numbers for Konvio’s plan."),
+            TranscriptLine(speaker: .them, start: 770, text: "Mäki agreed about the rollout."),
+        ])
+
+        XCTAssertEqual(Transcript.place(of: "we SHOULD ask\nconvio", in: markdown), "Them at 00:12:31")
+        XCTAssertEqual(Transcript.place(of: "Jyri has the numbers for Konvio's plan.", in: markdown), "Room 2 at 00:12:40")
+        XCTAssertEqual(Transcript.place(of: "the rollout", in: markdown), "Them at 00:12:31")
+        XCTAssertEqual(Transcript.place(of: "Ma\u{0308}ki agreed", in: markdown), "Them at 00:12:50")
+    }
+
+    func testAQuoteThatNoTranscriptLineHasHasNoPlace() {
+        let markdown = heardTranscript([TranscriptLine(speaker: .them, start: 1, text: "We should ask Convio about the rollout.")])
+
+        XCTAssertNil(Transcript.place(of: "ship on Friday", in: markdown))
+        XCTAssertNil(Transcript.place(of: "recorded the meeting", in: markdown), "the legend is not a transcript line")
+        XCTAssertNil(Transcript.place(of: "Them:", in: markdown), "the label is not spoken text")
+        XCTAssertNil(Transcript.place(of: " \n", in: markdown))
     }
 }

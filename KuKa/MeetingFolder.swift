@@ -42,10 +42,17 @@ enum Speaker: Hashable, Sendable {
     }
 }
 
+/// Only the transcript, the summary, and the failure (and the audio) decide `MeetingStage`.
 enum MeetingDocument: String, CaseIterable {
     case transcript = "transcript.md"
     case summary = "summary.md"
     case failure = "error.md"
+    /// The transcript as the transcriber wrote it, before known words.
+    case heardTranscript = ".transcript-as-heard.md"
+    /// The questions about suspect words. Only the summarize step writes it, before `summary.md`.
+    case questions = "review.json"
+    /// The answers to the questions. Only `saveAnswer` writes it, after `summary.md`.
+    case answers = "review-answers.json"
 }
 
 enum MeetingStep: Equatable {
@@ -111,7 +118,33 @@ enum MeetingStage: Equatable {
 }
 
 struct MeetingFolder: Hashable {
+    /// The meetings folder with every symlink resolved, as `realpath` gives it ("/private/var" for
+    /// "/var"), and then the meeting's own name. Every way to make a value gives this one form, so
+    /// two values for one meeting are equal: from the setting, from `all(in:)`, from a notification,
+    /// and before the folder exists.
     let url: URL
+
+    init(url: URL) {
+        self.init(name: url.lastPathComponent, inResolved: Self.resolved(url.deletingLastPathComponent()))
+    }
+
+    private init(name: String, inResolved root: URL) {
+        url = root.appendingPathComponent(name, isDirectory: true)
+    }
+
+    /// `URL.resolvingSymlinksInPath()` is not used: it removes "/private" only from a path that
+    /// exists, and it resolves nothing in a path that does not exist yet. The parts at the end that
+    /// do not exist yet are kept as given.
+    private static func resolved(_ folder: URL) -> URL {
+        let path = folder.standardizedFileURL.path
+        if let real = realpath(path, nil) {
+            defer { free(real) }
+            return URL(fileURLWithPath: String(cString: real), isDirectory: true)
+        }
+        let parent = folder.standardizedFileURL.deletingLastPathComponent()
+        guard parent.path != path else { return URL(fileURLWithPath: path, isDirectory: true) }
+        return resolved(parent).appendingPathComponent(folder.lastPathComponent, isDirectory: true)
+    }
 
     var name: String { url.lastPathComponent }
 
@@ -135,11 +168,12 @@ struct MeetingFolder: Hashable {
     static func create(in root: URL, startingAt date: Date) throws -> MeetingFolder {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = resolved(root)
         let base = folderName(startingAt: date)
         var suffix = 1
         while true {
             let name = suffix == 1 ? base : "\(base)-\(suffix)"
-            let meeting = MeetingFolder(url: root.appendingPathComponent(name, isDirectory: true))
+            let meeting = MeetingFolder(name: name, inResolved: root)
             do {
                 // Without intermediate directories this fails when the folder
                 // exists, so the check and the claim are one step.
@@ -153,12 +187,15 @@ struct MeetingFolder: Hashable {
         }
     }
 
+    /// The resolved root is listed, because `contentsOfDirectory(at:)` fails for a root that is
+    /// itself a symlink. A meeting folder that is a symlink is not a meeting.
     static func all(in root: URL) -> [(MeetingFolder, MeetingStage)] {
+        let root = resolved(root)
         let urls = (try? FileManager.default.contentsOfDirectory(
             at: root, includingPropertiesForKeys: [.isDirectoryKey], options: .skipsHiddenFiles)) ?? []
         return urls
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
-            .map(MeetingFolder.init(url:))
+            .map { MeetingFolder(name: $0.lastPathComponent, inResolved: root) }
             .sorted { $0.name < $1.name }
             .compactMap { meeting in meeting.stage().map { (meeting, $0) } }
     }
@@ -188,6 +225,19 @@ struct MeetingFolder: Hashable {
 
     func read(_ document: MeetingDocument) throws -> String {
         try String(contentsOf: url(for: document), encoding: .utf8)
+    }
+
+    /// The transcript as the transcriber wrote it. Without the copy (a meeting transcribed before
+    /// known words, or a deleted copy), it first saves `transcript.md` without its known-words note
+    /// as the copy, so a later run never corrects text twice.
+    func heardTranscript() throws -> String {
+        do {
+            return try read(.heardTranscript)
+        } catch CocoaError.fileReadNoSuchFile {
+            let heard = Transcript.withoutCorrectionNote(try read(.transcript))
+            try write(heard, to: .heardTranscript)
+            return heard
+        }
     }
 
     func clearFailure() throws {

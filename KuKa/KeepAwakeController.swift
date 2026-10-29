@@ -141,7 +141,7 @@ final class KeepAwakeController: NSObject {
         // If notification authorization was denied or never requested (indefinite
         // sessions don't request it), the center silently drops this request.
         // That's fine — the notification is purely informational.
-        notifier.post(title: "Ku-Ka", body: "Keep-awake ended — your Mac can sleep again.", opening: nil)
+        notifier.post(title: "Ku-Ka", body: "Keep-awake ended — your Mac can sleep again.", onClick: nil)
     }
 
     static func formatRemaining(_ interval: TimeInterval) -> String {

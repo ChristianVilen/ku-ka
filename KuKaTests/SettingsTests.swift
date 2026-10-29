@@ -55,6 +55,21 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(sut.meetingsFolder.path, NSHomeDirectory() + "/Notes")
     }
 
+    func testKnownWordsFileDefaultsToKnownWordsMdInTheMeetingsFolderAndFollowsIt() {
+        XCTAssertEqual(sut.knownWordsFile.path, NSHomeDirectory() + "/Meetings/known-words.md")
+
+        defaults.set("~/Notes", forKey: "meetingsFolder")
+        XCTAssertEqual(sut.knownWordsFile.path, NSHomeDirectory() + "/Notes/known-words.md")
+    }
+
+    func testKnownWordsFileReadsThePathSetWithDefaultsWrite() {
+        defaults.set("/Users/test/maps/terms.md", forKey: "knownWordsFile")
+        XCTAssertEqual(sut.knownWordsFile.path, "/Users/test/maps/terms.md")
+
+        defaults.set("~/maps/terms.md", forKey: "knownWordsFile")
+        XCTAssertEqual(sut.knownWordsFile.path, NSHomeDirectory() + "/maps/terms.md")
+    }
+
     func testMeetingLocaleDefaultsToUSEnglishAndReadsTheTagSetWithDefaultsWrite() {
         XCTAssertEqual(sut.meetingLocale.identifier(.bcp47), "en-US")
 
