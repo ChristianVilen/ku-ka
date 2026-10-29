@@ -12,7 +12,7 @@ final class MeetingProcessorTests: XCTestCase {
     private var labeller: FakeRoomLabeller!
     private var runner: FakeCommandRunner!
     private var trashed: [String] = []
-    private var steps: [MeetingStep] = []
+    private var progress: [MeetingProgress] = []
     /// Read by the processor at each use, so a test can change the list between two runs.
     private var knownWords = KnownWordsList.empty
 
@@ -23,7 +23,7 @@ final class MeetingProcessorTests: XCTestCase {
         runner = FakeCommandRunner()
         runner.results["agy"] = .success(CommandResult(termination: .exited(0), stdout: "## Summary\nShip Friday.", stderr: ""))
         trashed = []
-        steps = []
+        progress = []
         knownWords = .empty
     }
 
@@ -70,7 +70,7 @@ final class MeetingProcessorTests: XCTestCase {
     }
 
     private func process(_ meeting: MeetingFolder, with processor: MeetingProcessor? = nil) async -> MeetingOutcome {
-        await (processor ?? makeProcessor()).process(meeting) { [unowned self] in steps.append($0) }
+        await (processor ?? makeProcessor()).process(meeting) { [unowned self] in progress.append($0) }
     }
 
     private func audioExists(_ meeting: MeetingFolder) -> Bool {
@@ -83,7 +83,7 @@ final class MeetingProcessorTests: XCTestCase {
         let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
-        XCTAssertEqual(steps, [.transcribe, .summarize])
+        XCTAssertEqual(progress, [.step(.transcribe), .step(.summarize)])
         XCTAssertEqual(try meeting.read(.transcript), """
         # Meeting on 2026-10-23 at 14:02
 
@@ -123,7 +123,6 @@ final class MeetingProcessorTests: XCTestCase {
     func testAMissingSpeechModelIsDownloadedForTheConfiguredLanguageFirst() async throws {
         let meeting = try makeMeeting()
         whisper.modelIsMissing = true
-        var downloadsReported: [MeetingModel] = []
         let processor = MeetingProcessor(
             transcribers: [whisper, apple],
             roomLabeller: labeller,
@@ -132,10 +131,10 @@ final class MeetingProcessorTests: XCTestCase {
             locale: { Locale(identifier: "de-DE") },
             trash: { try FileManager.default.removeItem(at: $0) })
 
-        let outcome = await processor.process(meeting, onStep: { _ in }, onDownload: { downloadsReported.append($0) })
+        let outcome = await process(meeting, with: processor)
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
-        XCTAssertEqual(downloadsReported, [.speech])
+        XCTAssertEqual(progress, [.step(.transcribe), .downloading(.speech), .step(.transcribe), .step(.summarize)])
         XCTAssertEqual(whisper.downloads, ["de-DE"])
         XCTAssertEqual(whisper.loads, ["de-DE"])
     }
@@ -197,12 +196,25 @@ final class MeetingProcessorTests: XCTestCase {
         let meeting = try makeMeeting()
         whisper.modelIsMissing = true
         whisper.failure = (.download, MeetingStepError("The Internet connection appears to be offline."))
-        var events: [String] = []
 
-        _ = await makeProcessor().process(meeting, onStep: { events.append($0.progressVerb) },
-                                          onDownload: { events.append($0.downloadTitle) })
+        _ = await process(meeting)
 
-        XCTAssertEqual(events, ["Transcribing", "Downloading speech model", "Transcribing", "Summarizing"])
+        XCTAssertEqual(progress, [.step(.transcribe), .downloading(.speech), .step(.transcribe), .step(.summarize)])
+    }
+
+    func testNoSpeechModelDownloadShowsWhileAnotherKuKaHoldsTheDownloadLock() async throws {
+        let meeting = try makeMeeting()
+        whisper.modelIsMissing = true
+        whisper.downloadStarts = false
+        whisper.failure = (.download, MeetingStepError("Another Ku-Ka is downloading the Whisper model."))
+
+        let outcome = await process(meeting)
+
+        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
+        XCTAssertEqual(progress, [.step(.transcribe), .step(.summarize)])
+        XCTAssertTrue(try meeting.read(.transcript).contains(
+            "- Whisper could not download its model: Another Ku-Ka is downloading the Whisper model."))
+        XCTAssertEqual(apple.loads, ["en-US"])
     }
 
     func testFallbackDiagnosticsStayOnDiskButDoNotEnterTheSummaryPrompt() async throws {
@@ -308,8 +320,7 @@ final class MeetingProcessorTests: XCTestCase {
         labeller.onDownloadEnd = { events.append("download ended") }
         labeller.onLabel = { events.append("label") }
 
-        let outcome = await makeProcessor().process(meeting, onStep: { events.append($0.progressVerb) },
-                                                    onDownload: { events.append($0.downloadTitle) })
+        let outcome = await makeProcessor().process(meeting) { events.append($0.title) }
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
         XCTAssertEqual(events, ["Transcribing", "Downloading speaker model", "download ended", "Transcribing", "label",
@@ -320,13 +331,11 @@ final class MeetingProcessorTests: XCTestCase {
         let meeting = try makeMeeting()
         labeller.modelIsMissing = true
         labeller.downloadError = MeetingStepError("The Internet connection appears to be offline.")
-        var events: [String] = []
 
-        let outcome = await makeProcessor().process(meeting, onStep: { events.append($0.progressVerb) },
-                                                    onDownload: { events.append($0.downloadTitle) })
+        let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
-        XCTAssertEqual(events, ["Transcribing", "Downloading speaker model", "Transcribing", "Summarizing"])
+        XCTAssertEqual(progress, [.step(.transcribe), .downloading(.speaker), .step(.transcribe), .step(.summarize)])
         XCTAssertEqual(labeller.calls, ["download"])
         let transcript = try meeting.read(.transcript)
         XCTAssertTrue(transcript.contains(
@@ -393,13 +402,12 @@ final class MeetingProcessorTests: XCTestCase {
             segments: [TranscriptSegment(start: 1.5, end: 3.2, text: "Let's ship on Friday")], duration: 59))
         labeller.modelIsMissing = true
         labeller.result = .failed(.load("Model is corrupt."))
-        var downloads: [MeetingModel] = []
 
-        let outcome = await makeProcessor().process(meeting, onStep: { _ in }, onDownload: { downloads.append($0) })
+        let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
         XCTAssertEqual(labeller.calls, [])
-        XCTAssertEqual(downloads, [])
+        XCTAssertEqual(progress, [.step(.transcribe), .step(.summarize)])
         XCTAssertFalse(try meeting.read(.transcript).contains("There are no room labels"))
     }
 
@@ -548,7 +556,7 @@ final class MeetingProcessorTests: XCTestCase {
         let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .busy)
-        XCTAssertEqual(steps, [])
+        XCTAssertEqual(progress, [])
         XCTAssertEqual(meeting.stage(), .pending(.transcribe))
         otherWriter.release()
     }
@@ -561,7 +569,7 @@ final class MeetingProcessorTests: XCTestCase {
         let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .failed(.transcribe, message: "Ku-Ka could not lock the meeting folder \(meeting.url.path): Permission denied."))
-        XCTAssertEqual(steps, [])
+        XCTAssertEqual(progress, [])
     }
 
     func testASummaryFailureKeepsTheTranscriptAndListsEachCLI() async throws {
@@ -594,7 +602,7 @@ final class MeetingProcessorTests: XCTestCase {
         let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .failed(.transcribe, message: "An earlier attempt failed. See error.md in the meeting folder."))
-        XCTAssertEqual(steps, [])
+        XCTAssertEqual(progress, [])
     }
 
     func testRetryResumesAtTheFailedStep() async throws {
@@ -604,12 +612,12 @@ final class MeetingProcessorTests: XCTestCase {
         try meeting.clearFailure()
         runner.results["claude"] = .success(CommandResult(termination: .exited(0), stdout: "## Summary\nShip Friday.", stderr: ""))
         whisper.byFileName["them.caf"] = .failure(TestError(errorDescription: "must not transcribe again"))
-        steps = []
+        progress = []
 
         let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
-        XCTAssertEqual(steps, [.summarize])
+        XCTAssertEqual(progress, [.step(.summarize)])
         XCTAssertFalse(FileManager.default.fileExists(atPath: meeting.url(for: .failure).path))
     }
 
@@ -624,13 +632,13 @@ final class MeetingProcessorTests: XCTestCase {
             let meeting = try makeMeeting()
             for document in row.files { try meeting.write("# \(document.rawValue)", to: document) }
             if !row.keepAudio { try FileManager.default.removeItem(at: meeting.audioURL(.system).deletingLastPathComponent()) }
-            steps = []
+            progress = []
             trashed = []
 
             let outcome = await process(meeting)
 
             XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)), row.name)
-            XCTAssertEqual(steps, row.steps, row.name)
+            XCTAssertEqual(progress, row.steps.map { .step($0) }, row.name)
             XCTAssertEqual(trashed, row.trashed, row.name)
         }
     }
@@ -639,8 +647,8 @@ final class MeetingProcessorTests: XCTestCase {
         let meeting = try makeMeeting()
         let processor = makeProcessor(transcribers: [SuspendedTranscriber(name: "Whisper"), apple])
         let run = Task { await process(meeting, with: processor) }
-        await waitUntil { !steps.isEmpty }
-        XCTAssertEqual(steps, [.transcribe])
+        await waitUntil { !progress.isEmpty }
+        XCTAssertEqual(progress, [.step(.transcribe)])
 
         run.cancel()
 
@@ -693,12 +701,8 @@ final class MeetingProcessorTests: XCTestCase {
         let meeting = try makeMeeting()
         let suspended = SuspendedTranscriber(name: "Whisper")
         suspended.modelIsMissing = true
-        var downloading = false
-        let run = Task {
-            await makeProcessor(transcribers: [suspended, apple]).process(meeting, onStep: { _ in },
-                                                                          onDownload: { _ in downloading = true })
-        }
-        await waitUntil { downloading }
+        let run = Task { await process(meeting, with: makeProcessor(transcribers: [suspended, apple])) }
+        await waitUntil { progress.contains(.downloading(.speech)) }
 
         run.cancel()
 
@@ -743,8 +747,8 @@ final class MeetingProcessorTests: XCTestCase {
         let meeting = try makeMeeting()
         var heardCopyBeforeSummarizing: String?
 
-        _ = await makeProcessor().process(meeting) { step in
-            if step == .summarize { heardCopyBeforeSummarizing = try? meeting.read(.heardTranscript) }
+        _ = await makeProcessor().process(meeting) { event in
+            if event == .step(.summarize) { heardCopyBeforeSummarizing = try? meeting.read(.heardTranscript) }
         }
 
         XCTAssertEqual(heardCopyBeforeSummarizing, try meeting.read(.transcript))
@@ -1064,7 +1068,8 @@ private final class CancelledReturningTranscriber: FakeTranscriber {
 }
 
 private final class SuspendedTranscriber: FakeTranscriber {
-    override func download(for locale: Locale) async throws {
+    override func download(for locale: Locale, onStart: @MainActor () -> Void) async throws {
+        await onStart()
         try await Task.sleep(for: .seconds(60))
     }
 

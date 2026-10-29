@@ -22,8 +22,11 @@ struct WhisperKitTranscriber: Transcribing {
     }
 
     @concurrent
-    func download(for locale: Locale) async throws {
-        try await install.install { try await client.download(model: Self.model, into: $0) }
+    func download(for locale: Locale, onStart: @MainActor () -> Void) async throws {
+        try await install.install { partial in
+            await onStart()
+            try await client.download(model: Self.model, into: partial)
+        }
     }
 
     @concurrent

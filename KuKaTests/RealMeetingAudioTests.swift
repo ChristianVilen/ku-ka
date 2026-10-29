@@ -23,7 +23,7 @@ final class RealMeetingAudioTests: XCTestCase {
         do {
             var start = clock.now
             if try await transcriber.needsDownload(for: locale) {
-                try await transcriber.download(for: locale)
+                try await transcriber.download(for: locale) {}
                 timings.append("download: \(seconds(clock.now - start)) s")
             } else {
                 timings.append("download: none, the model was installed")

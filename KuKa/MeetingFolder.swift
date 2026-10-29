@@ -59,13 +59,6 @@ enum MeetingStep: Equatable {
     case transcribe
     case summarize
 
-    var progressVerb: String {
-        switch self {
-        case .transcribe: return "Transcribing"
-        case .summarize: return "Summarizing"
-        }
-    }
-
     var failureHeading: String {
         switch self {
         case .transcribe: return "Transcription Failed"
@@ -78,11 +71,19 @@ enum MeetingStep: Equatable {
 enum MeetingModel: Equatable {
     case speech
     case speaker
+}
 
-    var downloadTitle: String {
+/// What `MeetingProcessor.process` reports while it runs. The menu shows `title`.
+enum MeetingProgress: Equatable {
+    case step(MeetingStep)
+    case downloading(MeetingModel)
+
+    var title: String {
         switch self {
-        case .speech: return "Downloading speech model"
-        case .speaker: return "Downloading speaker model"
+        case .step(.transcribe): return "Transcribing"
+        case .step(.summarize): return "Summarizing"
+        case .downloading(.speech): return "Downloading speech model"
+        case .downloading(.speaker): return "Downloading speaker model"
         }
     }
 }
@@ -253,20 +254,21 @@ struct MeetingFolder: Hashable {
     }
 
     func markRoomLabelsStarted() throws {
-        try Data(Self.thisProcess.utf8).write(to: roomLabelsMarker, options: .atomic)
+        try Data().write(to: roomLabelsMarker, options: .atomic)
     }
 
-    /// Removes only a marker that this process wrote, so a quit keeps the marker that a crash left.
+    /// Accepts a missing marker: a cancel during labelling can remove it first.
     func clearRoomLabelsStarted() throws {
-        guard (try? Data(contentsOf: roomLabelsMarker)) == Data(Self.thisProcess.utf8) else { return }
-        try FileManager.default.removeItem(at: roomLabelsMarker)
+        do {
+            try FileManager.default.removeItem(at: roomLabelsMarker)
+        } catch CocoaError.fileNoSuchFile {
+            return
+        }
     }
 
     private var roomLabelsMarker: URL {
         url.appendingPathComponent(".room-labels-started")
     }
-
-    private static let thisProcess = UUID().uuidString
 
     func discardAudio(trash: (URL) throws -> Void) throws {
         guard FileManager.default.fileExists(atPath: audioFolder.path) else { return }

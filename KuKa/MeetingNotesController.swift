@@ -294,13 +294,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         }
         recorder = .idle(notice: nil)
         processingTask?.cancel()
-        // The process ends before the processor resumes to remove the marker, and the next run
-        // would read the marker as a crash during labelling.
-        do {
-            try current?.job.meeting.clearRoomLabelsStarted()
-        } catch {
-            NSLog("Ku-Ka: could not remove the room-labels marker: \(error)")
-        }
     }
 
     func waitUntilIdle() async {
@@ -508,13 +501,10 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
             let job = queue.removeFirst()
             switch job {
             case .process(let meeting):
-                let outcome = await processor.process(meeting, onStep: { [weak self] step in
-                    self?.current = (job, step.progressVerb)
+                let outcome = await processor.process(meeting) { [weak self] progress in
+                    self?.current = (job, progress.title)
                     self?.updateMenu()
-                }, onDownload: { [weak self] model in
-                    self?.current = (job, model.downloadTitle)
-                    self?.updateMenu()
-                })
+                }
                 current = nil
                 report(outcome, for: meeting)
             case .updateNotes(let meeting):

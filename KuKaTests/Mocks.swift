@@ -358,6 +358,9 @@ class FakeTranscriber: Transcribing {
     let name: String
     var byFileName: [String: Result<TrackTranscript, Error>] = [:]
     var modelIsMissing = false
+    /// False: `download` never calls `onStart`, as when another Ku-Ka holds the download lock.
+    var downloadStarts = true
+    /// A `.download` failure is thrown after `onStart`.
     var failure: (stage: TranscriberFailure.Stage, error: Error)?
     private(set) var downloads: [String] = []
     private(set) var loads: [String] = []
@@ -372,8 +375,9 @@ class FakeTranscriber: Transcribing {
         return modelIsMissing
     }
 
-    func download(for locale: Locale) async throws {
+    func download(for locale: Locale, onStart: @MainActor () -> Void) async throws {
         downloads.append(locale.identifier(.bcp47))
+        if downloadStarts { await onStart() }
         if let failure, failure.stage == .download { throw failure.error }
         modelIsMissing = false
     }

@@ -79,8 +79,7 @@ struct MeetingProcessor {
         return .updated(summary: meeting.url(for: .summary))
     }
 
-    func process(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
-                 onDownload: (MeetingModel) -> Void = { _ in }) async -> MeetingOutcome {
+    func process(_ meeting: MeetingFolder, progress: (MeetingProgress) -> Void) async -> MeetingOutcome {
         let lock: FileLock
         do {
             lock = try meeting.lock()
@@ -105,11 +104,11 @@ struct MeetingProcessor {
             case .failed(let step)?:
                 return .failed(step, message: "An earlier attempt failed. See error.md in the meeting folder.")
             case .pending(let step)?:
-                onStep(step)
+                progress(.step(step))
                 do {
                     switch step {
                     case .transcribe:
-                        guard try await transcribe(meeting, onStep: onStep, onDownload: onDownload) else { return .noSpeech }
+                        guard try await transcribe(meeting, progress: progress) else { return .noSpeech }
                     case .summarize:
                         try await summarize(meeting)
                     }
@@ -131,10 +130,9 @@ struct MeetingProcessor {
 
     /// False when nobody spoke. The meeting is then done, and its audio stays
     /// in the folder.
-    private func transcribe(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void,
-                            onDownload: (MeetingModel) -> Void) async throws -> Bool {
-        let (tracks, transcriber, failures) = try await transcribeTracks(meeting, onStep: onStep, onDownload: onDownload)
-        let rooms = try await labelRooms(meeting, tracks: tracks, onStep: onStep, onDownload: onDownload)
+    private func transcribe(_ meeting: MeetingFolder, progress: (MeetingProgress) -> Void) async throws -> Bool {
+        let (tracks, transcriber, failures) = try await transcribeTracks(meeting, progress: progress)
+        let rooms = try await labelRooms(meeting, tracks: tracks, progress: progress)
         try Task.checkCancellation()
         let lines = Transcript.merge(tracks, rooms: rooms)
         let duration = tracks.values.map(\.duration).max() ?? 0
@@ -153,9 +151,9 @@ struct MeetingProcessor {
 
     /// The session lives only in here, so the Whisper model is released
     /// before the room labeller loads its own model.
-    private func transcribeTracks(_ meeting: MeetingFolder, onStep: (MeetingStep) -> Void, onDownload: (MeetingModel) -> Void)
+    private func transcribeTracks(_ meeting: MeetingFolder, progress: (MeetingProgress) -> Void)
         async throws -> (tracks: [MeetingTrack: TrackTranscript], transcriber: String, failures: [TranscriberFailure]) {
-        let (session, transcriber, failures) = try await startTranscriber(onStep: onStep, onDownload: onDownload)
+        let (session, transcriber, failures) = try await startTranscriber(progress: progress)
         try Task.checkCancellation()
         var tracks: [MeetingTrack: TrackTranscript] = [:]
         for track in MeetingTrack.allCases where FileManager.default.fileExists(atPath: meeting.audioURL(track).path) {
@@ -168,29 +166,44 @@ struct MeetingProcessor {
     /// Without a microphone segment that the transcript keeps, nothing is downloaded or diarized.
     /// Throws only when the meeting folder cannot be written.
     private func labelRooms(_ meeting: MeetingFolder, tracks: [MeetingTrack: TrackTranscript],
-                            onStep: (MeetingStep) -> Void, onDownload: (MeetingModel) -> Void) async throws -> RoomLabels {
+                            progress: (MeetingProgress) -> Void) async throws -> RoomLabels {
         guard !Transcript.microphoneSpeech(tracks).isEmpty else { return .notDiarized }
         guard !meeting.roomLabelsStarted else { return .failed(.earlierAttemptStopped) }
         guard (tracks[.microphone]?.duration ?? 0) <= RoomLabelFailure.longestTrack else { return .failed(.tooLong) }
         if roomLabeller.needsDownload {
-            var started = false
             do {
-                defer { if started { onStep(.transcribe) } }
-                try await roomLabeller.download {
-                    started = true
-                    onDownload(.speaker)
-                }
+                try await downloading(.speaker, progress: progress) { try await roomLabeller.download(onStart: $0) }
             } catch {
                 return .failed(.download(error.localizedDescription))
             }
         }
         try meeting.markRoomLabelsStarted()
-        let rooms = await roomLabeller.label(meeting.audioURL(.microphone))
+        let rooms = await withTaskCancellationHandler {
+            await roomLabeller.label(meeting.audioURL(.microphone))
+        } onCancel: {
+            // A quit ends the process before `label` returns. `onCancel` runs inside `cancel()`,
+            // so the marker is gone before `MeetingNotesController.shutDown()` returns.
+            try? meeting.clearRoomLabelsStarted()
+        }
         try meeting.clearRoomLabelsStarted()
         return rooms
     }
 
-    private func startTranscriber(onStep: (MeetingStep) -> Void, onDownload: (MeetingModel) -> Void) async throws
+    /// `download` calls its `onStart` right before the download really starts. Only then is the
+    /// download reported, and when it ends, also after a failure, the step is Transcribing again.
+    /// `download` does not escape. Swift does not let a non-escaping closure parameter get a
+    /// closure that captures `progress`, so it is marked `@escaping`.
+    private func downloading(_ model: MeetingModel, progress: (MeetingProgress) -> Void,
+                             _ download: @escaping (_ onStart: @MainActor () -> Void) async throws -> Void) async throws {
+        var started = false
+        defer { if started { progress(.step(.transcribe)) } }
+        try await download {
+            started = true
+            progress(.downloading(model))
+        }
+    }
+
+    private func startTranscriber(progress: (MeetingProgress) -> Void) async throws
         -> (session: any TranscriptionSession, transcriber: String, failures: [TranscriberFailure]) {
         let locale = self.locale()
         var failures: [TranscriberFailure] = []
@@ -202,9 +215,9 @@ struct MeetingProcessor {
                 try Task.checkCancellation()
                 if needsDownload {
                     stage = .download
-                    onDownload(.speech)
-                    defer { onStep(.transcribe) }
-                    try await transcriber.download(for: locale)
+                    try await downloading(.speech, progress: progress) {
+                        try await transcriber.download(for: locale, onStart: $0)
+                    }
                 }
                 try Task.checkCancellation()
                 stage = .load
