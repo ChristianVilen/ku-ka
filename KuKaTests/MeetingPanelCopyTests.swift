@@ -9,27 +9,27 @@ final class MeetingPanelCopyTests: XCTestCase {
     }
 
     func testPauseAndResumeAreAnnouncedAtMediumPriority() {
-        XCTAssertEqual(announcement(from: .recording(10), to: .paused(10)),
+        XCTAssertEqual(announcement(from: .recording, to: .paused),
                        "50 Recording paused. Nothing is recorded until you resume.")
-        XCTAssertEqual(announcement(from: .paused(10), to: .recording(10)), "50 Recording resumed.")
+        XCTAssertEqual(announcement(from: .paused, to: .recording), "50 Recording resumed.")
     }
 
     func testAnInterruptionIsAnnouncedAtHighPriorityWithItsReason() {
-        XCTAssertEqual(announcement(from: .recording(10), to: .interrupted(reason: "The display was disconnected.")),
+        XCTAssertEqual(announcement(from: .recording, to: .interrupted(reason: "The display was disconnected.")),
                        "90 Recording stopped. The display was disconnected.")
-        XCTAssertEqual(announcement(from: .paused(10), to: .interrupted(reason: "The microphone stopped.")),
+        XCTAssertEqual(announcement(from: .paused, to: .interrupted(reason: "The microphone stopped.")),
                        "90 Recording stopped. The microphone stopped.")
     }
 
     func testTheStartAndTheSavedRecordingAreAnnouncedAtMediumPriority() {
-        XCTAssertEqual(announcement(from: .starting, to: .recording(0)), "50 Recording started.")
-        XCTAssertEqual(announcement(from: .recording(10), to: .saved), "50 Recording saved. Ku-Ka is making the notes.")
-        XCTAssertEqual(announcement(from: .paused(10), to: .saved), "50 Recording saved. Ku-Ka is making the notes.")
+        XCTAssertEqual(announcement(from: .starting, to: .recording), "50 Recording started.")
+        XCTAssertEqual(announcement(from: .recording, to: .saved), "50 Recording saved. Ku-Ka is making the notes.")
+        XCTAssertEqual(announcement(from: .paused, to: .saved), "50 Recording saved. Ku-Ka is making the notes.")
     }
 
     func testATimeChangeIsNotAnnounced() {
-        XCTAssertNil(announcement(from: .recording(10), to: .recording(11)))
-        XCTAssertNil(announcement(from: .paused(10), to: .paused(10)))
+        XCTAssertNil(announcement(from: .recording, to: .recording))
+        XCTAssertNil(announcement(from: .paused, to: .paused))
         XCTAssertNil(announcement(from: .saved, to: .saved))
     }
 
@@ -39,10 +39,10 @@ final class MeetingPanelCopyTests: XCTestCase {
     }
 
     func testNothingIsAnnouncedWhileThePanelIsHiddenOrWhenItShowsAgain() {
-        XCTAssertNil(announcement(from: .recording(10), to: nil))
-        XCTAssertNil(announcement(from: .paused(10), to: nil))
-        XCTAssertNil(announcement(from: nil, to: .recording(10)))
-        XCTAssertNil(announcement(from: nil, to: .paused(10)))
+        XCTAssertNil(announcement(from: .recording, to: nil))
+        XCTAssertNil(announcement(from: .paused, to: nil))
+        XCTAssertNil(announcement(from: nil, to: .recording))
+        XCTAssertNil(announcement(from: nil, to: .paused))
     }
 
     func testTheEndOfARecordingIsAnnouncedAlsoWhenThePanelWasHidden() {
@@ -52,7 +52,7 @@ final class MeetingPanelCopyTests: XCTestCase {
     }
 
     func testThePillNamesEveryStatusButRecordingInWords() {
-        let statuses: [MeetingControls.Status] = [.starting, .recording(245), .paused(245), .saved,
+        let statuses: [MeetingControls.Status] = [.starting, .recording, .paused, .saved,
                                                   .interrupted(reason: "The display was disconnected.")]
 
         XCTAssertEqual(statuses.map(MeetingPanelCopy.word), ["Starting…", nil, "Paused", "Recording saved", "Recording stopped"])
@@ -64,8 +64,8 @@ final class MeetingPanelCopyTests: XCTestCase {
                        "Ku-Ka is making the transcript and notes. You get a notification when they are ready.")
         XCTAssertEqual(MeetingPanelCopy.note(for: .interrupted(reason: "The display was disconnected.")),
                        "The display was disconnected. Ku-Ka makes notes from what it recorded. To record the rest, choose Start Recording Meeting.")
-        XCTAssertNil(MeetingPanelCopy.note(for: .recording(10)))
-        XCTAssertNil(MeetingPanelCopy.note(for: .paused(10)))
+        XCTAssertNil(MeetingPanelCopy.note(for: .recording))
+        XCTAssertNil(MeetingPanelCopy.note(for: .paused))
         XCTAssertNil(MeetingPanelCopy.note(for: .starting))
     }
 

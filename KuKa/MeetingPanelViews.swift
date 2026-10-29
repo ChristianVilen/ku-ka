@@ -178,9 +178,7 @@ final class MeetingPanelButton: NSButton {
 /// The shape left of the status: the record mark, two pause bars, a check, or a warning. Each
 /// state has its own shape, not only its own colour.
 final class MeetingStatusMark: NSView {
-    enum Kind { case recording, paused, saved, interrupted }
-
-    var kind: Kind = .recording { didSet { needsDisplay = true } }
+    var status: MeetingControls.Status = .recording { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -196,7 +194,10 @@ final class MeetingStatusMark: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let box = NSRect(x: (bounds.width - 13) / 2, y: (bounds.height - 13) / 2, width: 13, height: 13)
-        switch kind {
+        switch status {
+        case .starting:
+            // The spinner shows instead.
+            break
         case .recording:
             // The menu bar icon's mark: a red ring with a white centre.
             let ring = NSBezierPath(ovalIn: box.insetBy(dx: 1.75, dy: 1.75))
@@ -307,7 +308,7 @@ final class TranscriptSpeechCell: NSTableCellView {
     func configure(speaker: Speaker, at time: TimeInterval, text: String, isFinal: Bool, isContinuation: Bool) {
         speakerLabel.stringValue = speaker.label
         speakerLabel.textColor = MeetingControlsPanel.Colors.speaker(speaker)
-        timeLabel.stringValue = MeetingNotesController.formatElapsed(time)
+        timeLabel.stringValue = MeetingRecorder.formatElapsed(time)
         speakerLabel.isHidden = isContinuation
         timeLabel.isHidden = isContinuation
         speechLabel.stringValue = MeetingPanelCopy.speech(text, isFinal: isFinal)

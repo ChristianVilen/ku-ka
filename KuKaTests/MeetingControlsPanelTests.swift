@@ -34,7 +34,7 @@ final class MeetingControlsPanelTests: XCTestCase {
     private var reduceTransparency = false
     /// The pointer the panel's drags read, in screen coordinates.
     private var mouseLocation = CGPoint.zero
-    private var controller: MeetingNotesController!
+    private var recorder: MeetingRecorder!
     private var sut: MeetingControlsPanel!
 
     override func setUp() async throws {
@@ -45,7 +45,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         defaults.removePersistentDomain(forName: Self.suite)
         settings = Settings(defaults: defaults, loginItem: FakeLoginItem())
         screens = TestScreens([primary])
-        controller = MeetingNotesController(
+        recorder = MeetingRecorder(
             permissions: PermissionsManager(
                 isAccessibilityTrusted: { true },
                 hasScreenCaptureAccess: { true },
@@ -54,50 +54,39 @@ final class MeetingControlsPanelTests: XCTestCase {
             root: { [unowned self] in root },
             capture: capture,
             liveTranscriber: liveTranscriber,
-            processor: MeetingProcessor(
-                transcribers: [FakeTranscriber()],
-                roomLabeller: FakeRoomLabeller(),
-                summarizer: Summarizer(runner: FakeCommandRunner(), home: URL(fileURLWithPath: "/Users/test"),
-                                       isExecutable: { _ in true }),
-                knownWords: { .empty },
-                trash: { try FileManager.default.removeItem(at: $0) },
-                now: { localDate(2026, 10, 23, 15, 0) }),
-            knownWords: { .empty },
             notifier: FakeNotifier(),
             alertStartFailure: { _, _ in false },
-            openURL: { _ in },
             hostNow: { [unowned self] in hostTime },
             closeSavedNoticeLater: { _ in })
         sut = MeetingControlsPanel(
-            controller: controller, settings: settings, screens: screens,
+            recorder: recorder, settings: settings, screens: screens,
             announce: { [unowned self] in announcements.append(($0, $1)) },
             displayOptions: { [unowned self] in (reduceMotion, reduceTransparency) },
             mouseLocation: { [unowned self] in mouseLocation })
-        sut.bindController()
+        sut.bindRecorder()
     }
 
     override func tearDown() async throws {
         sut.close()
-        controller.shutDown()
-        await controller.waitUntilIdle()
+        recorder.shutDown()
         defaults.removePersistentDomain(forName: Self.suite)
     }
 
     // MARK: - Helpers
 
     private func startMeeting() async {
-        await controller.toggleRecording()
+        await recorder.toggleRecording()
     }
 
-    /// Sends one live result and waits until the controller applied it. The host time is set
+    /// Sends one live result and waits until the recorder applied it. The host time is set
     /// half a second after the result, so it is never behind.
     private func deliver(_ track: MeetingTrack, _ text: String, from start: TimeInterval, to end: TimeInterval,
                          isFinal: Bool = true, at host: HostTime? = nil) async {
         hostTime = host ?? HostTime(seconds: 1_000 + end + 0.5)
-        let before = controller.controls?.preview
+        let before = recorder.controls?.preview
         liveTranscriber.send(.result(LiveResult(track: track, start: start, end: end, text: text, isFinal: isFinal,
                                                 finalizedThrough: isFinal ? end : start)))
-        await waitUntil { controller.controls?.preview != before }
+        await waitUntil { recorder.controls?.preview != before }
     }
 
     private func views(in view: NSView) -> [NSView] {
@@ -162,16 +151,16 @@ final class MeetingControlsPanelTests: XCTestCase {
         await startMeeting()
         XCTAssertTrue(sut.isVisible)
 
-        controller.dismissControls()
+        recorder.dismissControls()
         XCTAssertFalse(sut.isVisible)
 
-        controller.showControls()
+        recorder.showControls()
         XCTAssertTrue(sut.isVisible)
 
-        controller.stopRecording()
+        recorder.stopRecording()
         XCTAssertTrue(sut.isVisible, "the saved notice")
 
-        controller.dismissControls()
+        recorder.dismissControls()
         XCTAssertFalse(sut.isVisible)
     }
 
@@ -207,28 +196,28 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertEqual(pause.title, "")
 
         hostTime = hostTime + 10
-        controller.pause()
+        recorder.pause()
 
         XCTAssertNil(button("Pause recording"))
         XCTAssertEqual(button("Resume recording")?.title, "Resume")
     }
 
-    func testThePauseButtonAsksTheControllerToToggleAndDecidesNothingFromWhatItShows() async throws {
+    func testThePauseButtonAsksTheRecorderToToggleAndDecidesNothingFromWhatItShows() async throws {
         await startMeeting()
         let pause = try XCTUnwrap(button("Pause recording"))
 
         hostTime = hostTime + 10
         pause.performClick(nil)
-        XCTAssertEqual(controller.phase, .paused)
+        XCTAssertEqual(recorder.phase, .paused)
 
         // The menu resumes while the panel does not redraw, so the button still shows Resume.
-        controller.onControlsChange = nil
+        recorder.onControlsChange = nil
         hostTime = hostTime + 10
-        controller.resume()
+        recorder.resume()
         hostTime = hostTime + 10
         pause.performClick(nil)
 
-        XCTAssertEqual(controller.phase, .paused)
+        XCTAssertEqual(recorder.phase, .paused)
     }
 
     func testTheStopButtonStopsTheRecording() async throws {
@@ -236,16 +225,16 @@ final class MeetingControlsPanelTests: XCTestCase {
 
         try XCTUnwrap(button("Stop recording")).performClick(nil)
 
-        XCTAssertEqual(controller.phase, .idle)
+        XCTAssertEqual(recorder.phase, .idle)
         XCTAssertEqual(capture.recordings.first?.stopCount, 1)
-        XCTAssertEqual(controller.controls?.status, .saved)
+        XCTAssertEqual(recorder.controls?.status, .saved)
     }
 
     func testPauseAndStopAreOffWhileStarting() async throws {
         microphone = .notDetermined
         var prompt: CheckedContinuation<Bool, Never>?
         answerMicrophonePrompt = { await withCheckedContinuation { prompt = $0 } }
-        let start = Task { await controller.toggleRecording() }
+        let start = Task { await recorder.toggleRecording() }
         await waitUntil { prompt != nil }
 
         XCTAssertTrue(sut.isVisible)
@@ -262,13 +251,13 @@ final class MeetingControlsPanelTests: XCTestCase {
         await startMeeting()
         XCTAssertNil(button("Close"))
 
-        controller.stopRecording()
+        recorder.stopRecording()
         XCTAssertNil(button("Pause recording"))
         XCTAssertNil(button("Stop recording"))
         try XCTUnwrap(button("Close")).performClick(nil)
 
         XCTAssertFalse(sut.isVisible)
-        XCTAssertNil(controller.controls)
+        XCTAssertNil(recorder.controls)
     }
 
     func testAnInterruptionStaysUntilClosed() async throws {
@@ -284,14 +273,14 @@ final class MeetingControlsPanelTests: XCTestCase {
         await startMeeting()
         hostTime = hostTime + 245
 
-        controller.onControlsChange?()
+        recorder.onControlsChange?()
 
         XCTAssertTrue(allViews.contains { $0.accessibilityLabel() == "Recorded time 4:05" })
     }
 
     func testNoTextInThePanelIsSelectable() async {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         await deliver(.system, "Let's ship on Friday.", from: 0, to: 2)
         await deliver(.microphone, "Sounds good to me", from: 4, to: 6, isFinal: false)
 
@@ -310,12 +299,12 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertFalse(transcriptIsShown)
         XCTAssertEqual(sut.frame.height, pillHeight)
 
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         XCTAssertTrue(transcriptIsShown)
         XCTAssertEqual(sut.frame.height, pillHeight + 280)
 
-        controller.stopRecording()
-        controller.dismissControls()
+        recorder.stopRecording()
+        recorder.dismissControls()
         await startMeeting()
 
         XCTAssertFalse(transcriptIsShown)
@@ -326,35 +315,35 @@ final class MeetingControlsPanelTests: XCTestCase {
         await startMeeting()
 
         try XCTUnwrap(button("Show live transcript")).performClick(nil)
-        XCTAssertEqual(controller.controls?.isTranscriptOpen, true)
+        XCTAssertEqual(recorder.controls?.isTranscriptOpen, true)
 
         try XCTUnwrap(button("Hide live transcript")).performClick(nil)
-        XCTAssertEqual(controller.controls?.isTranscriptOpen, false)
+        XCTAssertEqual(recorder.controls?.isTranscriptOpen, false)
     }
 
     func testEscClosesTheDrawer() async {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         sut.cancelOperation(nil)
 
-        XCTAssertEqual(controller.controls?.isTranscriptOpen, false)
+        XCTAssertEqual(recorder.controls?.isTranscriptOpen, false)
         XCTAssertEqual(sut.frame.height, pillHeight)
     }
 
     func testHidePanelHidesItAndRecordingGoesOn() async throws {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         try XCTUnwrap(button("Hide panel")).performClick(nil)
 
         XCTAssertFalse(sut.isVisible)
-        XCTAssertEqual(controller.phase, .recording)
+        XCTAssertEqual(recorder.phase, .recording)
     }
 
     func testTheDrawerSaysWhyThereIsNoTextAndShowsTheLag() async {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         XCTAssertTrue(allViews.contains { ($0 as? NSTextField)?.stringValue == "Preparing live transcript" && !$0.isHiddenOrHasHiddenAncestor })
 
         await deliver(.system, "Late words", from: 0, to: 2, at: HostTime(seconds: 1_008))
@@ -367,7 +356,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         settings.meetingControlsTopRight = CGPoint(x: 1000, y: 200)
         await startMeeting()
 
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         XCTAssertEqual(sut.frame.minY, 200 - pillHeight)
         XCTAssertEqual(sut.frame.height, pillHeight + 280)
@@ -377,7 +366,7 @@ final class MeetingControlsPanelTests: XCTestCase {
 
     func testScrollingBackStopsFollowingAndEndReturnsToLive() async throws {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         for row in 0..<16 {
             let start = TimeInterval(row * 4)
             await deliver(row.isMultiple(of: 2) ? .system : .microphone,
@@ -405,7 +394,7 @@ final class MeetingControlsPanelTests: XCTestCase {
 
     func testNewRowsScrollIntoViewWhileFollowing() async throws {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         for row in 0..<16 {
             let start = TimeInterval(row * 4)
@@ -426,18 +415,18 @@ final class MeetingControlsPanelTests: XCTestCase {
         announcements = []
 
         hostTime = hostTime + 10
-        controller.pause()
+        recorder.pause()
         XCTAssertEqual(announcements.map(\.text), ["Recording paused. Nothing is recorded until you resume."])
         XCTAssertEqual(announcements.map(\.priority), [.medium])
 
         hostTime = hostTime + 10
-        controller.resume()
+        recorder.resume()
         XCTAssertEqual(announcements.map(\.text).last, "Recording resumed.")
         announcements = []
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         await deliver(.system, "Let's ship on Friday.", from: 0, to: 2)
         hostTime = hostTime + 1
-        controller.onControlsChange?()
+        recorder.onControlsChange?()
         XCTAssertTrue(announcements.isEmpty)
 
         capture.interrupt(reason: "The microphone was disconnected.")
@@ -451,7 +440,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         let closed = sut.frame
 
         let start = Date()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
         XCTAssertEqual(sut.animationResizeTime(sut.frame), 0)
@@ -465,7 +454,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         let closed = sut.frame
 
         let start = Date()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(start), 0.15, "the frame grows over time")
         XCTAssertEqual(sut.frame.height, closed.height + 280)
@@ -488,8 +477,8 @@ final class MeetingControlsPanelTests: XCTestCase {
 
     func testShowingAndOpeningTheDrawerWriteNothingToSettings() async {
         await startMeeting()
-        controller.setTranscriptOpen(true)
-        controller.setTranscriptOpen(false)
+        recorder.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(false)
 
         XCTAssertEqual(pillTopRight, CGPoint(x: 1424, y: 859))
         XCTAssertNil(defaults.object(forKey: "meetingControlsTopRight"))
@@ -549,7 +538,7 @@ final class MeetingControlsPanelTests: XCTestCase {
 
     func testTheEndOfAResizeWritesTheHeightOnce() async {
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         let grip = CGPoint(x: sut.frame.midX, y: sut.frame.minY + 4)
 
         mouse(.leftMouseDown, at: grip)
@@ -567,7 +556,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         settings.meetingTranscriptHeight = 900
         await startMeeting()
 
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
 
         XCTAssertEqual(sut.frame.height, pillHeight + 460)
     }
@@ -577,7 +566,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         await startMeeting()
         XCTAssertEqual(pillTopRight, CGPoint(x: 1000, y: 500))
 
-        controller.onControlsRequest?(.restoreDefaultPosition)
+        recorder.onControlsRequest?(.restoreDefaultPosition)
 
         XCTAssertEqual(pillTopRight, CGPoint(x: 1424, y: 859))
         XCTAssertNil(settings.meetingControlsTopRight)
@@ -602,7 +591,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         microphone = .notDetermined
         var prompt: CheckedContinuation<Bool, Never>?
         answerMicrophonePrompt = { await withCheckedContinuation { prompt = $0 } }
-        let start = Task { await controller.toggleRecording() }
+        let start = Task { await recorder.toggleRecording() }
         await waitUntil { prompt != nil }
         try snap("01-starting")
         microphone = .granted
@@ -610,31 +599,31 @@ final class MeetingControlsPanelTests: XCTestCase {
         await start.value
 
         hostTime = HostTime(seconds: 1_000 + 636)
-        controller.onControlsChange?()
+        recorder.onControlsChange?()
         try snap("02-recording")
 
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         try snap("03-preview-loading")
 
         liveTranscriber.send(.unavailable("Live text is not available for Finnish (Finland)."))
-        await waitUntil { controller.controls?.preview?.status != .preparing }
+        await waitUntil { recorder.controls?.preview?.status != .preparing }
         try snap("04-unavailable")
 
-        controller.stopRecording()
+        recorder.stopRecording()
         try snap("05-saved")
-        controller.dismissControls()
+        recorder.dismissControls()
 
         hostTime = HostTime(seconds: 1_000)
         await startMeeting()
-        controller.setTranscriptOpen(true)
+        recorder.setTranscriptOpen(true)
         await deliver(.system, "Okay, I think everyone's here. Let's start with the release date for 2.4.", from: 1, to: 5)
         await deliver(.microphone, "Sure. The plan is still to cut the release branch on Thursday.", from: 6, to: 10)
         await deliver(.system, "Is QA comfortable with Thursday, or do they need the extra week?", from: 11, to: 15)
         await deliver(.microphone, "They asked for two more days for the sync tests.", from: 16, to: 19)
         hostTime = HostTime(seconds: 1_020)
-        controller.pause()
+        recorder.pause()
         hostTime = HostTime(seconds: 1_050)
-        controller.resume()
+        recorder.resume()
         // File positions after the resume are 3 s later than the recorded time.
         await deliver(.system, "Two days is fine. What about the onboarding changes?", from: 24, to: 27,
                       at: HostTime(seconds: 1_054.5))
@@ -647,13 +636,13 @@ final class MeetingControlsPanelTests: XCTestCase {
         await deliver(.system, "Good, then let's keep the date.", from: 37, to: 39, at: HostTime(seconds: 1_072))
         try snap("07-behind")
 
-        controller.pause()
+        recorder.pause()
         try snap("08-paused-open")
-        controller.setTranscriptOpen(false)
+        recorder.setTranscriptOpen(false)
         try snap("09-paused")
         hostTime = HostTime(seconds: 1_073)
-        controller.resume()
-        controller.setTranscriptOpen(true)
+        recorder.resume()
+        recorder.setTranscriptOpen(true)
 
         let clip = try XCTUnwrap(transcript.enclosingScrollView?.contentView)
         clip.scroll(to: .zero)

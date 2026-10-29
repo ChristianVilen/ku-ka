@@ -90,14 +90,18 @@ struct WordReview: Equatable {
 
     /// Done meetings whose review has open questions, oldest first.
     static func unfinished(in root: URL, knownWords: KnownWordsList) -> [WordReview] {
-        unfinished(among: MeetingFolder.all(in: root), knownWords: knownWords)
-    }
-
-    /// The same for a listing that the caller already has from `MeetingFolder.all(in:)`.
-    static func unfinished(among meetings: [(MeetingFolder, MeetingStage)], knownWords: KnownWordsList) -> [WordReview] {
-        meetings
+        MeetingFolder.all(in: root)
             .compactMap { meeting, stage in stage == .done ? meeting.wordReview(knownWords: knownWords) : nil }
             .filter { !$0.isFinished }
+    }
+
+    /// The open questions of `meeting`, or with nil, of every done meeting in `root`: the number
+    /// that the menu's Check Words and the notes notification show.
+    static func openQuestionCount(of meeting: MeetingFolder?, in root: URL, knownWords: KnownWordsList) -> Int {
+        guard let meeting else {
+            return unfinished(in: root, knownWords: knownWords).reduce(0) { $0 + $1.openQuestions.count }
+        }
+        return meeting.wordReview(knownWords: knownWords)?.openQuestions.count ?? 0
     }
 }
 

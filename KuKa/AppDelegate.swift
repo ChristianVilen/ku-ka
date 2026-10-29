@@ -20,16 +20,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let clipboardHistory = ClipboardHistoryController()
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var knownWords = KnownWordsFile(url: { [settings] in settings.knownWordsFile })
-    private lazy var meetingNotes = MeetingNotesController(
+    private lazy var meetingRecorder = MeetingRecorder(
         permissions: permissions,
         root: { [settings] in settings.meetingsFolder },
-        locale: { [settings] in settings.meetingLocale },
+        locale: { [settings] in settings.meetingLocale }
+    )
+    private lazy var meetingNotes = MeetingNotesController(
+        recorder: meetingRecorder,
+        root: { [settings] in settings.meetingsFolder },
         processor: MeetingProcessor(roomLabeller: SpeakerKitRoomLabeller(),
                                     knownWords: { [knownWords] in knownWords.read() },
                                     locale: { [settings] in settings.meetingLocale }),
-        knownWords: { [knownWords] in knownWords.read() }
+        wordsToCheck: { [knownWords, settings] in
+            WordReview.openQuestionCount(of: $0, in: settings.meetingsFolder, knownWords: knownWords.read())
+        }
     )
-    private lazy var meetingControlsPanel = MeetingControlsPanel(controller: meetingNotes, settings: settings)
+    private lazy var meetingControlsPanel = MeetingControlsPanel(recorder: meetingRecorder, settings: settings)
     private lazy var wordReview = WordReviewController(
         root: { [settings] in settings.meetingsFolder },
         knownWords: knownWords,
@@ -45,7 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionHandlingEnabled = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard meetingNotes.phase.isCapturing else { return .terminateNow }
+        guard meetingRecorder.phase.isCapturing else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "Stop Recording and Quit?"
         alert.informativeText = "Ku-Ka is recording a meeting. If you quit, the recording stops, and Ku-Ka makes the notes the next time it opens."
@@ -247,9 +253,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// hardware and no disk and writes no setting, and both stay hidden until they are needed.
     private func setupMeetingNotes() {
         meetingNotes.onStateChange = { [weak self] in self?.updateStatus() }
-        meetingNotes.onShowPermissions = { [weak self] in self?.showOnboarding() }
+        meetingRecorder.onShowPermissions = { [weak self] in self?.showOnboarding() }
         meetingNotes.onCheckWords = { [weak self] in self?.wordReviewWindow.show($0) }
-        meetingControlsPanel.bindController()
+        meetingControlsPanel.bindRecorder()
         wordReviewWindow.bindController()
     }
 
@@ -288,7 +294,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             warning = nil
         }
-        let phase = meetingNotes.phase
+        let phase = meetingRecorder.phase
         statusItem.button?.image = statusMenu.icon(
             keepAwakeActive: keepAwake.isActive,
             recording: phase.recordingMark,

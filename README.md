@@ -260,7 +260,8 @@ KuKa/
 ├── SpeakerKitRoomLabeller.swift # Tells apart the voices in the room with SpeakerKit: model download, diarization
 ├── MeetingSummarizer.swift   # Runs agy or claude for the summary, writes summary.md
 ├── MeetingProcessor.swift    # Transcribes, then summarizes, from wherever a meeting stopped
-├── MeetingNotesController.swift # Meeting Notes menu section, recording state, and processing queue
+├── MeetingRecorder.swift     # Records a meeting: start, pause, stop, the live transcript, and what the floating panel shows
+├── MeetingNotesController.swift # Meeting Notes menu section and the processing queue
 ├── Corrector.swift           # Finds and replaces the confirmed wrong forms of known words
 ├── KnownWords.swift          # Reads the list of known words and adds a line to it
 ├── KnownWordsFile.swift      # The list of known words on disk, written under a lock
@@ -311,7 +312,7 @@ Tests cover:
 - Tiling layout math and the maximize/restore toggle, including apps that snap window sizes
 - Screen-picking and windows-per-screen rules, plus the tiling controller's saved-frame handling
 - Shortcut registration, feature toggles, action delivery, conflict detection, partial failure recovery, wake renewal, stale callback rejection, and cleanup
-- Meeting notes: the stage rule and folder rules on a real temporary folder, the transcript merge and echo rule, the transcriber fallback from Whisper to Apple, the Whisper model install, language codes, and silence filter against a fake WhisperKit, room labels and the speaker model install against a fake SpeakerKit, the summary fallback from `agy` to `claude`, child processes with real executables, recovery and retry from each step, the recording controller with a fake capture, Pause and Resume on synthetic audio, the live transcript model, the meeting controls panel, and known words: the list format, the corrector, insert-only additions to a temporary list, the questions and answers, and the review window
+- Meeting notes: the stage rule and folder rules on a real temporary folder, the transcript merge and echo rule, the transcriber fallback from Whisper to Apple, the Whisper model install, language codes, and silence filter against a fake WhisperKit, room labels and the speaker model install against a fake SpeakerKit, the summary fallback from `agy` to `claude`, child processes with real executables, recovery and retry from each step, the recorder and the menu controller with a fake capture, Pause and Resume on synthetic audio, the live transcript model, the meeting controls panel, and known words: the list format, the corrector, insert-only additions to a temporary list, the questions and answers, and the review window
 
 Unit tests never download or load the Whisper or SpeakerKit model. `RealMeetingAudioTests` runs the real models on your own meeting audio, and it is skipped unless you set its environment variables. `RealLiveTranscriptTests` runs Apple's installed live model on audio you choose in the same way. `AGENTS.md` describes how to run them.
 

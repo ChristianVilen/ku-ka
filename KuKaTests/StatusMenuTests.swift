@@ -15,14 +15,18 @@ final class StatusMenuTests: XCTestCase {
         loginItem = FakeLoginItem()
         settings = Settings(defaults: defaults, loginItem: loginItem)
         meetingsRoot = try makeTemporaryDirectory()
-        let meetingNotes = MeetingNotesController(
+        let recorder = MeetingRecorder(
             permissions: PermissionsManager(isAccessibilityTrusted: { true }, hasScreenCaptureAccess: { true },
                                             microphoneAccess: { .granted }),
             root: { [unowned self] in meetingsRoot },
             capture: FakeMeetingAudioCapture(),
+            notifier: FakeNotifier())
+        let meetingNotes = MeetingNotesController(
+            recorder: recorder,
+            root: { [unowned self] in meetingsRoot },
             processor: MeetingProcessor(transcribers: [FakeTranscriber()], roomLabeller: FakeRoomLabeller(),
                                         knownWords: { .empty }),
-            knownWords: { .empty },
+            wordsToCheck: { [unowned self] in WordReview.openQuestionCount(of: $0, in: meetingsRoot, knownWords: .empty) },
             notifier: FakeNotifier())
         sut = StatusMenu(settings: settings, sections: [KeepAwakeController(defaults: defaults), meetingNotes])
     }
