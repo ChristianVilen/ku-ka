@@ -21,6 +21,10 @@ A lightweight macOS app to replace the default `Shift+Command+4` selected area s
 
 ## Architecture
 
+Calendar reminders use `CalendarOccurrence`, `CalendarReminderController`, `CalendarReminderStore`, `EventKitCalendarSource`, `CalendarReminderNotifications`, and `CalendarReminderDriver`. `AppDelegate.calendarReminders` is the optional app-owned controller for the #43 Settings UI. Enable through `setEnabled(_:) async`, never a defaults-only write. Keep native construction outside the existing XCTest and `--uitesting` guard. `SystemNotifier` is the sole notification delegate. Forward recorder changes through the existing Meeting Notes callback. See `docs/calendar-recording-reminders.md` for exact interfaces and identity limits. Tests must inject calendar fields, notification-center calls, and driver signals. Never use a real EventKit store, real notification delivery, capture, or model downloads in these tests.
+
+Optional `meeting.json` display-title metadata does not change dated folder names or meeting stages. `MeetingRecorder.displayTitle` fixes the title for its session. `MeetingNotesController` shows a bounded title in the existing status line and retains the full title in its tooltip and accessibility label.
+
 ### File Structure
 
 ```
@@ -66,6 +70,13 @@ KuKa/
 ├── PasteboardImage.swift     # The one image-write rule shared by ImageStore and SystemPasteboard: PNG always, TIFF while small enough
 ├── ContentHash.swift         # SHA-256 hex digest shared by ClipboardItem (dedupe key) and ImageStore (per-file tracking)
 ├── MeetingFolder.swift       # One meeting on disk: tracks, documents, the stage rule, naming, listing, atomic writes, the heard transcript copy
+├── MeetingTitle.swift        # Normalizes optional display titles and escapes Markdown headings
+├── CalendarOccurrence.swift  # Immutable occurrence and identity, reminder actions, calendar boundaries
+├── CalendarReminderController.swift # Reminder policy, session association, exact action validation, status
+├── CalendarReminderStore.swift # Bounded consumed-occurrence receipts without titles
+├── EventKitCalendarSource.swift # Read-only EventKit adapter and safe provider identity aliases
+├── CalendarReminderNotifications.swift # Native category/request builders and feature-only cleanup
+├── CalendarReminderDriver.swift # EventKit, wake, clock, safety, and next-boundary refresh signals
 ├── Transcript.swift          # Pure: segment and line types, the merge, the echo rule, room numbers, transcript.md and its legends, known-words corrections and their note, the place of a quote
 ├── Corrector.swift           # Pure: Phrase, PhraseMatcher (whole-token matching), and the Corrector that replaces known heard forms
 ├── KnownWords.swift          # Pure: KnownWordsList reads the known-words Markdown list; its corrector, knows, the words relevant to a text, and the insert-only adding; KnownWordAddition
