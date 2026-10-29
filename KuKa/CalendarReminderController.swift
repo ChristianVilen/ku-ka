@@ -16,20 +16,35 @@ final class CalendarReminderController {
     private let settings: Settings
     private let store: CalendarReminderStore
     private let now: () -> Date
-    private struct Issued {
-        let event: CalendarOccurrence
-        let session: UUID?
+    private struct Offer {
+        enum Kind {
+            case start(CalendarOccurrence)
+            case end(CalendarOccurrence, session: UUID)
+        }
+        let token: UUID
+        let kind: Kind
         var claimed = false
+        var event: CalendarOccurrence {
+            switch kind { case .start(let event), .end(let event, _): event }
+        }
+        var session: UUID? {
+            switch kind { case .start: nil; case .end(_, let session): session }
+        }
     }
+    private enum EndReminder: Equatable { case waiting, offered(Date), continued }
     private struct Association {
         var event: CalendarOccurrence
         let session: UUID
-        var continued = false
-        var offeredEnd: Date?
+        var endReminder: EndReminder = .waiting
     }
-    private var issued: [UUID: Issued] = [:]
-    private var association: Association?
-    private var pendingStart: (event: CalendarOccurrence, session: UUID)?
+    private enum RecordingLink {
+        case validating(Association), associated(Association)
+        var value: Association {
+            switch self { case .validating(let value), .associated(let value): value }
+        }
+    }
+    private var offer: Offer?
+    private var recordingLink: RecordingLink?
     private var enabled = false
     private var generation = UUID()
     private var worker: Task<Void, Never>?
@@ -115,28 +130,28 @@ final class CalendarReminderController {
             guard valid(stamp), revision == refreshRevision, await accessIsReady(stamp),
                   revision == refreshRevision else { return }
             var associatedEvent: CalendarOccurrence?
-            if let event = association?.event ?? pendingStart?.event {
+            if let event = recordingLink?.value.event {
                 associatedEvent = try await source.occurrence(id: event.id)
                 guard valid(stamp), revision == refreshRevision, await accessIsReady(stamp),
                       revision == refreshRevision else { return }
             }
             reconcileRecorder()
-            if let pendingStart, associatedEvent != pendingStart.event {
-                self.pendingStart = nil
+            if case .validating(let link) = recordingLink, associatedEvent != link.event {
+                recordingLink = nil
             }
-            if var link = association {
+            if case .associated(var link) = recordingLink {
                 if let event = associatedEvent, event.eligible {
                     link.event = event
-                    association = link
+                    recordingLink = .associated(link)
                 } else {
-                    association = nil
+                    recordingLink = nil
                 }
             }
             let current = now()
             invalidate { item in
                 if let session = item.session {
-                    return association?.session != session || association?.event != item.event
-                        || association?.continued == true || item.event.end > current
+                    return recordingLink?.value.session != session || recordingLink?.value.event != item.event
+                        || recordingLink?.value.endReminder == .continued || item.event.end > current
                 }
                 return recorder.activeSessionID != nil || item.event.end <= current
                     || !events.contains(item.event) || !item.event.eligible
@@ -146,27 +161,28 @@ final class CalendarReminderController {
                 $0.eligible && $0.start <= current && $0.start >= current.addingTimeInterval(-120)
                     && $0.end > current && !consumed.contains($0.id)
             }.sorted { $0.start == $1.start ? $0.id < $1.id : $0.start < $1.start }
-            let canOffer = recorder.activeSessionID == nil && !issued.values.contains { $0.session == nil }
+            let canOffer = recorder.activeSessionID == nil && offer == nil
             store.consume(due + events.filter { consumed.contains($0.id) }, at: current)
             if canOffer, let event = due.first {
                 await post(event: event, session: nil, stamp: stamp)
             }
             guard valid(stamp), revision == refreshRevision, await accessIsReady(stamp),
                   revision == refreshRevision else { return }
-            if let link = association, !link.continued, link.offeredEnd != link.event.end, link.event.end <= now(),
-               !issued.values.contains(where: { $0.session == link.session }) {
-                association?.offeredEnd = link.event.end
+            if case .associated(var link) = recordingLink, link.endReminder != .continued,
+               link.endReminder != .offered(link.event.end), link.event.end <= now(), offer == nil {
+                link.endReminder = .offered(link.event.end)
+                recordingLink = .associated(link)
                 await post(event: link.event, session: link.session, stamp: stamp)
             }
             guard valid(stamp), revision == refreshRevision else { return }
             let future = events.filter { $0.eligible && $0.start > now() }.map(\.start)
-            let end = association.flatMap { !$0.continued && $0.event.end > now() ? $0.event.end : nil }
-            let offerEnd = issued.values.filter { $0.session == nil }.map { $0.event.end }
-            driver.schedule(at: (future + offerEnd + [end].compactMap { $0 }).min())
+            let end = recordingLink.flatMap { $0.value.endReminder != .continued && $0.value.event.end > now() ? $0.value.event.end : nil }
+            let offerEnd = offer.flatMap { $0.session == nil ? $0.event.end : nil }
+            driver.schedule(at: (future + [offerEnd, end].compactMap { $0 }).min())
             setStatus(.ready)
         } catch {
             guard valid(stamp), revision == refreshRevision else { return }
-            pendingStart = nil
+            if case .validating = recordingLink { recordingLink = nil }
             invalidate { _ in true }
             driver.schedule(at: nil)
             setStatus(.readFailed)
@@ -175,15 +191,15 @@ final class CalendarReminderController {
 
     private func post(event: CalendarOccurrence, session: UUID?, stamp: UUID) async {
         let token = UUID()
-        issued[token] = Issued(event: event, session: session)
+        offer = Offer(token: token, kind: session.map { .end(event, session: $0) } ?? .start(event))
         do {
             try await notifications.add(CalendarReminder(token: token, kind: session == nil ? .start : .end,
                                                          title: event.displayTitle))
-            if !valid(stamp) || issued[token] == nil {
+            if !valid(stamp) || offer?.token != token {
                 notifications.remove(tokens: [token])
             }
         } catch {
-            issued.removeValue(forKey: token)
+            if offer?.token == token { offer = nil }
             notifications.remove(tokens: [token])
         }
     }
@@ -195,8 +211,7 @@ final class CalendarReminderController {
     }
 
     private func reconcileRecorder() {
-        if association?.session != recorder.activeSessionID { association = nil }
-        if pendingStart?.session != recorder.activeSessionID { pendingStart = nil }
+        if recordingLink?.value.session != recorder.activeSessionID { recordingLink = nil }
         invalidate { item in
             item.session.map { $0 != recorder.activeSessionID } ?? (recorder.activeSessionID != nil)
         }
@@ -212,8 +227,7 @@ final class CalendarReminderController {
         generation = UUID()
         refreshRevision += 1
         dirty = false
-        association = nil
-        pendingStart = nil
+        recordingLink = nil
         invalidate { _ in true }
         driver.stop()
     }
@@ -241,8 +255,7 @@ final class CalendarReminderController {
 
     private func accessRequired(_ status: Status) {
         generation = UUID()
-        association = nil
-        pendingStart = nil
+        recordingLink = nil
         invalidate { _ in true }
         driver.schedule(at: nil)
         setStatus(status)
@@ -254,30 +267,33 @@ final class CalendarReminderController {
         onStatusChange?()
     }
 
-    private func invalidate(where predicate: (Issued) -> Bool) {
-        let tokens = issued.filter { predicate($0.value) }.map(\.key)
-        for token in tokens { issued.removeValue(forKey: token) }
-        if !tokens.isEmpty { notifications.remove(tokens: tokens) }
+    private func invalidate(where predicate: (Offer) -> Bool) {
+        guard let offer, predicate(offer) else { return }
+        self.offer = nil
+        notifications.remove(tokens: [offer.token])
     }
 
     func handle(_ action: CalendarReminderAction, token: UUID) async {
         let stamp = generation
-        guard enabled, var item = issued[token], !item.claimed else { return }
+        guard enabled, var item = offer, item.token == token, !item.claimed else { return }
         item.claimed = true
-        issued[token] = item
+        offer = item
         notifications.remove(tokens: [token])
-        guard await accessIsReady(stamp), issued[token] != nil else { return }
+        guard await accessIsReady(stamp), offer?.token == token else { return }
         do {
             let event = try await source.occurrence(id: item.event.id)
-            guard valid(stamp), await accessIsReady(stamp), issued[token] != nil else { return }
-            issued.removeValue(forKey: token)
+            guard valid(stamp), await accessIsReady(stamp), offer?.token == token else { return }
+            offer = nil
             guard event == item.event, item.event.eligible else { return }
             if let session = item.session {
-                guard association?.session == session, recorder.activeSessionID == session,
-                      item.event.end <= now(), association?.continued == false else { return }
+                guard case .associated(var link) = recordingLink, link.session == session,
+                      recorder.activeSessionID == session, item.event.end <= now(),
+                      link.endReminder != .continued else { return }
                 switch action {
                 case .stop: recorder.stopRecording(ifSession: session); reconcileRecorder()
-                case .continueRecording: association?.continued = true
+                case .continueRecording:
+                    link.endReminder = .continued
+                    recordingLink = .associated(link)
                 case .showControls: recorder.showControls()
                 default: break
                 }
@@ -287,12 +303,15 @@ final class CalendarReminderController {
                 let session = await recorder.startRecording(title: item.event.displayTitle)
                 guard valid(stamp), await accessIsReady(stamp), let session,
                       recorder.activeSessionID == session else { return }
-                pendingStart = (event: item.event, session: session)
-                defer { if pendingStart?.session == session { pendingStart = nil } }
+                recordingLink = .validating(Association(event: item.event, session: session))
+                defer {
+                    if case .validating(let link) = recordingLink, link.session == session { recordingLink = nil }
+                }
                 let current = try await source.occurrence(id: item.event.id)
                 guard valid(stamp), await accessIsReady(stamp), recorder.activeSessionID == session,
-                      pendingStart?.session == session, current == item.event else { return }
-                association = Association(event: item.event, session: session)
+                      case .validating(let link) = recordingLink, link.session == session,
+                      current == item.event else { return }
+                recordingLink = .associated(link)
                 await refresh()
             }
         } catch {
