@@ -10,6 +10,8 @@
 
 **Spec:** docs/superpowers/specs/2026-10-29-settings-window-design.md
 
+**Completion:** Implemented and independently reviewed. See [verification](../verification/2026-10-29-settings-window.md) for final test results, the native image, remaining live checks, and the menu-test sequence deviation. The checklists below retain the original planned sequence.
+
 ## Global Constraints
 
 - Preserve existing keys, defaults, command behavior, and saved values. Thumbnail choices remain 3, 5, 15, and 0 seconds.

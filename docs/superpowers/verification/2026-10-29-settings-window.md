@@ -49,11 +49,13 @@ xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
 
 ## Test results and method
 
-The full KuKaTests run at `3a7037b` passed 817 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_16-57-16-+0200.xcresult`.
+The final full KuKaTests run at `18593df` passed 818 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-06-17-+0200.xcresult`. A prior full run at `3a7037b` passed 817 tests before the final regression test was added.
 
 The skipped tests are the optional meeting-panel image capture, two real live-transcript tests, the real Whisper audio test, and the real SpeakerKit test. They need explicit fixture or model paths and were not enabled. Xcode reported the existing CoreDevice and CoreSimulator mismatches, the Info.plist resource warning, and a thread-priority warning in WordReviewWindowTests. The run was successful, not warning-free.
 
-The summary-tool and native-control changes used observed red-green test cycles. The separate menu-migration red check was retrospective. It confirmed that the new test rejects the old menu, but it did not follow the planned test-before-migration order. The worker reports distinguish that regression check from TDD.
+The summary-tool and native-control changes used observed red-green test cycles. The separate menu-migration red check was retrospective. It confirmed that the new test rejects the old menu, but it did not follow the planned test-before-migration order.
+
+The final login regression test failed before the fix with a visible old error and the text difference `"Could not change launch at login. Registration refused"` versus `""`. After the fix, 34 focused Settings tests passed. The final full suite includes that regression.
 
 ## Native rendering evidence
 
@@ -71,4 +73,6 @@ The before state is the source inventory above. The earlier live baseline attemp
 - Check light and dark appearance on the desktop.
 - Check editor focus after Settings closes, and Command-A, C, X, V, and Z in the word-review text field.
 
-Task reviews approved the summary policy and the Settings migration. The final whole-branch review is pending. A task reviewer found a stale login error after reopening Settings; the final fix pass will address it.
+Independent task reviews approved the summary policy and the Settings migration. The whole-branch review found no Critical or Important issues and requested two minor fixes. Commit `18593df` clears stale login feedback on reopen and corrects the fallback wording in AGENTS.md. The scoped fix review approved both changes with no new findings. The comment review found no added comments or suppressions to remove.
+
+The evidence audit used gpt-6.1-sol and found no material inconsistencies against the supplied session digest. Its remaining flags are the real-world checks above and the documented retrospective menu check. No app was installed, no branch was pushed or merged, and no pull request or issue update was published.
