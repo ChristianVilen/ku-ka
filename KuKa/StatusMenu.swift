@@ -28,25 +28,18 @@ extension MenuSection {
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     let menu = NSMenu()
-    var onTilingToggled: ((Bool) -> Void)?
-    var onClipboardHistoryToggled: ((Bool) -> Void)?
+    var onShowSettings: (() -> Void)?
     var onShowPermissions: (() -> Void)?
     var onOpenKeyboardSettings: (() -> Void)?
     /// Fired every time the menu opens, before it is shown.
     var onMenuWillOpen: (() -> Void)?
 
-    private let settings: Settings
     private let sections: [MenuSection]
     private var refreshTimer: Timer?
-    private var launchAtLoginItem: NSMenuItem!
-    private var windowTilingItem: NSMenuItem!
-    private var clipboardHistoryItem: NSMenuItem!
-    private var durationItems: [NSMenuItem] = []
     private var hotkeyWarningItems: [NSMenuItem] = []
     private var renderedHealth: HotkeyHealth?
 
-    init(settings: Settings, sections: [MenuSection]) {
-        self.settings = settings
+    init(sections: [MenuSection]) {
         self.sections = sections
         super.init()
         build()
@@ -158,42 +151,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     @objc private func openKeyboardSettings() { onOpenKeyboardSettings?() }
 
+    func applicationMenu() -> NSMenu {
+        let mainMenu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        settingsItem.keyEquivalentModifierMask = .command
+        appMenu.addItem(settingsItem)
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+        return mainMenu
+    }
+
     private func build() {
-        let settingsLabel = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
-        settingsLabel.isEnabled = false
-        menu.addItem(settingsLabel)
-
-        launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLoginItem.target = self
-        launchAtLoginItem.state = settings.launchAtLogin ? .on : .off
-        menu.addItem(launchAtLoginItem)
-
-        windowTilingItem = NSMenuItem(title: "Window Tiling", action: #selector(toggleWindowTiling), keyEquivalent: "")
-        windowTilingItem.target = self
-        windowTilingItem.state = settings.windowTilingEnabled ? .on : .off
-        menu.addItem(windowTilingItem)
-
-        clipboardHistoryItem = NSMenuItem(title: "Clipboard History", action: #selector(toggleClipboardHistory), keyEquivalent: "")
-        clipboardHistoryItem.target = self
-        clipboardHistoryItem.state = settings.clipboardHistoryEnabled ? .on : .off
-        menu.addItem(clipboardHistoryItem)
-
-        menu.addItem(.separator())
-
-        let durationLabel = NSMenuItem(title: "Thumbnail Duration", action: nil, keyEquivalent: "")
-        durationLabel.isEnabled = false
-        menu.addItem(durationLabel)
-
-        let currentDuration = settings.thumbnailDuration
-        for (title, tag) in [("3 Seconds", 3), ("5 Seconds", 5), ("15 Seconds", 15), ("Forever", 0)] {
-            let item = NSMenuItem(title: title, action: #selector(changeDuration(_:)), keyEquivalent: "")
-            item.target = self
-            item.tag = tag
-            item.state = Double(tag) == currentDuration ? .on : .off
-            menu.addItem(item)
-            durationItems.append(item)
-        }
-
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        settingsItem.keyEquivalentModifierMask = .command
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
 
         for section in sections {
@@ -242,30 +217,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.delegate = self
     }
 
-    @objc private func changeDuration(_ sender: NSMenuItem) {
-        settings.thumbnailDuration = Double(sender.tag)
-        for item in durationItems { item.state = .off }
-        sender.state = .on
-    }
-
-    @objc private func toggleWindowTiling() {
-        let enabled = !settings.windowTilingEnabled
-        settings.windowTilingEnabled = enabled
-        windowTilingItem.state = enabled ? .on : .off
-        onTilingToggled?(enabled)
-    }
-
-    @objc private func toggleClipboardHistory() {
-        let enabled = !settings.clipboardHistoryEnabled
-        settings.clipboardHistoryEnabled = enabled
-        clipboardHistoryItem.state = enabled ? .on : .off
-        onClipboardHistoryToggled?(enabled)
-    }
-
-    @objc private func toggleLaunchAtLogin() {
-        settings.setLaunchAtLogin(!settings.launchAtLogin)
-        launchAtLoginItem.state = settings.launchAtLogin ? .on : .off
-    }
+    @objc private func showSettings() { onShowSettings?() }
 
     @objc private func showPermissions() {
         onShowPermissions?()

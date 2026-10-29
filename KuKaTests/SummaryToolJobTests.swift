@@ -14,7 +14,6 @@ final class SummaryToolJobTests: MeetingNotesTestCase {
             processor: makeMeetingProcessor(transcribers: [transcriber], runner: runner),
             wordsToCheck: { _ in 0 },
             summaryTool: { [unowned self] in reads += 1; return tool },
-            setRoot: { _ in },
             notifier: notifier,
             openURL: { _ in })
         menu = NSMenu()

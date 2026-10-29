@@ -47,6 +47,21 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(Settings(defaults: defaults, loginItem: loginItem).thumbnailDuration, 15)
     }
 
+    func testDisplayAwakeKeepsItsTrueDefaultAndExistingKey() {
+        XCTAssertTrue(sut.keepDisplayAwake)
+        XCTAssertNil(defaults.object(forKey: "keepDisplayAwake"))
+        sut.keepDisplayAwake = false
+        XCTAssertEqual(defaults.object(forKey: "keepDisplayAwake") as? Bool, false)
+        XCTAssertFalse(Settings(defaults: defaults, loginItem: loginItem).keepDisplayAwake)
+    }
+
+    func testContextSetterSavesThePathAndNilRemovesTheKey() {
+        sut.meetingContextFile = URL(fileURLWithPath: "/Users/example/background.md")
+        XCTAssertEqual(defaults.string(forKey: "meetingContextFile"), "/Users/example/background.md")
+        sut.meetingContextFile = nil
+        XCTAssertNil(defaults.object(forKey: "meetingContextFile"))
+    }
+
     func testMeetingContextHasNoDefaultAndReadsEachNewPath() {
         XCTAssertNil(sut.meetingContextFile)
         defaults.set("", forKey: "meetingContextFile")

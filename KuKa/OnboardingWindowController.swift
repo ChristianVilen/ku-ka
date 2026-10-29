@@ -90,11 +90,6 @@ final class PermissionRowView: NSView {
 
 /// Setup for permissions and screenshot shortcuts. The permission checklist
 /// stays available through the menu; shortcut setup is shown automatically once.
-///
-/// While the window is open the app temporarily becomes a regular app (Dock
-/// icon, can take focus) so the window reliably comes to the front, and
-/// `PermissionsManager` polls so a grant flips the row to ✅ live — no
-/// relaunch. On close the app returns to being a menu-bar-only accessory.
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     /// Which page the window shows. `.welcome` is used only for the automatic
     /// open at launch; the "Permissions…" menu item and a blocked capture go
@@ -110,7 +105,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     private let permissions: PermissionsManager
     private let settings: Settings
-    private let setActivationPolicy: (NSApplication.ActivationPolicy) -> Void
+    private let activation: OrdinaryWindowActivation
+    private let activate: () -> Void
     private let accessibilityRow: PermissionRowView
     private let screenRecordingRow: PermissionRowView
     private let microphoneRow: PermissionRowView
@@ -121,11 +117,13 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     init(
         permissions: PermissionsManager,
         settings: Settings = Settings(),
-        setActivationPolicy: @escaping (NSApplication.ActivationPolicy) -> Void = { NSApp.setActivationPolicy($0) }
+        activate: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
+        activation: OrdinaryWindowActivation = .shared
     ) {
         self.permissions = permissions
         self.settings = settings
-        self.setActivationPolicy = setActivationPolicy
+        self.activation = activation
+        self.activate = activate
 
         accessibilityRow = PermissionRowView(
             title: "Accessibility (window tiling and paste)",
@@ -318,8 +316,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     func show(_ page: Page = .checklist) {
         install(page)
-        setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        if let window { activation.open(window) }
+        activate()
         if window?.isVisible != true {
             window?.center()
         }
@@ -355,7 +353,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         permissions.stopPolling()
-        setActivationPolicy(.accessory)
+        if let window { activation.close(window) }
         onClose?()
     }
 }

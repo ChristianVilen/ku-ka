@@ -5,7 +5,16 @@ import UserNotifications
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
-    private let settings = Settings()
+    static var isTesting: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || CommandLine.arguments.contains("--uitesting")
+    }
+    let settings: Settings = {
+        if isTesting {
+            return Settings(defaults: UserDefaults(suiteName: "KuKa.TestHost")!, loginItem: DisabledLoginItem())
+        }
+        return Settings()
+    }()
     private let imageStore = ImageStore()
     private lazy var captureFlow = CaptureFlow(
         selection: SelectionSession(),
@@ -15,9 +24,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private lazy var thumbnailStack = ThumbnailStackManager(store: imageStore)
     private var editorWindow: EditorWindow?
-    private let keepAwake = KeepAwakeController()
+    private lazy var keepAwake = KeepAwakeController(keepDisplayAwake: settings.keepDisplayAwake)
     private let windowTiling = WindowTilingController()
-    private let clipboardHistory = ClipboardHistoryController()
+    private lazy var clipboardHistory = ClipboardHistoryController()
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var knownWords = KnownWordsFile(url: { [settings] in settings.knownWordsFile })
     private lazy var meetingRecorder = MeetingRecorder(
@@ -36,8 +45,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         wordsToCheck: { [knownWords, settings] in
             WordReview.openQuestionCount(of: $0, in: settings.meetingsFolder, knownWords: knownWords.read())
         },
-        summaryTool: { [settings] in settings.summaryTool },
-        setRoot: { [settings] in settings.meetingsFolder = $0 }
+        summaryTool: { [settings] in settings.summaryTool }
     )
     private lazy var meetingControlsPanel = MeetingControlsPanel(recorder: meetingRecorder, settings: settings)
     private(set) var calendarReminders: CalendarReminderController?
@@ -49,7 +57,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         requestUpdate: { [weak self] in self?.meetingNotes.updateNotes($0) }
     )
     private lazy var wordReviewWindow = WordReviewWindowController(controller: wordReview)
-    private lazy var statusMenu = StatusMenu(settings: settings, sections: [keepAwake, meetingNotes])
+    private lazy var statusMenu = StatusMenu(sections: Self.isTesting ? [] : [keepAwake, meetingNotes])
+    private lazy var settingsWindow = SettingsWindowController(settings: settings)
     private let permissions = PermissionsManager()
     private var onboardingController: OnboardingWindowController?
     /// False in UI-test runs, where permission handling is skipped entirely
@@ -57,6 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var permissionHandlingEnabled = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !Self.isTesting else { return .terminateNow }
         guard meetingRecorder.phase.isCapturing else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "Stop Recording and Quit?"
@@ -68,6 +78,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        guard !Self.isTesting else { return }
         hotkeyManager.stop()
         keepAwake.deactivate()
         clipboardHistory.disable()
@@ -78,27 +89,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let isTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            || CommandLine.arguments.contains("--uitesting")
+        if Self.isTesting {
+            if CommandLine.arguments.contains("--uitesting") { setupMenuBar() }
+            return
+        }
         setupMenuBar()
         setupThumbnailStack()
         setupKeepAwake()
         setupClipboardHistory()
         setupMeetingNotes()
-        if !isTesting {
-            UNUserNotificationCenter.current().delegate = SystemNotifier.shared
-            SystemNotifier.shared.onCheckWords = { [weak self] in self?.wordReviewWindow.show($0) }
-            setupCalendarReminders()
-            setupHotkey()
-            setupPermissions()
-            // Polling the real pasteboard during unit/UI test runs would
-            // ingest whatever the developer happens to have copied, so this
-            // stays behind the same isTesting gate as setupPermissions().
-            if settings.clipboardHistoryEnabled {
-                clipboardHistory.enable()
-            }
-            meetingNotes.resumeUnfinished()
+        UNUserNotificationCenter.current().delegate = SystemNotifier.shared
+        SystemNotifier.shared.onCheckWords = { [weak self] in self?.wordReviewWindow.show($0) }
+        setupCalendarReminders()
+        setupHotkey()
+        setupPermissions()
+        if settings.clipboardHistoryEnabled {
+            clipboardHistory.enable()
         }
+        meetingNotes.resumeUnfinished()
     }
 
     private func setupCalendarReminders() {
@@ -173,20 +181,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         updateStatus()
-        statusMenu.onTilingToggled = { [weak self] enabled in
+        statusMenu.onShowSettings = { [weak self] in self?.settingsWindow.show() }
+        statusItem.menu = statusMenu.menu
+        NSApp.mainMenu = statusMenu.applicationMenu()
+        guard !Self.isTesting else { return }
+        settingsWindow.onTilingChanged = { [weak self] enabled in
             self?.hotkeyManager.tilingEnabled = enabled
         }
+        settingsWindow.onDisplayAwakeChanged = { [weak self] in self?.keepAwake.setDisplayAwake($0) }
+        settingsWindow.onMeetingsFolderChanged = { [weak self] _ in self?.meetingNotes.meetingsFolderChanged() }
         statusMenu.onShowPermissions = { [weak self] in self?.showOnboarding() }
         statusMenu.onOpenKeyboardSettings = { [weak self] in self?.permissions.openSettings(.keyboardShortcuts) }
-        statusItem.menu = statusMenu.menu
     }
 
-    /// Binds callbacks once at launch, before presentation. Safe in tests: it does not read
-    /// the real pasteboard, unlike `clipboardHistory.enable()`.
     private func setupClipboardHistory() {
         clipboardPanel.bindController()
 
-        statusMenu.onClipboardHistoryToggled = { [weak self] enabled in
+        settingsWindow.onClipboardChanged = { [weak self] enabled in
             guard let self else { return }
             hotkeyManager.clipboardHistoryEnabled = enabled
             if enabled {
@@ -255,8 +266,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         keepAwake.onStateChange = { [weak self] in self?.updateStatus() }
     }
 
-    /// Not behind the `isTesting` gate: binding the panel and the review window touches no
-    /// hardware and no disk and writes no setting, and both stay hidden until they are needed.
     private func setupMeetingNotes() {
         meetingNotes.onStateChange = { [weak self] in
             self?.updateStatus()
@@ -287,6 +296,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatus() {
+        if Self.isTesting {
+            statusItem.button?.image = statusMenu.icon(keepAwakeActive: false, recording: nil, warning: nil)
+            return
+        }
         let health = permissionHandlingEnabled
             ? HotkeyHealth(accessibilityMissing: !permissions.accessibility, issues: hotkeyManager.issues)
             : .healthy
@@ -309,4 +322,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = phase.statusDescription.map { "Ku-Ka: \($0)" }
         scheduleScreenshotSetup()
     }
+}
+
+private struct DisabledLoginItem: LoginItemManaging {
+    var isEnabled: Bool { false }
+    func setEnabled(_ enabled: Bool) throws {}
 }

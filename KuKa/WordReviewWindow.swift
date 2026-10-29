@@ -37,15 +37,13 @@ enum WordReviewCopy {
     }
 }
 
-/// Renders `controller.screen`. Makes the app regular while open so the field gets the keyboard,
-/// then returns it to an accessory app on close.
 @MainActor
 final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     private static let contentWidth: CGFloat = 480
     private static let contentPadding: CGFloat = 20
 
     private let controller: WordReviewController
-    private let setActivationPolicy: (NSApplication.ActivationPolicy) -> Void
+    private let activation: OrdinaryWindowActivation
     private let activate: () -> Void
 
     private let meetingLabel = NSTextField(labelWithString: "")
@@ -76,10 +74,10 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
     private var isClosing = false
 
     init(controller: WordReviewController,
-         setActivationPolicy: @escaping (NSApplication.ActivationPolicy) -> Void = { NSApp.setActivationPolicy($0) },
-         activate: @escaping () -> Void = { NSApp.activate() }) {
+         activate: @escaping () -> Void = { NSApp.activate() },
+         activation: OrdinaryWindowActivation = .shared) {
         self.controller = controller
-        self.setActivationPolicy = setActivationPolicy
+        self.activation = activation
         self.activate = activate
 
         let window = ReviewWindow(contentRect: NSRect(x: 0, y: 0, width: Self.contentWidth, height: 300),
@@ -126,7 +124,7 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         controller.close()
         isClosing = false
         questionInField = nil
-        setActivationPolicy(.accessory)
+        if let window { activation.close(window) }
     }
 
     private func fill(_ page: WordReviewScreen.QuestionPage, error: String?) {
@@ -231,7 +229,7 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
     private func present() {
         guard let window else { return }
         if !window.isVisible {
-            setActivationPolicy(.regular)
+            activation.open(window)
             window.center()
         }
         activate()

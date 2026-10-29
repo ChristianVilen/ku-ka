@@ -1,0 +1,65 @@
+# Settings window verification
+
+## Inventory and behavior
+
+The previous menu held launch at login, window tiling, clipboard history, and thumbnail duration. The Keep Awake panel held the display-awake checkbox. Meeting Notes held Choose Meetings Folder. These controls now live in one retained, grouped, scrollable Settings window.
+
+| Preference | Stored key or owner | Default |
+|---|---|---|
+| Launch at login | `LoginItemManaging` | Actual service state |
+| Enable window tiling | `windowTilingEnabled` | true |
+| Record clipboard history | `clipboardHistoryEnabled` | true |
+| Show thumbnail for | `thumbnailDuration` | 5 seconds |
+| Keep display awake during Keep Awake | `keepDisplayAwake` | true |
+| Meetings folder | `meetingsFolder` | `~/Meetings` |
+| Summary tool | `summaryTool` | automatic |
+| Background file | `meetingContextFile` | None |
+
+Thumbnail choices always include 3, 5, 15 seconds, and Forever. A saved custom value appears as Custom and stays intact until the user selects another value. Opening Settings only reads preferences. The existing known-words path follows a changed meetings folder unless the user has set an explicit path.
+
+The menu retains Keep Awake duration and Turn Off, recording controls, Show Meeting Controls, Restore Default Position, Check Words, Retry, Open Meetings Folder, permissions, help, and Quit. Settings has Command-comma. Command-W closes its window directly, including when there is no application menu.
+
+Automatic tries Antigravity, then Claude Code. An explicit selection uses only that tool. The queue reads the choice when a job starts. Background Choose and Clear use the existing context setting. Clear never deletes the file. The complete accepted context file goes to the selected provider with the transcript.
+
+Calendar #28 and Teams #41 can add controls to the Meeting Notes group after their owners supply typed state and actions. No integration controls or calendar operations are part of this change.
+
+## Executable checks
+
+`SettingsWindowControllerTests` drives native button clicks and popup target actions with isolated defaults, a fake login service, injected pickers, and injected presentation. It covers saves, typed runtime callbacks, all thumbnail and summary choices, picker acceptance and cancellation, context clearing, login failure, reopening, custom values, full accessible paths, width, scrolling, and explicit key-view order.
+
+The same suite sends native Command-W events and checks actual onboarding and word-review windows in both close orders beside Settings. Each test closes its windows. `StatusMenuTests` sends Command-comma through the application menu, checks the single Settings entry, and rejects persistent preference controls in the status menu.
+
+The app host selects isolated `KuKa.TestHost` defaults and an inert login service before any runtime setup. XCTest starts no app polling, permissions, hotkeys, or recording. `--uitesting` retains Settings and the static menu with the same isolated preferences and no operational feature sections or runtime callbacks. The revised `--uitesting` host was not launched during this task.
+
+Use one runner with DerivedData in `build/task-verification`:
+
+```sh
+xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
+  -derivedDataPath build/task-verification test \
+  -only-testing:KuKaTests/SettingsWindowControllerTests \
+  -only-testing:KuKaTests/SettingsTests \
+  -only-testing:KuKaTests/StatusMenuTests \
+  -only-testing:KuKaTests/KeepAwakeControllerTests \
+  -only-testing:KuKaTests/OnboardingWindowControllerTests \
+  -only-testing:KuKaTests/WordReviewWindowTests \
+  -only-testing:KuKaTests/MeetingNotesControllerTests \
+  -only-testing:KuKaTests/MeetingNotesCheckWordsTests \
+  -only-testing:KuKaTests/SummaryToolJobTests
+```
+
+## Native rendering evidence
+
+![Offscreen native Settings form](../evidence/settings-window/settings-offscreen-aqua-580x600.png)
+
+`testNativeAccessibilityNamesKeyOrderAndOffscreenRendering` renders the native content view through `bitmapImageRepForCachingDisplay` and `cacheDisplay`. The attachment uses Aqua appearance, a 580 by 600-point viewport, and a 1160 by 1200-pixel Retina bitmap. It contains synthetic paths and an inert login service. The image was exported from XCTest and visually inspected. The scroll background is made opaque for the capture. The window is never ordered onscreen by this test.
+
+The before state is the source inventory above. The earlier live baseline attempt timed out, and the user then stopped the debug app. The app stayed closed. This image is an offscreen native render, not live UI validation.
+
+## Remaining real-world checks
+
+- Walk the native form with Tab and Shift-Tab, and check focus rings and picker focus return.
+- Check names, values, and login error announcements with VoiceOver.
+- Check real login registration and native file sheets in a signed app.
+- Check light and dark appearance on the desktop.
+
+The parent runs the full KuKaTests suite and independent code review after this task.
