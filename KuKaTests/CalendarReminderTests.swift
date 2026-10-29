@@ -446,6 +446,33 @@ final class CalendarReminderTests: XCTestCase {
         XCTAssertTrue(notices.visible.isEmpty)
     }
 
+    func testUnchangedRefreshDuringPostStartReadKeepsEndReminder() async {
+        source.events = [event()]
+        await sut.setEnabled(true)
+        var reads = 0
+        var release: CheckedContinuation<CalendarOccurrence?, Error>?
+        source.exact = {
+            reads += 1
+            if reads == 2 {
+                return try await withCheckedThrowingContinuation { release = $0 }
+            }
+            return self.event()
+        }
+        let token = notices.visible.first?.token ?? UUID()
+        let action = Task { await self.sut.handle(.start, token: token) }
+        await waitUntil { release != nil }
+        await sut.refresh()
+        release?.resume(returning: event())
+        await action.value
+        XCTAssertEqual(driver.next, Date(timeIntervalSince1970: 10_600))
+        time += 600
+        await sut.refresh()
+        XCTAssertEqual(notices.added.map(\.kind), [.start, .end])
+        await sut.handle(.stop, token: notices.visible.first?.token ?? UUID())
+        XCTAssertNil(recorder.activeSessionID)
+        XCTAssertEqual(recorder.stops, 1)
+    }
+
     func testStalePostStartExactReadCannotRestoreDeletedAssociation() async {
         source.events = [event()]
         await sut.setEnabled(true)
@@ -454,7 +481,10 @@ final class CalendarReminderTests: XCTestCase {
         source.exact = {
             reads += 1
             if reads == 1 { return self.event() }
-            return try await withCheckedThrowingContinuation { release = $0 }
+            if reads == 2 {
+                return try await withCheckedThrowingContinuation { release = $0 }
+            }
+            return self.source.events.first
         }
         let token = notices.visible.first?.token ?? UUID()
         let action = Task { await self.sut.handle(.start, token: token) }

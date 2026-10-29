@@ -29,6 +29,7 @@ final class CalendarReminderController {
     }
     private var issued: [UUID: Issued] = [:]
     private var association: Association?
+    private var pendingStart: (event: CalendarOccurrence, session: UUID)?
     private var enabled = false
     private var generation = UUID()
     private var worker: Task<Void, Never>?
@@ -114,12 +115,15 @@ final class CalendarReminderController {
             guard valid(stamp), revision == refreshRevision, await accessIsReady(stamp),
                   revision == refreshRevision else { return }
             var associatedEvent: CalendarOccurrence?
-            if let association {
-                associatedEvent = try await source.occurrence(id: association.event.id)
+            if let event = association?.event ?? pendingStart?.event {
+                associatedEvent = try await source.occurrence(id: event.id)
                 guard valid(stamp), revision == refreshRevision, await accessIsReady(stamp),
                       revision == refreshRevision else { return }
             }
             reconcileRecorder()
+            if let pendingStart, associatedEvent != pendingStart.event {
+                self.pendingStart = nil
+            }
             if var link = association {
                 if let event = associatedEvent, event.eligible {
                     link.event = event
@@ -162,6 +166,7 @@ final class CalendarReminderController {
             setStatus(.ready)
         } catch {
             guard valid(stamp), revision == refreshRevision else { return }
+            pendingStart = nil
             invalidate { _ in true }
             driver.schedule(at: nil)
             setStatus(.readFailed)
@@ -191,6 +196,7 @@ final class CalendarReminderController {
 
     private func reconcileRecorder() {
         if association?.session != recorder.activeSessionID { association = nil }
+        if pendingStart?.session != recorder.activeSessionID { pendingStart = nil }
         invalidate { item in
             item.session.map { $0 != recorder.activeSessionID } ?? (recorder.activeSessionID != nil)
         }
@@ -207,6 +213,7 @@ final class CalendarReminderController {
         refreshRevision += 1
         dirty = false
         association = nil
+        pendingStart = nil
         invalidate { _ in true }
         driver.stop()
     }
@@ -235,6 +242,7 @@ final class CalendarReminderController {
     private func accessRequired(_ status: Status) {
         generation = UUID()
         association = nil
+        pendingStart = nil
         invalidate { _ in true }
         driver.schedule(at: nil)
         setStatus(status)
@@ -279,10 +287,11 @@ final class CalendarReminderController {
                 let session = await recorder.startRecording(title: item.event.displayTitle)
                 guard valid(stamp), await accessIsReady(stamp), let session,
                       recorder.activeSessionID == session else { return }
-                let revision = refreshRevision
+                pendingStart = (event: item.event, session: session)
+                defer { if pendingStart?.session == session { pendingStart = nil } }
                 let current = try await source.occurrence(id: item.event.id)
                 guard valid(stamp), await accessIsReady(stamp), recorder.activeSessionID == session,
-                      revision == refreshRevision, current == item.event else { return }
+                      pendingStart?.session == session, current == item.event else { return }
                 association = Association(event: item.event, session: session)
                 await refresh()
             }
