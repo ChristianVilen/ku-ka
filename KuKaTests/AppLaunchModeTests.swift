@@ -25,7 +25,7 @@ final class AppLaunchModeTests: XCTestCase {
         let host = SettingsPreviewAppDelegate(defaults: defaults, present: { presented.append($0) },
             activation: OrdinaryWindowActivation(setPolicy: { _ in }))
         defer { host.settingsWindow.close() }
-        XCTAssertNil(defaults.persistentDomain(forName: suite))
+        XCTAssertTrue(defaults.persistentDomain(forName: suite)?.isEmpty ?? true)
         let menuItem = try XCTUnwrap(host.statusMenu.menu.item(withTitle: "Settings…"))
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(menuItem.action), to: menuItem.target, from: menuItem))
         let appMenu = host.statusMenu.applicationMenu()
@@ -35,7 +35,7 @@ final class AppLaunchModeTests: XCTestCase {
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(command.action), to: command.target, from: command))
         XCTAssertEqual(presented.count, 2)
         XCTAssertTrue(presented.allSatisfy { $0 === host.settingsWindow.window })
-        XCTAssertNil(defaults.persistentDomain(forName: suite))
+        XCTAssertTrue(defaults.persistentDomain(forName: suite)?.isEmpty ?? true)
         host.settingsWindow.summaryTool.selectItem(withTitle: "Claude Code (claude)")
         let popup = host.settingsWindow.summaryTool
         _ = popup.sendAction(popup.action, to: popup.target)

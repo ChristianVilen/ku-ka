@@ -7,11 +7,7 @@ final class SettingsPreviewAppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
 
     init(defaults: UserDefaults = UserDefaults(suiteName: "KuKa.TestHost")!,
-         present: @escaping (NSWindow) -> Void = {
-             if !$0.isVisible { $0.center() }
-             NSApp.activate()
-             $0.makeKeyAndOrderFront(nil)
-         },
+         present: @escaping (NSWindow) -> Void = SettingsWindowController.presentWindow,
          activation: OrdinaryWindowActivation = .shared) {
         settingsWindow = SettingsWindowController(
             settings: Settings(defaults: defaults, loginItem: DisabledLoginItem()),

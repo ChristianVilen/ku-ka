@@ -31,11 +31,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     init(settings: Settings,
          chooseFolder: @escaping Picker = SettingsWindowController.folderPicker,
          chooseContext: @escaping Picker = SettingsWindowController.contextPicker,
-         present: @escaping (NSWindow) -> Void = {
-             if !$0.isVisible { $0.center() }
-             NSApp.activate()
-             $0.makeKeyAndOrderFront(nil)
-         },
+         present: @escaping (NSWindow) -> Void = SettingsWindowController.presentWindow,
          activation: OrdinaryWindowActivation = .shared) {
         self.settings = settings
         self.chooseFolder = chooseFolder
@@ -54,6 +50,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    static func presentWindow(_ window: NSWindow) {
+        if !window.isVisible { window.center() }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+    }
 
     func show() {
         loginError.stringValue = ""
