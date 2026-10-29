@@ -1,7 +1,27 @@
 import Foundation
 
-/// Case order is the order the CLIs are tried (`Summarizer` iterates
-/// `allCases`), so the preferred CLI must stay first.
+enum SummaryTool: String, CaseIterable, Sendable {
+    case automatic
+    case antigravity = "agy"
+    case claude = "claude"
+
+    var title: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .antigravity: "Antigravity (agy)"
+        case .claude: "Claude Code (claude)"
+        }
+    }
+
+    var candidates: [SummaryCLI] {
+        switch self {
+        case .automatic: [.antigravity, .claude]
+        case .antigravity: [.antigravity]
+        case .claude: [.claude]
+        }
+    }
+}
+
 enum SummaryCLI: String, CaseIterable {
     case antigravity = "agy"
     case claude = "claude"
@@ -90,11 +110,11 @@ struct Summarizer {
     }
 
     @concurrent
-    func summarize(transcript: String, knownWords: RelevantKnownWords) async -> SummaryResult {
+    func summarize(transcript: String, knownWords: RelevantKnownWords, tool: SummaryTool = .automatic) async -> SummaryResult {
         let prompt = SummaryPrompt.make(transcript: transcript, knownWords: knownWords, context: context?.read())
         let searchPath = SummaryCLI.userToolDirectories(home: home) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
         var failures: [SummaryFailure] = []
-        for cli in SummaryCLI.allCases {
+        for cli in tool.candidates {
             if Task.isCancelled { break }
             let searched = cli.candidatePaths(home: home)
             guard let path = searched.first(where: isExecutable) else {

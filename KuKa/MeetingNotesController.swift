@@ -40,6 +40,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private let recorder: MeetingRecorder
     private let root: () -> URL
     private let processor: MeetingProcessor
+    private let summaryTool: () -> SummaryTool
     /// The number of open questions of a meeting, or with nil, of every done meeting.
     private let wordsToCheck: (MeetingFolder?) -> Int
     private let notifier: Notifying
@@ -77,6 +78,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
          root: @escaping () -> URL,
          processor: MeetingProcessor,
          wordsToCheck: @escaping (MeetingFolder?) -> Int,
+         summaryTool: @escaping () -> SummaryTool = { .automatic },
          chooseFolder: @escaping @MainActor (URL) -> URL? = MeetingsFolderPicker.choose,
          setRoot: @escaping (URL) -> Void,
          notifier: Notifying = SystemNotifier.shared,
@@ -84,6 +86,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         self.recorder = recorder
         self.root = root
         self.processor = processor
+        self.summaryTool = summaryTool
         self.wordsToCheck = wordsToCheck
         self.notifier = notifier
         self.openURL = openURL
@@ -237,10 +240,11 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private func processQueue() async {
         while !queue.isEmpty, !Task.isCancelled {
             let job = queue.removeFirst()
+            let tool = summaryTool()
             switch job {
             case .process(let recording):
                 let meeting = recording.folder
-                let outcome = await processor.process(meeting, speakers: recording.speakers) { [weak self] progress in
+                let outcome = await processor.process(meeting, speakers: recording.speakers, tool: tool) { [weak self] progress in
                     self?.current = (job, progress.title)
                     self?.updateMenu()
                 }
@@ -249,7 +253,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
             case .updateNotes(let meeting):
                 current = (job, "Updating notes")
                 updateMenu()
-                let outcome = await processor.updateNotes(meeting)
+                let outcome = await processor.updateNotes(meeting, tool: tool)
                 current = nil
                 report(outcome, for: meeting)
             }

@@ -2,6 +2,57 @@ import XCTest
 @testable import KuKa
 
 final class MeetingSummarizerTests: XCTestCase {
+    func testToolCandidateOrder() {
+        XCTAssertEqual(SummaryTool.automatic.candidates, [.antigravity, .claude])
+        XCTAssertEqual(SummaryTool.antigravity.candidates, [.antigravity])
+        XCTAssertEqual(SummaryTool.claude.candidates, [.claude])
+        XCTAssertEqual(SummaryTool.allCases.map(\.title), ["Automatic", "Antigravity (agy)", "Claude Code (claude)"])
+    }
+
+    func testExplicitToolsNeverFallBackForAnyFailure() async {
+        for (tool, cli) in [(SummaryTool.antigravity, SummaryCLI.antigravity), (.claude, .claude)] {
+            let failures: [(Result<CommandResult, Error>, SummaryFailure.Reason)] = [
+                (.failure(CocoaError(.fileReadNoPermission)), .couldNotLaunch(CocoaError(.fileReadNoPermission).localizedDescription)),
+                (.success(CommandResult(termination: .exited(2), stdout: "", stderr: "denied")), .exited(status: 2, stderrTail: "denied")),
+                (.success(CommandResult(termination: .timedOut, stdout: "", stderr: "")), .timedOut),
+                (.success(CommandResult(termination: .exited(0), stdout: " \n", stderr: "")), .emptyOutput),
+            ]
+            for (reply, reason) in failures {
+                let runner = FakeCommandRunner()
+                runner.results[cli.rawValue] = reply
+                let result = await summarizer(runner).summarize(transcript: transcript, knownWords: .none, tool: tool)
+                XCTAssertEqual(result, .failed([SummaryFailure(cli: cli, reason: reason)]))
+                XCTAssertEqual(runner.calls.map { $0.executable.lastPathComponent }, [cli.rawValue])
+            }
+            let runner = FakeCommandRunner()
+            let other = cli == .claude ? "agy" : "claude"
+            let result = await summarizer(runner, installed: ["/opt/homebrew/bin/" + other])
+                .summarize(transcript: transcript, knownWords: .none, tool: tool)
+            XCTAssertEqual(result, .failed([SummaryFailure(cli: cli, reason: .notInstalled(searched: [
+                "/opt/homebrew/bin/" + cli.rawValue,
+                "/usr/local/bin/" + cli.rawValue,
+                "/Users/test/.local/bin/" + cli.rawValue,
+            ]))]))
+            XCTAssertTrue(runner.calls.isEmpty)
+        }
+    }
+
+    func testExplicitToolsPreserveKnownWordsContextAndReviewParsing() async throws {
+        let file = try makeTemporaryDirectory().appendingPathComponent("context.md")
+        try Data("Project background".utf8).write(to: file)
+        for (tool, cli) in [(SummaryTool.antigravity, SummaryCLI.antigravity), (.claude, .claude)] {
+            let runner = FakeCommandRunner()
+            runner.results[cli.rawValue] = .success(CommandResult(termination: .exited(0), stdout: "## Summary\nShip.\n```ku-ka-review\n\(askConvio)\n```", stderr: ""))
+            let result = await Summarizer(runner: runner, isExecutable: { _ in true }, context: MeetingContextFile(url: { file }))
+                .summarize(transcript: transcript, knownWords: knownWords, tool: tool)
+            XCTAssertEqual(result, .written(markdown: "## Summary\nShip.", suspects: [suspect("Convio", quote: "Ask Convio.")], by: cli, after: []))
+            let call = try XCTUnwrap(runner.calls.first)
+            let sent = try XCTUnwrap(call.input ?? call.arguments.last)
+            XCTAssertTrue(sent.contains("Project background"))
+            XCTAssertTrue(sent.contains("- Convio -> Konvio"))
+        }
+    }
+
     func testContextIsBackgroundAndKeepsKnownWordsReviewAndTranscriptRules() {
         let background = "Project: Konvio\nPeople: Aino\n"
         let prompt = SummaryPrompt.make(transcript: transcript, knownWords: knownWords, context: background)

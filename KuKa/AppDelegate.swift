@@ -36,6 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         wordsToCheck: { [knownWords, settings] in
             WordReview.openQuestionCount(of: $0, in: settings.meetingsFolder, knownWords: knownWords.read())
         },
+        summaryTool: { [settings] in settings.summaryTool },
         setRoot: { [settings] in settings.meetingsFolder = $0 }
     )
     private lazy var meetingControlsPanel = MeetingControlsPanel(recorder: meetingRecorder, settings: settings)

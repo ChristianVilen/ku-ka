@@ -48,6 +48,11 @@ final class Settings {
         set { defaults.set(newValue, forKey: "clipboardHistoryEnabled") }
     }
 
+    var summaryTool: SummaryTool {
+        get { defaults.string(forKey: "summaryTool").flatMap(SummaryTool.init(rawValue:)) ?? .automatic }
+        set { defaults.set(newValue.rawValue, forKey: "summaryTool") }
+    }
+
     /// Defaults to ~/Meetings, not ~/Documents or ~/Desktop: with iCloud
     /// "Desktop & Documents" on, those sync to iCloud, and meeting audio must
     /// stay on this Mac.
