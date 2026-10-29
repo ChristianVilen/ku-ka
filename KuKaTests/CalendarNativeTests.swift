@@ -181,7 +181,7 @@ final class CalendarNativeTests: XCTestCase {
         let operation = Task { try await adapter.add(.init(token: token, kind: .start, title: "Planning")) }
         for _ in 0..<100 where continuation == nil { await Task.yield() }
         XCTAssertNotNil(continuation)
-        adapter.remove(tokens: [token])
+        adapter.cancel(tokens: [token])
         continuation?.resume()
         try await operation.value
         XCTAssertEqual(center.requests.count, 1)
@@ -213,7 +213,7 @@ final class CalendarNativeTests: XCTestCase {
         let operation = Task { try await adapter.add(.init(token: token, kind: .start, title: "Planning")) }
         for _ in 0..<100 where release == nil { await Task.yield() }
         XCTAssertNotNil(release)
-        adapter.remove(tokens: [token])
+        adapter.cancel(tokens: [token])
         release?.resume()
         try await operation.value
         XCTAssertTrue(center.requests.isEmpty)
@@ -304,7 +304,7 @@ final class CalendarNativeTests: XCTestCase {
         XCTAssertEqual(center.removedDelivered, ["calendar-recording.old-delivered"])
         let token = UUID()
         try await adapter.add(.init(token: token, kind: .start, title: "Planning"))
-        adapter.remove(tokens: [token])
+        adapter.cancel(tokens: [token])
         XCTAssertEqual(center.removedPending.last, "calendar-recording.\(token.uuidString)")
         XCTAssertEqual(center.removedDelivered.last, "calendar-recording.\(token.uuidString)")
     }

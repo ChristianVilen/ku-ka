@@ -544,7 +544,7 @@ private final class CalendarNoticesFake: CalendarReminderNotifying {
         added.append(reminder)
         visible.append(reminder)
     }
-    func remove(tokens: [UUID]) { visible.removeAll { tokens.contains($0.token) } }
+    func cancel(tokens: [UUID]) { visible.removeAll { tokens.contains($0.token) } }
 }
 
 @MainActor

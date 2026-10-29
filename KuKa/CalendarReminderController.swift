@@ -278,7 +278,7 @@ final class CalendarReminderController {
     private func invalidate(where predicate: (Offer) -> Bool) {
         guard let offer, predicate(offer) else { return }
         self.offer = nil
-        notifications.remove(tokens: [offer.token])
+        notifications.cancel(tokens: [offer.token])
     }
 
     func handle(_ action: CalendarReminderAction, token: UUID) async {
@@ -286,7 +286,7 @@ final class CalendarReminderController {
         guard enabled, var item = offer, item.token == token, !item.claimed else { return }
         item.claimed = true
         offer = item
-        notifications.remove(tokens: [token])
+        notifications.cancel(tokens: [token])
         guard await accessIsReady(stamp), offer?.token == token else { return }
         do {
             let event = try await source.occurrence(id: item.event.id)

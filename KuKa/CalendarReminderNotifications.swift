@@ -76,12 +76,12 @@ final class CalendarReminderNotifications: CalendarReminderNotifying {
             try await calls.add(UNNotificationRequest(identifier: Self.prefix + reminder.token.uuidString,
                                                       content: content, trigger: nil))
         } catch {
-            remove(tokens: [reminder.token])
+            cancel(tokens: [reminder.token])
             throw error
         }
-        if invalidated.contains(reminder.token) { remove(tokens: [reminder.token]) }
+        if invalidated.contains(reminder.token) { cancel(tokens: [reminder.token]) }
     }
-    func remove(tokens: [UUID]) {
+    func cancel(tokens: [UUID]) {
         invalidated.formUnion(tokens.filter { adding.contains($0) })
         let identifiers = tokens.map { Self.prefix + $0.uuidString }
         calls.removePending(identifiers)
