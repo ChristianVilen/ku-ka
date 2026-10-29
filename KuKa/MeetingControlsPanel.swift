@@ -1,15 +1,9 @@
 import Carbon.HIToolbox
 import Cocoa
 
-/// The floating meeting controls: a glass pill with the status, the recorded time, Pause or
-/// Resume, Stop, and the transcript toggle, above or below a `MeetingTranscriptDrawer` with the
-/// live transcript.
-///
-/// Pure view, like `ClipboardPanel`. Every recording fact it draws comes from
-/// `recorder.controls`, and its buttons call the recorder. It owns only presentation: its
-/// frame, the drawer height while a resize lasts, and fades. The drawer owns the rows and
-/// `TranscriptFollow`. It writes `Settings` only when a user drag or resize ends, never at launch
-/// or for a move of its own, because tests run inside the app with the user's defaults.
+/// Reads recording state from `recorder.controls` and owns only presentation.
+/// Writes `Settings` only when a user drag or resize ends: tests run in the app with the
+/// user's defaults, so launch and automatic moves must not write them.
 ///
 /// It never calls `NSApp.activate` and never makes itself key when it appears, so the meeting
 /// app keeps the keyboard. Unlike `ClipboardPanel`, it does not close on `resignKey`.
@@ -22,8 +16,6 @@ final class MeetingControlsPanel: FloatingPanel {
         let drawerAbove: Bool
     }
 
-    /// What the full render draws and the geometry reads: the status, the drawer, and the
-    /// drawer's message.
     private struct Shape: Equatable {
         let status: MeetingControls.Status
         let isTranscriptOpen: Bool
@@ -36,10 +28,9 @@ final class MeetingControlsPanel: FloatingPanel {
     private let announce: (String, NSAccessibilityPriorityLevel) -> Void
     private let displayOptions: () -> (reduceMotion: Bool, reduceTransparency: Bool)
 
-    /// The status the last reload drew, only to announce a change. The buttons never read it.
+    /// Used only to announce changes; button actions read the recorder.
     private var announcedStatus: MeetingControls.Status?
-    /// The shape the last full render drew. A drag, a resize, or a screen change lays out this
-    /// shape, so it does not build the transcript rows again. The buttons never read it.
+    /// Reused during drag, resize, and screen changes to avoid rebuilding transcript rows.
     private var drawnShape: Shape?
     private var placement: Placement?
     private var targetFrame: CGRect?
@@ -115,7 +106,6 @@ final class MeetingControlsPanel: FloatingPanel {
     /// For keyboard use after Show Meeting Controls. A click on a button never makes it key.
     override var canBecomeKey: Bool { true }
 
-    /// Esc closes the drawer.
     override func cancelOperation(_ sender: Any?) {
         recorder.setTranscriptOpen(false)
     }
@@ -136,11 +126,7 @@ final class MeetingControlsPanel: FloatingPanel {
          NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
     }
 
-    // MARK: - Rendering
-
-    /// Redraws what the recorder says. The single entry point for every change. Only a new
-    /// `Shape` configures the panel and lays it out again, so a time tick or new text sets only
-    /// the time, the chip, and the rows.
+    /// Only a new `Shape` needs layout; ticks and new text update their views directly.
     func reload() {
         let controls = recorder.controls
         if let announcement = MeetingPanelCopy.announcement(from: announcedStatus, to: controls?.status) {
@@ -293,8 +279,6 @@ final class MeetingControlsPanel: FloatingPanel {
         }
     }
 
-    // MARK: - Actions
-
     @objc private func pauseClicked() { recorder.togglePause() }
     @objc private func stopClicked() { recorder.stopRecording() }
     @objc private func closeClicked() { recorder.dismissControls() }
@@ -343,8 +327,6 @@ final class MeetingControlsPanel: FloatingPanel {
         settings.meetingTranscriptHeight = Double(height)
     }
 
-    // MARK: - Observers
-
     @objc private func screensChanged() {
         guard isVisible, let drawnShape else { return }
         relayout(drawnShape, animated: false)
@@ -357,7 +339,6 @@ final class MeetingControlsPanel: FloatingPanel {
         reload()
     }
 
-    /// Reduce Transparency: a solid pill instead of glass.
     private func applyAccessibilityDisplay() {
         let solid = displayOptions().reduceTransparency
         if let pillBackground, solid == (pillBackground is MeetingPanelFill) { return }
@@ -387,8 +368,6 @@ final class MeetingControlsPanel: FloatingPanel {
         ])
         if let placement { apply(placement, isOpen: !drawer.isHidden, animated: false) }
     }
-
-    // MARK: - Building
 
     private func buildPill() {
         pill.translatesAutoresizingMaskIntoConstraints = false

@@ -4,10 +4,6 @@ import XCTest
 @testable import KuKa
 
 final class WhisperKitTranscriberTests: XCTestCase {
-    private struct TestError: LocalizedError {
-        let errorDescription: String?
-    }
-
     private let english = Locale(identifier: "en-US")
     private var root: URL!
     private var client: FakeWhisperKitClient!

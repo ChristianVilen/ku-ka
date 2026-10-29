@@ -41,7 +41,6 @@ enum MeetingPanelPlacement {
         CGRect(x: topRight.x - size.width, y: topRight.y - size.height, width: size.width, height: size.height)
     }
 
-    /// The screen that holds most of `rect`. Nil when it is on none.
     private static func screen(of rect: CGRect, in screens: [ScreenGeometry]) -> ScreenGeometry? {
         let overlaps = screens.map { (screen: $0, area: area($0.frame.intersection(rect))) }
         return overlaps.filter { $0.area > 0 }.max { $0.area < $1.area }?.screen
@@ -52,31 +51,25 @@ enum MeetingPanelPlacement {
     }
 }
 
-/// Whether the drawer follows new text. View state, kept as a value so its rule has tests.
 struct TranscriptFollow: Equatable {
     private(set) var isFollowing = true
     private(set) var unseenRows = 0
 
-    /// The user scrolled. Following stops when the last row is out of view and starts again
-    /// when it is back in view.
     mutating func scrolled(lastRowVisible: Bool) {
         isFollowing = lastRowVisible
         if lastRowVisible { unseenRows = 0 }
     }
 
-    /// While not following, new rows are counted for Return to live.
     mutating func rowsChanged(from old: Int, to new: Int) {
         guard !isFollowing else { return }
         unseenRows += max(0, new - old)
     }
 
-    /// Return to live, or End in the transcript.
     mutating func returnToLive() {
         isFollowing = true
         unseenRows = 0
     }
 
-    /// Nil while following.
     var returnToLiveTitle: String? {
         isFollowing ? nil : MeetingPanelCopy.returnToLive(newRows: unseenRows)
     }

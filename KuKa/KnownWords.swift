@@ -1,6 +1,5 @@
 import Foundation
 
-/// One wrong form of a known word.
 struct HeardForm: Equatable, Sendable {
     let phrase: Phrase
     /// A ✓ in the list confirms this form, so Ku-Ka replaces it without a question.
@@ -16,7 +15,6 @@ struct KnownWord: Equatable, Sendable {
     let heard: [HeardForm]
 }
 
-/// The known words that occur in one transcript.
 struct RelevantKnownWords: Equatable, Sendable {
     static let none = RelevantKnownWords(words: [], correctAsHeard: [])
 
@@ -44,7 +42,6 @@ struct RelevantKnownWords: Equatable, Sendable {
 struct KnownWordsList: Equatable, Sendable {
     static let empty = KnownWordsList(markdown: "")
 
-    /// The start of a list file that does not exist yet.
     static let newFileHeader = """
         # Known words
 
@@ -59,7 +56,6 @@ struct KnownWordsList: Equatable, Sendable {
     let correctAsHeard: [Phrase]
     /// Every line of the text with its own ending, so `adding` can insert by position.
     private let lines: [Line]
-    /// The tokens of every right form, heard form, and correct-as-heard word, for `knows`.
     private let knownTokens: Set<[String]>
 
     init(markdown: String) {
@@ -190,12 +186,9 @@ struct KnownWordsList: Equatable, Sendable {
         return end
     }
 
-    /// The right form and every heard form.
     private static func phrases(of word: KnownWord) -> [Phrase] {
         [Phrase(word.right)].compactMap { $0 } + word.heard.map(\.phrase)
     }
-
-    // MARK: Lines
 
     private static func lines(of markdown: String) -> [Line] {
         var split: [(text: Substring, ending: Substring)] = []
@@ -241,7 +234,6 @@ struct KnownWordsList: Equatable, Sendable {
         return .replacements(segments.compactMap { $0 })
     }
 
-    /// The lines from a first line "---" through the next "---". With no closing line, all of them.
     private static func frontMatterCount(_ lines: [Substring]) -> Int {
         guard lines.first == "---" else { return 0 }
         return lines.dropFirst().firstIndex(of: "---").map { $0 + 1 } ?? lines.count
@@ -257,7 +249,6 @@ struct KnownWordsList: Equatable, Sendable {
         return text.count >= 3 && text.allSatisfy { $0 == fence }
     }
 
-    /// "Companies" for "## Companies".
     private static func heading(_ line: Substring) -> String? {
         let marks = line.prefix { $0 == "#" }
         guard (1...6).contains(marks.count), line.dropFirst(marks.count).first == " " else { return nil }
@@ -265,14 +256,11 @@ struct KnownWordsList: Equatable, Sendable {
         return title.isEmpty ? nil : title
     }
 
-    /// The text after the bullet's marker. Nil for a line that is not a bullet.
     private static func bulletText(_ line: Substring) -> Substring? {
         let marker = line.drop { $0 == " " }
         guard let first = marker.first, "-*+".contains(first), marker.dropFirst().first == " " else { return nil }
         return marker.dropFirst(2)
     }
-
-    // MARK: Segments
 
     private static let arrows = ["→", "->"]
     private static let quotes = CharacterSet(charactersIn: "\"“”'")
@@ -356,9 +344,6 @@ struct KnownWordsList: Equatable, Sendable {
         return Phrase(form)
     }
 
-    // MARK: Merging
-
-    /// One word for each right form, in the order of its first entry.
     private static func merged(_ entries: [KnownWord]) -> [KnownWord] {
         var rights: [String] = []
         var entriesByRight: [String: [KnownWord]] = [:]
@@ -371,7 +356,6 @@ struct KnownWordsList: Equatable, Sendable {
         }
     }
 
-    /// Each form once, in first-seen order, and confirmed when any entry confirms it.
     private static func uniqueForms(_ forms: [HeardForm]) -> [HeardForm] {
         var unique: [HeardForm] = []
         for form in forms {
@@ -406,7 +390,6 @@ private struct Line: Equatable, Sendable {
 
     var indent: Int { text.prefix { $0 == " " || $0 == "\t" }.count }
 
-    /// Any heading, or with a `title` only that one, case ignored.
     func isHeading(_ title: String? = nil) -> Bool {
         guard case .heading(let text) = meaning else { return false }
         return title.map { text.caseInsensitiveCompare($0) == .orderedSame } ?? true

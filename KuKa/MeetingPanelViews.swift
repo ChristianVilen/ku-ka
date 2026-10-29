@@ -1,8 +1,6 @@
 import Cocoa
 
 extension MeetingControlsPanel {
-    /// Every size the meeting panel draws with. Nested, because ClipboardRowViews.swift has a
-    /// top-level `Metrics`.
     enum Layout {
         static let cornerRadius: CGFloat = 18
         static let pillHeight: CGFloat = 42
@@ -105,7 +103,6 @@ final class MeetingPanelFill: NSView {
     }
 }
 
-/// A capsule button on a light fill: a symbol alone, or a symbol and a title.
 final class MeetingPanelButton: NSButton {
     private let fill: NSColor
     /// For a button that floats over the transcript, whose fill matches the drawer.
@@ -175,8 +172,7 @@ final class MeetingPanelButton: NSButton {
     }
 }
 
-/// The shape left of the status: the record mark, two pause bars, a check, or a warning. Each
-/// state has its own shape, not only its own colour.
+/// Each state has its own shape, so the status does not rely on colour alone.
 final class MeetingStatusMark: NSView {
     var status: MeetingControls.Status = .recording { didSet { needsDisplay = true } }
 
@@ -196,7 +192,6 @@ final class MeetingStatusMark: NSView {
         let box = NSRect(x: (bounds.width - 13) / 2, y: (bounds.height - 13) / 2, width: 13, height: 13)
         switch status {
         case .starting:
-            // The spinner shows instead.
             break
         case .recording:
             // The menu bar icon's mark: a red ring with a white centre.
@@ -273,7 +268,6 @@ final class MeetingPillView: MeetingPanelDragView {
     }
 }
 
-/// The drawer's far edge, which changes its height.
 final class MeetingDrawerGrip: MeetingPanelDragView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor.separatorColor.setFill()
@@ -286,8 +280,6 @@ final class MeetingDrawerGrip: MeetingPanelDragView {
     }
 }
 
-/// One spoken row: the speaker and the recorded time on a speaker change, then the text. A
-/// draft is in the secondary colour and ends with an ellipsis.
 final class TranscriptSpeechCell: NSTableCellView {
     private typealias Layout = MeetingControlsPanel.Layout
 
@@ -338,7 +330,6 @@ final class TranscriptSpeechCell: NSTableCellView {
     private static let measuring = NSTextField.makeWrappingLabel(size: Layout.textSize)
 }
 
-/// A pause in the recording, as a divider with its time.
 final class TranscriptPauseCell: NSTableCellView {
     private let label = NSTextField.makeLabel(size: 11, weight: .semibold, color: .secondaryLabelColor, digits: true)
 

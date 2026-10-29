@@ -1,18 +1,14 @@
 import AppKit
 import UserNotifications
 
-/// What a click on a notification does.
 enum NotificationClick: Equatable {
-    /// Opens a file or folder.
     case open(URL)
-    /// Opens the review window on this meeting.
     case checkWords(MeetingFolder)
 
     /// "url" is also the key of every notification before Check Words, so those still open.
     private static let openKey = "url"
     private static let checkWordsKey = "checkWords"
 
-    /// The notification's userInfo, which macOS keeps until the click.
     var userInfo: [String: String] {
         switch self {
         case .open(let url): return [Self.openKey: url.absoluteString]
@@ -35,20 +31,16 @@ protocol Notifying {
     /// Call when the user starts something that will notify later, so the
     /// macOS prompt appears while its reason is clear.
     func requestPermission()
-    /// `onClick` happens when the user clicks the notification.
     func post(title: String, body: String, onClick: NotificationClick?)
 }
 
-/// The one way Ku-Ka posts notifications. `AppDelegate` installs it as the
-/// notification center's delegate, so a click opens the notification's file
-/// or the review window.
+/// `AppDelegate` must install this as the notification center's delegate to handle clicks.
 final class SystemNotifier: NSObject, Notifying, UNUserNotificationCenterDelegate {
     static let shared = SystemNotifier()
 
     private var didRequestPermission = false
     private let open: (URL) -> Void
 
-    /// A click on a notification that has words to check. The app opens the review window.
     var onCheckWords: (@MainActor (MeetingFolder) -> Void)?
 
     init(open: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {

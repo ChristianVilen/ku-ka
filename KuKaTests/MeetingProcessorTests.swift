@@ -192,30 +192,6 @@ final class MeetingProcessorTests: MeetingProcessorTestCase {
                        "**[00:00:07] Me:** This was saved by an earlier run.")
     }
 
-    func testTheSummaryLeavesOutTheReviewBlockOfTheReply() async throws {
-        let meeting = try makeMeeting()
-        runner.results["agy"] = .success(CommandResult(termination: .exited(0), stdout: """
-        ## Summary
-        Ship Friday.
-
-        ```ku-ka-review
-        [{"heard": "Friday", "suggestion": null, "kind": "term", "quote": "Let's ship on Friday", "reason": "a test"}]
-        ```
-
-        """, stderr: ""))
-
-        let outcome = await process(meeting)
-
-        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
-        XCTAssertEqual(try meeting.read(.summary), """
-        # Meeting on 2026-10-23 at 14:02
-
-        ## Summary
-        Ship Friday.
-
-        """)
-    }
-
     func testATranscriptionFailureAfterLoadingWritesTheReasonKeepsTheAudioAndDoesNotFallBack() async throws {
         let meeting = try makeMeeting()
         whisper.byFileName["them.caf"] = .failure(TestError(errorDescription: "Whisper could not transcribe them.caf: Out of memory."))

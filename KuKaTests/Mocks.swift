@@ -2,8 +2,6 @@ import XCTest
 import os
 @testable import KuKa
 
-// MARK: - Mock FileManager
-
 class MockFileManager: FileManaging {
     var homeDirectoryForCurrentUser: URL = URL(fileURLWithPath: "/tmp/kuka-test")
     var createdDirectories: [URL] = []
@@ -27,8 +25,6 @@ class MockFileManager: FileManaging {
     }
 }
 
-// MARK: - Mock Clipboard
-
 class MockClipboard: ClipboardManaging {
     var copiedCount = 0
     var clearedCount = 0
@@ -45,8 +41,6 @@ class MockClipboard: ClipboardManaging {
         clearedCount += 1
     }
 }
-
-// MARK: - Mock Screen Capture
 
 class MockScreenCapture: ScreenCapturing {
     var imageToReturn: CGImage?
@@ -75,8 +69,6 @@ class MockScreenCapture: ScreenCapturing {
     }
 }
 
-// MARK: - Mock WindowListProvider
-
 class MockWindowListProvider: WindowListProvider {
     var windows: [WindowInfo] = []
 
@@ -84,8 +76,6 @@ class MockWindowListProvider: WindowListProvider {
         windows
     }
 }
-
-// MARK: - Mock WindowControlling (window tiling)
 
 @MainActor
 class MockWindowControlling: WindowControlling {
@@ -106,13 +96,9 @@ class MockWindowControlling: WindowControlling {
     }
 }
 
-// MARK: - Mock StageManagerDetecting
-
 class MockStageManagerDetecting: StageManagerDetecting {
     var isStageManagerEnabled: Bool = false
 }
-
-// MARK: - Fake Sleep Preventer
 
 class FakeSleepPreventer: SleepPreventing {
     private(set) var beginCount = 0
@@ -143,8 +129,6 @@ class FakeSleepPreventer: SleepPreventing {
     }
 }
 
-// MARK: - Fake ImageStore
-
 class FakeImageStore: ImageStoring {
     private(set) var storedImages: [CGImage] = []
     private(set) var combinedCalls: [(top: NSImage, bottom: NSImage)] = []
@@ -172,8 +156,6 @@ class FakeImageStore: ImageStoring {
     }
 }
 
-// MARK: - Fake LoginItem
-
 class FakeLoginItem: LoginItemManaging {
     var isEnabled = false
     var errorToThrow: Error?
@@ -186,14 +168,10 @@ class FakeLoginItem: LoginItemManaging {
     }
 }
 
-// MARK: - Fake Screens
-
 struct FakeScreens: Screens {
     var all: [ScreenGeometry] = []
     var mainIndex: Int?
 }
-
-// MARK: - Fake Pasteboard
 
 class FakePasteboard: PasteboardReading, PasteboardWriting {
     var changeCount = 0
@@ -229,8 +207,6 @@ class FakePasteboard: PasteboardReading, PasteboardWriting {
     }
 }
 
-// MARK: - Fake Keystroke Sender
-
 class FakeKeystrokeSender: KeystrokeSending {
     private(set) var sendCount = 0
 
@@ -245,7 +221,6 @@ class FakeNotifier: Notifying {
         let body: String
         let click: NotificationClick?
 
-        /// The file or folder that a click opens.
         var url: URL? {
             guard case .open(let url)? = click else { return nil }
             return url
@@ -268,7 +243,6 @@ class FakeActiveRecording: ActiveRecording {
     var endReason: String?
     var levels = RecordingAudioLevels.silent
     private(set) var stopCount = 0
-    /// Every clock the controller handed over, in order.
     private(set) var appliedClocks: [RecordingClock] = []
     /// Real feeds: a test offers audio to them, and `stop()` finishes them.
     let feeds = Dictionary(uniqueKeysWithValues: MeetingTrack.allCases.map { ($0, LiveAudioFeed()) })
@@ -294,7 +268,6 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
     /// Ends the capture with this reason before `start` returns.
     var endsWhileStarting: String?
     private(set) var recordings: [FakeActiveRecording] = []
-    /// The clock of each start, in order.
     private(set) var clocks: [RecordingClock] = []
     private var interruptHandler: (@MainActor (String) -> Void)?
 
@@ -323,7 +296,6 @@ class FakeMeetingAudioCapture: MeetingAudioCapturing {
 }
 
 extension LiveResult {
-    /// A result whose text is one phrase over the whole range.
     init(track: MeetingTrack, start: TimeInterval, end: TimeInterval, text: String, isFinal: Bool,
          finalizedThrough: TimeInterval) {
         self.init(track: track, start: start, end: end, phrases: [TranscriptSegment(start: start, end: end, text: text)],
@@ -331,7 +303,6 @@ extension LiveResult {
     }
 }
 
-/// Hands out one update stream per start, which the test sends on.
 class FakeLiveTranscriber: LiveTranscribing {
     private(set) var starts: [(locale: String, audio: [MeetingTrack: AsyncStream<WrittenAudio>])] = []
     private var continuation: AsyncStream<LiveUpdate>.Continuation?
@@ -348,7 +319,6 @@ class FakeLiveTranscriber: LiveTranscribing {
         return updates
     }
 
-    /// Sends on the latest start's stream.
     func send(_ update: LiveUpdate) {
         continuation?.yield(update)
     }
@@ -402,19 +372,14 @@ class FakeTranscriber: Transcribing {
     }
 }
 
-/// `label` returns `result`. The default result keeps every transcript as it was before room labels.
 class FakeRoomLabeller: RoomLabelling {
     var result: RoomLabels = .notDiarized
     var modelIsMissing = false
-    /// `download` throws it after it starts.
     var downloadError: Error?
     /// `label` cancels the calling task before it returns, as a quit during labelling does.
     var cancelsItsTask = false
-    /// Runs when `download` ends, so a test can see what happened before and after it.
     var onDownloadEnd: (() -> Void)?
-    /// Runs at the start of `label`, so a test can see what happened before it.
     var onLabel: (() -> Void)?
-    /// "download", or "label" and the audio file name.
     private(set) var calls: [String] = []
 
     var needsDownload: Bool { modelIsMissing }

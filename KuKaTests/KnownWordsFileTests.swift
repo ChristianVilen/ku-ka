@@ -23,8 +23,6 @@ final class KnownWordsFileTests: XCTestCase {
         try Data(text.utf8).write(to: url)
     }
 
-    // MARK: - Reading
-
     func testEachReadSeesTheFileAsItIsNow() throws {
         let file = list()
         try write("- Convio → **Konvio** ✓\n")
@@ -41,8 +39,6 @@ final class KnownWordsFileTests: XCTestCase {
         XCTAssertEqual(read.words, [])
         XCTAssertEqual(read.correctAsHeard, [])
     }
-
-    // MARK: - Adding
 
     func testAddCreatesAMissingFolderAndFileThatStartsWithTheHeader() throws {
         try list().add(.replacement(heard: "Konvya", right: "Konvio", confirmed: true))
@@ -86,8 +82,6 @@ final class KnownWordsFileTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: target, encoding: .utf8),
                        "- Convio → **Konvio** ✓\n- Konvya → **Konvio** ✓ confirmed 2026-10-28 by Ku-Ka\n")
     }
-
-    // MARK: - Refusing to write
 
     func testAddWhileAnotherHolderHasTheLockThrowsBusyAndLeavesTheFileUnchanged() throws {
         try write("- Convio → **Konvio** ✓\n")

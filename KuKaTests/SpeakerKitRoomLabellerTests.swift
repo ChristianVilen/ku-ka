@@ -5,10 +5,6 @@ import XCTest
 
 @MainActor
 final class SpeakerKitRoomLabellerTests: XCTestCase {
-    private struct TestError: LocalizedError {
-        let errorDescription: String?
-    }
-
     private let microphone = URL(fileURLWithPath: "/Meetings/2026-10-23_14-02/audio/me.caf")
     private var root: URL!
     private var client: FakeSpeakerKitClient!

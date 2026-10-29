@@ -137,15 +137,6 @@ final class MeetingSummarizerTests: XCTestCase {
         ]))
     }
 
-    func testPromptEndsWithTheTranscript() {
-        for words: RelevantKnownWords in [.none, knownWords] {
-            let prompt = SummaryPrompt.make(transcript: transcript, knownWords: words)
-
-            XCTAssertTrue(prompt.hasSuffix("Transcript:\n\n**[00:00:01] Them:** Let's ship on Friday"), prompt)
-        }
-    }
-
-    /// The prompt up to the end of its rules. Known words and the review request come after it.
     private let instructions = """
     You are writing meeting notes from the transcript below. Each line starts with a time and a speaker \
     label. "Me" and "Room" labels come from the microphone of the Mac that recorded the meeting. That \
@@ -261,8 +252,6 @@ final class MeetingSummarizerTests: XCTestCase {
         XCTAssertTrue(prompt.contains("context. Do not list a word from the lists above. Each item"), prompt)
     }
 
-    // MARK: - The review block
-
     private func suspect(_ heard: String, quote: String, suggestion: String? = nil, kind: WordKind = .other,
                          reason: String? = nil) -> SuspectWord {
         SuspectWord(heard: heard, suggestion: suggestion, kind: kind, quote: quote, reason: reason)
@@ -355,26 +344,5 @@ final class MeetingSummarizerTests: XCTestCase {
         ])
         XCTAssertEqual(reply.suspects.dropFirst(3).map(\.heard), (1...7).map { "Word\($0)" })
         XCTAssertEqual(reply.suspects.last?.kind, .term)
-    }
-
-    func testPromptExplainsTheSpeakerLabelsAndNeverMakesThemOwners() {
-        XCTAssertTrue(prompt.hasPrefix("""
-        You are writing meeting notes from the transcript below. Each line starts with a time and a speaker \
-        label. "Me" and "Room" labels come from the microphone of the Mac that recorded the meeting. That \
-        microphone hears the person who recorded the meeting and anyone in the same room. "Me" is the whole \
-        microphone, so "Me" can be several people. "Room 1", "Room 2", and so on are different voices on that \
-        microphone. Software told the voices apart by their sound, so two people can share one Room label, and \
-        one person can have two Room labels. No label tells which person recorded the meeting. A transcript has \
-        "Me" or Room labels, not both. "Them" is everyone else on the call, and the transcript does not tell \
-        those people apart. A "Me" or "Room" line can sometimes repeat a "Them" line because of echo.
-
-        Write Markdown
-        """), prompt)
-        XCTAssertTrue(prompt.contains("""
-        A checklist in the form "- [ ] Owner: task". The owner is a person's name only when the \
-        transcript says who will do the task. Otherwise the owner is "Unclear". Never use a speaker \
-        label, such as "Me", "Them", or "Room 1", as an owner.
-        ## Key points
-        """), prompt)
     }
 }

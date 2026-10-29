@@ -1,13 +1,10 @@
 import XCTest
 @testable import KuKa
 
-/// The controller's part of known words: the words-to-check notification, Check Words in the menu, and
-/// Update Notes jobs in the queue.
 @MainActor
 final class MeetingNotesCheckWordsTests: MeetingNotesTestCase {
     private let askTheVendors = "Ask Convio, Brightlane and Yuri on Friday"
 
-    /// The CLI's notes come with a review block that asks about `heard`, each quoted from `askTheVendors`.
     private func hearTheVendors(suspects heard: [String]) throws {
         try XCTUnwrap(transcriber as? FakeTranscriber).byFileName["them.caf"] = .success(TrackTranscript(
             segments: [TranscriptSegment(start: 1, end: 3, text: askTheVendors)], duration: 60))
@@ -18,7 +15,6 @@ final class MeetingNotesCheckWordsTests: MeetingNotesTestCase {
             stderr: ""))
     }
 
-    /// A done meeting whose review asks about `heard`, with the first `skipped` of them skipped.
     @discardableResult
     private func reviewedMeeting(at date: Date, asking heard: [String], skipped: Int = 0) throws -> MeetingFolder {
         let meeting = try MeetingFolder.create(in: root, startingAt: date)
@@ -123,8 +119,6 @@ final class MeetingNotesCheckWordsTests: MeetingNotesTestCase {
 
         XCTAssertEqual(asked, [nil])
     }
-
-    // MARK: - Update Notes
 
     func testUpdateNotesWaitsForTheMeetingThatIsProcessedAndThenSaysWhatItDoes() async throws {
         let gate = GatedCommandRunner()
@@ -249,17 +243,14 @@ final class MeetingNotesCheckWordsTests: MeetingNotesTestCase {
     }
 }
 
-/// Each run waits until the test lets one through, or until its task is cancelled, and then
-/// replies with notes. `run` is called off the main actor, so the counts are behind a lock.
+/// Waits for a pass or cancellation. Counts are locked because `run` executes off the main actor.
 private final class GatedCommandRunner: CommandRunning {
     private let lock = NSLock()
     private var started = 0
     private var finished = 0
     private var passes = 0
 
-    /// Runs that started.
     var runs: Int { lock.withLock { started } }
-    /// Runs that wait now.
     var waiting: Int { lock.withLock { started - finished } }
 
     func letOneThrough() {

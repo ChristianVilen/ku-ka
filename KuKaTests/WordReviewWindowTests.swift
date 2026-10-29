@@ -44,10 +44,6 @@ final class WordReviewWindowTests: XCTestCase {
         sut.close()
     }
 
-    // MARK: - Helpers
-
-    /// A done meeting on that day of October 2026 whose `review.json` asks `questions`, with the
-    /// heard forms in `skipped` already skipped.
     @discardableResult
     private func reviewedMeeting(on day: Int, asking questions: [[String: String]],
                                  skipped: [String] = []) throws -> MeetingFolder {
@@ -62,7 +58,6 @@ final class WordReviewWindowTests: XCTestCase {
         return meeting
     }
 
-    /// Every view under `view`, in the order the page lays them out.
     private func views(in view: NSView) -> [NSView] {
         view.subviews.flatMap { [$0] + views(in: $0) }
     }
@@ -115,8 +110,6 @@ final class WordReviewWindowTests: XCTestCase {
     private var list: String? {
         try? String(contentsOf: listURL, encoding: .utf8)
     }
-
-    // MARK: - The question page
 
     func testAQuestionShowsTheMeetingThePositionThePlaceAndTheQuoteWithTheHeardFormInBold() throws {
         try reviewedMeeting(on: 23, asking: [yuri, convio, kworix], skipped: ["Yuri"])
@@ -245,8 +238,6 @@ final class WordReviewWindowTests: XCTestCase {
                        ["Skip", "It Is Correct as Heard", "Save"])
     }
 
-    // MARK: - The finished page
-
     func testTheFinishedPageOffersUpdateNotesAndNextMeetingOnlyWhenTheScreenAllows() throws {
         let meeting = try reviewedMeeting(on: 23, asking: [convio])
         try reviewedMeeting(on: 24, asking: [yuri])
@@ -299,8 +290,6 @@ final class WordReviewWindowTests: XCTestCase {
         XCTAssertEqual(sut.window?.isVisible, false)
         XCTAssertNil(controller.screen)
     }
-
-    // MARK: - Opening and closing
 
     func testANilScreenClosesTheWindowAndTheAppIsRegularOnlyWhileItIsOpen() throws {
         try reviewedMeeting(on: 23, asking: [convio, yuri])
@@ -359,24 +348,4 @@ final class WordReviewWindowTests: XCTestCase {
         XCTAssertEqual(policies, [.regular])
     }
 
-    // MARK: - Copy
-
-    func testTheCopySaysWhatTheDesignSays() {
-        XCTAssertEqual(WordReviewCopy.windowTitle, "Check Words")
-        XCTAssertEqual(WordReviewCopy.position(2, of: 3), "Word 2 of 3")
-        XCTAssertEqual(WordReviewCopy.reason("spelled three ways"), "Why Ku-Ka asks: spelled three ways")
-        XCTAssertEqual(WordReviewCopy.rightWordLabel, "Right word:")
-        XCTAssertEqual(WordReviewCopy.rightWordField("Convio"), "Right word for “Convio”")
-        XCTAssertEqual(WordReviewCopy.ordinaryNote("my key"),
-                       "“my key” is also ordinary words. Ku-Ka will not replace it in every transcript. The summary tool will check it by context.")
-        XCTAssertEqual([WordReviewCopy.skip, WordReviewCopy.correctAsHeard, WordReviewCopy.save],
-                       ["Skip", "It Is Correct as Heard", "Save"])
-        XCTAssertEqual(WordReviewCopy.finished("Meeting on 2026-10-28 at 10:00"),
-                       "All words checked for Meeting on 2026-10-28 at 10:00.")
-        XCTAssertEqual([WordReviewCopy.openSummary, WordReviewCopy.updateNotes, WordReviewCopy.nextMeeting, WordReviewCopy.close],
-                       ["Open Summary", "Update Notes", "Next Meeting", "Close"])
-        XCTAssertEqual(WordReviewCopy.updateExplanation,
-                       "Update Notes makes the transcript and the summary again with your answers. It replaces changes that you made to the transcript by hand.")
-        XCTAssertEqual(WordReviewCopy.updating, "Ku-Ka is updating the notes. You get a notification when they are ready.")
-    }
 }

@@ -1,6 +1,5 @@
 import AppKit
 
-/// Every word the meeting controls panel shows or announces.
 enum MeetingPanelCopy {
     struct Button: Equatable {
         /// Nil for a button that shows only its symbol.
@@ -9,8 +8,6 @@ enum MeetingPanelCopy {
         let label: String
         let tooltip: String
     }
-
-    // MARK: The pill
 
     /// Nil while recording: the mark and the time say it.
     static func word(for status: MeetingControls.Status) -> String? {
@@ -62,8 +59,6 @@ enum MeetingPanelCopy {
         title: "Hide panel", label: "Hide panel",
         tooltip: "Recording continues. Choose Show Meeting Controls in the Ku-Ka menu to bring the panel back.")
 
-    // MARK: The drawer
-
     static let transcriptTitle = "Live transcript"
     static let draftNote = "Draft until you stop"
     static let draftTooltip = "Rough text while you record. Ku-Ka writes the full transcript after you stop."
@@ -102,8 +97,6 @@ enum MeetingPanelCopy {
     static func returnToLive(newRows: Int) -> String {
         newRows > 0 ? "Return to live · \(newRows) new" : "Return to live"
     }
-
-    // MARK: VoiceOver
 
     /// Only a change of kind is announced, so a time tick or a transcript row never is. Nil
     /// stands for a hidden panel: hiding it and showing it again change nothing, but the end of

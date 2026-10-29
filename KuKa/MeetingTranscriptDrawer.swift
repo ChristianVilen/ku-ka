@@ -1,9 +1,6 @@
 import Cocoa
 
-/// The meeting panel's drawer: a header, a message while no text can come, the live transcript
-/// draft, Return to live, and the grip at the far edge. It owns the rows, `TranscriptFollow`, and
-/// the scroll position. The panel decides when it shows, on which side of the pill, and how tall
-/// it is.
+/// Owns rows, follow state, and scroll position. The panel owns visibility and geometry.
 final class MeetingTranscriptDrawer: NSView {
     private typealias Layout = MeetingControlsPanel.Layout
     private typealias Colors = MeetingControlsPanel.Colors
@@ -38,9 +35,7 @@ final class MeetingTranscriptDrawer: NSView {
     private var scrollBelowMessage: NSLayoutConstraint!
     private var scrollAtBodyTop: NSLayoutConstraint!
 
-    /// Hide panel in the header.
     var onHide: (() -> Void)?
-    /// A drag on the grip, which changes the drawer's height.
     var onResizeBegan: (() -> Void)? {
         get { grip.onBegan }
         set { grip.onBegan = newValue }
@@ -64,8 +59,6 @@ final class MeetingTranscriptDrawer: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    // MARK: - Rendering
 
     /// The header always lies next to the pill and the grip at the far edge.
     func setAbovePill(_ above: Bool) {
@@ -108,7 +101,6 @@ final class MeetingTranscriptDrawer: NSView {
         renderReturnToLive()
     }
 
-    /// The drawer just opened: it follows the newest row and fades in.
     func opened() {
         follow.returnToLive()
         scrollToEnd(animated: false)
@@ -176,8 +168,6 @@ final class MeetingTranscriptDrawer: NSView {
 
     @objc private func hideClicked() { onHide?() }
     @objc private func returnToLiveClicked() { returnToLive() }
-
-    // MARK: - Building
 
     private func build() {
         let title = NSTextField.makeLabel(size: 12, weight: .semibold)

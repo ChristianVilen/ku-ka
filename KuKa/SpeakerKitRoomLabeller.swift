@@ -3,9 +3,7 @@ import SpeakerKit
 import WhisperKit
 
 struct SpeakerKitRoomLabeller: RoomLabelling {
-    /// The commit of `argmaxinc/speakerkit-coreml` that Ku-Ka downloads. The
-    /// installed folder's name comes from it, so a new revision installs into
-    /// a new folder.
+    /// Changing the `argmaxinc/speakerkit-coreml` revision installs into a new folder.
     static let revision = "556fc52a13327837688f02289457cded017802e9"
 
     private let client: SpeakerKitClient
@@ -107,8 +105,7 @@ struct SpeakerKitLibrary: SpeakerKitClient {
             try Task.checkCancellation()
             let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: audio.path)
             let result = try await kit.diarize(audioArray: samples, options: SpeakerKitLibrary.diarizationOptions)
-            // SpeakerKit runs its pipeline in an unstructured Task, so a
-            // cancel does not stop it. It ends in seconds; drop its result.
+            // SpeakerKit's unstructured Task keeps running after cancellation; drop its result.
             try Task.checkCancellation()
             return SpeakerKitLibrary.voiceTurns(from: result.segments)
         }

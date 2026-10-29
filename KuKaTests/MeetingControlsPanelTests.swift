@@ -72,8 +72,6 @@ final class MeetingControlsPanelTests: XCTestCase {
         defaults.removePersistentDomain(forName: Self.suite)
     }
 
-    // MARK: - Helpers
-
     private func startMeeting() async {
         await recorder.toggleRecording()
     }
@@ -143,8 +141,6 @@ final class MeetingControlsPanelTests: XCTestCase {
                          charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode))!
     }
 
-    // MARK: - On screen
-
     func testThePanelIsOnScreenWhileRecordingAndOffScreenWhenIdleOrDismissed() async {
         XCTAssertFalse(sut.isVisible)
 
@@ -187,8 +183,6 @@ final class MeetingControlsPanelTests: XCTestCase {
 
         XCTAssertTrue(sut.isVisible)
     }
-
-    // MARK: - The pill
 
     func testThePauseButtonReadsResumeWithATextLabelWhilePaused() async throws {
         await startMeeting()
@@ -292,8 +286,6 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertEqual(transcript.selectionHighlightStyle, .none)
     }
 
-    // MARK: - The drawer
-
     func testTheDrawerIsClosedAtTheStartOfAMeeting() async {
         await startMeeting()
         XCTAssertFalse(transcriptIsShown)
@@ -362,8 +354,6 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertEqual(sut.frame.height, pillHeight + 280)
     }
 
-    // MARK: - Following the transcript
-
     func testScrollingBackStopsFollowingAndEndReturnsToLive() async throws {
         await startMeeting()
         recorder.setTranscriptOpen(true)
@@ -406,8 +396,6 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertTrue(lastRowIsVisible)
         XCTAssertGreaterThan(try XCTUnwrap(transcript.enclosingScrollView).contentView.bounds.minY, 0)
     }
-
-    // MARK: - VoiceOver, Reduce Motion, Reduce Transparency
 
     func testStateChangesAreAnnouncedAndTranscriptRowsAreNot() async {
         await startMeeting()
@@ -472,8 +460,6 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertFalse(allViews.contains { $0 is NSGlassEffectView })
         XCTAssertNotNil(button("Pause recording"))
     }
-
-    // MARK: - Position and height
 
     func testShowingAndOpeningTheDrawerWriteNothingToSettings() async {
         await startMeeting()
@@ -571,8 +557,6 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertEqual(pillTopRight, CGPoint(x: 1424, y: 859))
         XCTAssertNil(settings.meetingControlsTopRight)
     }
-
-    // MARK: - Pictures for review
 
     /// Writes one PNG per state, in light and dark, when KUKA_PANEL_SNAPSHOTS names a folder.
     func testWritesAPictureOfEachState() async throws {

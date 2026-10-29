@@ -1,7 +1,6 @@
 import Foundation
 
 enum KnownWordsFileError: LocalizedError, Equatable {
-    /// Another Ku-Ka holds the list lock.
     case busy
     /// The bytes are not UTF-8. Ku-Ka leaves the file unchanged.
     case notText(path: String)

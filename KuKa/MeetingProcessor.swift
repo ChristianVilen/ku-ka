@@ -37,9 +37,7 @@ struct MeetingProcessor {
     private let trash: (URL) throws -> Void
     private let now: () -> Date
 
-    /// `roomLabeller` has no default value, so a test that forgets the fake does not compile
-    /// instead of downloading a model. Nor has `knownWords`, so the app cannot forget the list. It is
-    /// read once for each summary, never kept.
+    /// Reads the known-words list once per summary; the list is never cached.
     init(transcribers: [Transcribing] = [WhisperKitTranscriber(), SpeechTranscriberAdapter()],
          roomLabeller: RoomLabelling,
          summarizer: Summarizer = Summarizer(),
@@ -56,8 +54,7 @@ struct MeetingProcessor {
         self.now = now
     }
 
-    /// Makes `transcript.md` and `summary.md` of a done meeting again, with the list as it is now.
-    /// Asks no new questions, and leaves `review.json` and `review-skipped.json` alone.
+    /// Asks no new questions and leaves both review files alone.
     func updateNotes(_ meeting: MeetingFolder) async -> NotesUpdateOutcome {
         let lock: FileLock
         do {
@@ -168,7 +165,7 @@ struct MeetingProcessor {
         return (tracks, transcriber, failures)
     }
 
-    /// Without a microphone segment that the transcript keeps, nothing is downloaded or diarized.
+    /// Skips downloading and diarization when no microphone segment passes the text and segment-echo filters.
     /// Throws only when the meeting folder cannot be written.
     private func labelRooms(_ meeting: MeetingFolder, tracks: [MeetingTrack: TrackTranscript],
                             progress: (MeetingProgress) -> Void) async throws -> RoomLabels {
@@ -194,10 +191,8 @@ struct MeetingProcessor {
         return rooms
     }
 
-    /// `download` calls its `onStart` right before the download really starts. Only then is the
-    /// download reported, and when it ends, also after a failure, the step is Transcribing again.
-    /// `download` does not escape. Swift does not let a non-escaping closure parameter get a
-    /// closure that captures `progress`, so it is marked `@escaping`.
+    /// Reports downloading only after `onStart`, then restores Transcribing even on failure.
+    /// `download` does not escape, but Swift requires `@escaping` to pass it a closure that captures `progress`.
     private func downloading(_ model: MeetingModel, progress: (MeetingProgress) -> Void,
                              _ download: @escaping (_ onStart: @MainActor () -> Void) async throws -> Void) async throws {
         var started = false
@@ -260,11 +255,9 @@ struct MeetingProcessor {
         }
     }
 
-    /// The one place that applies known words. `transcript.md` is always made again from the heard
-    /// copy and the list as it is now, so a second run gives the same file and a removed list line
-    /// undoes its replacement. Then the CLI summarizes the corrected text. Throws only when the
-    /// meeting folder cannot be read or written; the caller decides what a failed CLI means and
-    /// writes `summary.md`.
+    /// Rebuilds `transcript.md` from the heard copy, so corrections never apply twice and a removed
+    /// list line undoes its replacement. This also replaces hand edits to `transcript.md`.
+    /// Throws only for meeting-folder reads or writes; the caller handles CLI failure and writes `summary.md`.
     private func correctAndSummarize(_ meeting: MeetingFolder) async throws
         -> (result: SummaryResult, content: String, list: KnownWordsList) {
         let heard = try meeting.heardTranscript()

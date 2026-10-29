@@ -1,6 +1,5 @@
 import AppKit
 
-/// Every word the review window shows, as `MeetingPanelCopy` does for the meeting panel.
 enum WordReviewCopy {
     static let windowTitle = "Check Words"
     static let rightWordLabel = "Right word:"
@@ -15,7 +14,6 @@ enum WordReviewCopy {
         "Update Notes makes the transcript and the summary again with your answers. It replaces changes that you made to the transcript by hand."
     static let updating = "Ku-Ka is updating the notes. You get a notification when they are ready."
 
-    /// "Word 2 of 3".
     static func position(_ number: Int, of count: Int) -> String {
         "Word \(number) of \(count)"
     }
@@ -39,11 +37,8 @@ enum WordReviewCopy {
     }
 }
 
-/// The review window. View only: it renders `controller.screen` and forwards each click, like
-/// `ClipboardPanel` with `ClipboardHistoryController`.
-///
-/// Like `OnboardingWindowController`, it makes the app regular while it is open, so that the field
-/// gets the keyboard, and an accessory app again when it closes.
+/// Renders `controller.screen`. Makes the app regular while open so the field gets the keyboard,
+/// then returns it to an accessory app on close.
 @MainActor
 final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     private static let contentWidth: CGFloat = 480
@@ -114,8 +109,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         if controller.screen != nil { present() }
     }
 
-    /// Draws `controller.screen`. A nil screen closes the window, and any other screen fills in its
-    /// page and shows the window.
     func render() {
         guard let screen = controller.screen else {
             if !isClosing, window?.isVisible == true { close() }
@@ -135,8 +128,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         questionInField = nil
         setActivationPolicy(.accessory)
     }
-
-    // MARK: - Pages
 
     private func fill(_ page: WordReviewScreen.QuestionPage, error: String?) {
         install(questionPage)
@@ -248,8 +239,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         window.makeKeyAndOrderFront(nil)
     }
 
-    // MARK: - Actions
-
     @objc private func saveClicked() {
         controller.save(rightWord: field.stringValue)
     }
@@ -300,8 +289,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         saveButton.isEnabled = !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // MARK: - Views
-
     private func makeButton(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
         button.setAccessibilityLabel(title)
@@ -316,7 +303,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
         return row
     }
 
-    /// Takes the free width of a row, so the views after it sit at the trailing edge.
     private static func spacer() -> NSView {
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)

@@ -4,8 +4,8 @@ import ScreenCaptureKit
 import os
 
 protocol MeetingAudioCapturing {
-    /// `clock` gives the recording its origin. The caller reads the host clock just before
-    /// this call, so no captured buffer starts before the origin.
+    /// The caller reads the host clock just before this call to set the recording's origin.
+    /// A buffer can start before the origin; `RecordingClock` clips those frames.
     @MainActor
     func start(into meeting: MeetingFolder, clock: RecordingClock,
                onInterrupted: @escaping @MainActor (_ reason: String) -> Void) async throws -> ActiveRecording
@@ -16,9 +16,9 @@ protocol ActiveRecording: AnyObject {
     /// end before `start` returns, while the caller cannot yet match the
     /// callback to this recording, so the caller checks this afterwards.
     var endReason: String? { get }
-    /// Per track, exactly the audio written to that track's file, for the live view. Bounded
-    /// and lossy (see `LiveAudioFeed`). Each stream finishes when the recording stops or is
-    /// interrupted. One reader per stream.
+    /// Converted buffers with file positions, for the live view. Omits inserted silence and
+    /// converter drain output. Bounded and lossy (see `LiveAudioFeed`), with one reader per
+    /// stream. Finishes when the recording stops or is interrupted.
     var writtenAudio: [MeetingTrack: AsyncStream<WrittenAudio>] { get }
     @MainActor func audioLevels() -> RecordingAudioLevels
     /// Every buffer the sample queue takes after this call is cut by `clock`. The caller reads

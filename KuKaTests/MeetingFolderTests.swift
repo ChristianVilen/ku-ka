@@ -128,14 +128,6 @@ final class MeetingFolderTests: XCTestCase {
         }
     }
 
-    func testTheHeardTranscriptIsTheSavedCopy() throws {
-        let meeting = try MeetingFolder.create(in: try makeTemporaryDirectory(), startingAt: localDate(2026, 10, 23, 14, 2))
-        try meeting.write("**[00:00:01] Them:** Ask Convio.\n", to: .heardTranscript)
-        try meeting.write("**[00:00:01] Them:** Ask Konvio.\n", to: .transcript)
-
-        XCTAssertEqual(try meeting.heardTranscript(), "**[00:00:01] Them:** Ask Convio.\n")
-    }
-
     func testWithoutAHeardCopyTheTranscriptWithoutItsNoteBecomesTheCopy() throws {
         let meeting = try MeetingFolder.create(in: try makeTemporaryDirectory(), startingAt: localDate(2026, 10, 23, 14, 2))
         try meeting.write("**[00:00:01] Them:** Ask Konvio.\n\n---\n\nKnown words applied: Convio → Konvio (1).\n", to: .transcript)

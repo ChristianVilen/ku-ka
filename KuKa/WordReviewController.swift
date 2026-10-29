@@ -1,7 +1,5 @@
 import AppKit
 
-/// Everything the review window draws. `WordReviewController` builds it from disk and its own few
-/// pieces of window state, and the window keeps no copy.
 struct WordReviewScreen: Equatable {
     enum Page: Equatable {
         case question(QuestionPage)
@@ -13,7 +11,7 @@ struct WordReviewScreen: Equatable {
         /// 1-based among all questions of the meeting, so it counts the answered ones too.
         let number: Int
         let count: Int
-        /// As the CLI wrote it, for the ordinary-words note and the field's VoiceOver label.
+        /// The quote's matched spelling, for the ordinary-words note and the field's VoiceOver label.
         let heard: String
         let place: String?
         let quote: HighlightedQuote
@@ -58,20 +56,14 @@ extension WordReviewScreen.HighlightedQuote {
     }
 }
 
-/// The review window's state and every write it makes. The window renders `screen` and calls the
-/// actions, and keeps no state of its own, like `ClipboardPanel` with `ClipboardHistoryController`.
-///
-/// - The open meeting's questions and skips, and the list, are read from disk for each action and
-///   each screen, never kept apart from it. A question whose word the list knows is not open.
-/// - A right word or "correct as heard" writes only the list, and Skip writes only the meeting's
-///   skip file. When the write fails, the question stays open and the page shows the error.
+/// Reads questions, skips, and the list from disk for each action and screen.
+/// Answers write only the list; skips write only the meeting. A failed write keeps the question open.
 @MainActor
 final class WordReviewController {
     /// Nil while the window is closed.
     private(set) var screen: WordReviewScreen? {
         didSet { if screen != oldValue { onChange?() } }
     }
-    /// The window binds this once, at launch.
     var onChange: (@MainActor () -> Void)?
 
     private let root: () -> URL
@@ -123,7 +115,6 @@ final class WordReviewController {
         answerOpenQuestion { _, question in try knownWords.add(.correctAsHeard(question.heard)) }
     }
 
-    /// The list does not change.
     func skip() {
         answerOpenQuestion { meeting, question in try meeting.saveSkip(question) }
     }
@@ -145,7 +136,6 @@ final class WordReviewController {
         render(knownWords.read())
     }
 
-    /// The finished page offers this only when another meeting has open questions.
     func showNextMeeting() {
         let list = knownWords.read()
         guard let next = WordReview.unfinished(in: root(), knownWords: list).first?.meeting else {
@@ -156,7 +146,6 @@ final class WordReviewController {
         show(next)
     }
 
-    /// Saved answers stay.
     func close() {
         meeting = nil
         isUpdating = false
@@ -183,7 +172,6 @@ final class WordReviewController {
             return
         }
         guard let question = review.openQuestions.first else {
-            // The open meeting has no open question, so every unfinished meeting is another one.
             screen = WordReviewScreen(
                 page: .finished(.init(meetingTitle: meeting.title, canUpdateNotes: review.hasLearnedWords && !isUpdating,
                                       isUpdating: isUpdating,
@@ -213,7 +201,6 @@ final class WordReviewController {
     }
 }
 
-/// The default `isOrdinary` of `WordReviewController`, which asks it only for terms and other words.
 enum OrdinaryWords {
     /// True when every word of the lower-cased phrase is spelled right in the language of the meeting
     /// locale. False when this Mac has no spelling dictionary for the language, so the answer keeps

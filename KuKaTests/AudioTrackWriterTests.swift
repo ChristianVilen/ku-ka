@@ -102,26 +102,12 @@ final class AudioTrackWriterTests: XCTestCase {
             recording.stream(stream, didOutputSampleBuffer: microphone, of: .microphone)
             recording.stream(stream, didOutputSampleBuffer: system, of: .audio)
         }
+        XCTAssertGreaterThan(recording.audioLevels().microphone, 0, "still recording")
         XCTAssertGreaterThan(recording.audioLevels().system, 0, "still recording")
         recording.stop()
 
         XCTAssertEqual(try runLengths(in: meeting.audioURL(.microphone)), [SampleRun(0, 3_200), SampleRun(1_000, 4)])
         XCTAssertEqual(try runLengths(in: meeting.audioURL(.system)), [SampleRun(0, 720_000), SampleRun(1_000, 4)])
-    }
-
-    @MainActor
-    func testAFirstBufferAFewTenthsAfterTheOriginIsWrittenAfterItsSilence() throws {
-        let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: Date())
-        let recording = try makeRecording(into: meeting, clock: RecordingClock(origin: HostTime(seconds: 100)))
-        let first = try buffer([1_000, 1_000, 1_000, 1_000], at: 100.2)
-
-        recording.queue.sync {
-            recording.stream(stream, didOutputSampleBuffer: first, of: .microphone)
-        }
-        XCTAssertGreaterThan(recording.audioLevels().microphone, 0, "still recording")
-        recording.stop()
-
-        XCTAssertEqual(try runLengths(in: meeting.audioURL(.microphone)), [SampleRun(0, 3_200), SampleRun(1_000, 4)])
     }
 
     @MainActor

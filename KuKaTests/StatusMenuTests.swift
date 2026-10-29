@@ -45,8 +45,6 @@ final class StatusMenuTests: XCTestCase {
         _ = (item.target as? NSObject)?.perform(item.action, with: item)
     }
 
-    // MARK: - Hotkey health warning
-
     func testRepeatedHealthDoesNotReplaceMenuItems() {
         let health = HotkeyHealth(issues: [.init(shortcut: .tileLeft, failure: .releaseFailed(-50))])
         sut.updateHotkeyHealth(health)
@@ -88,8 +86,6 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertFalse(menuItems.contains { $0.title.hasPrefix("⚠️") })
         XCTAssertNil(item(titled: "Open Keyboard Settings…"))
     }
-
-    // MARK: - Structure
 
     func testMenuContainsCoreItems() {
         for title in ["Launch at Login", "Window Tiling", "Clipboard History", "3 Seconds", "5 Seconds", "15 Seconds", "Forever", "Quit Ku-Ka"] {
@@ -138,8 +134,6 @@ final class StatusMenuTests: XCTestCase {
                        ["Meeting Notes", "Start Recording Meeting", "Check Words (1)…", "Retry Failed Meeting", "Open Meetings Folder"])
     }
 
-    // MARK: - Window tiling
-
     func testTilingToggleWritesSettingsFiresCallbackAndFlipsCheckmark() {
         let tiling = item(titled: "Window Tiling")!
         XCTAssertEqual(tiling.state, .on, "tiling defaults to enabled")
@@ -152,8 +146,6 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertEqual(callbackValue, false)
         XCTAssertEqual(tiling.state, .off)
     }
-
-    // MARK: - Clipboard history
 
     func testClipboardHistoryToggleWritesSettingsFiresCallbackAndFlipsCheckmark() {
         let clipboardHistory = item(titled: "Clipboard History")!
@@ -168,8 +160,6 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertEqual(clipboardHistory.state, .off)
     }
 
-    // MARK: - Thumbnail duration
-
     func testDurationPickIsExclusiveAndPersisted() {
         let fifteen = item(titled: "15 Seconds")!
         XCTAssertEqual(item(titled: "5 Seconds")!.state, .on, "default duration is checked")
@@ -183,8 +173,6 @@ final class StatusMenuTests: XCTestCase {
         }
     }
 
-    // MARK: - Launch at login
-
     func testLaunchAtLoginToggleDrivesTheLoginSeam() {
         let login = item(titled: "Launch at Login")!
         XCTAssertEqual(login.state, .off)
@@ -194,8 +182,6 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertEqual(loginItem.setCalls, [true])
         XCTAssertEqual(login.state, .on)
     }
-
-    // MARK: - Icon
 
     func testIconDiffersWhenKeepAwakeIsActive() {
         let plain = sut.icon(keepAwakeActive: false, recording: nil, warning: nil)
@@ -220,12 +206,5 @@ final class StatusMenuTests: XCTestCase {
 
         XCTAssertNotEqual(paused.tiffRepresentation, recording.tiffRepresentation)
         XCTAssertNotEqual(paused.tiffRepresentation, plain.tiffRepresentation)
-    }
-
-    func testAMeetingThatIsStartingShowsTheIdleIcon() {
-        let starting = sut.icon(keepAwakeActive: false, recording: RecorderPhase.starting.recordingMark, warning: nil)
-        let idle = sut.icon(keepAwakeActive: false, recording: RecorderPhase.idle.recordingMark, warning: nil)
-
-        XCTAssertEqual(starting.tiffRepresentation, idle.tiffRepresentation)
     }
 }

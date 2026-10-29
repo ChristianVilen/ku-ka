@@ -1,8 +1,6 @@
 import Foundation
 
-/// A suspect word that passed every check. Apart from `review.json`, only `WordQuestions.select`
-/// makes one, so its heard text has 1 to 4 tokens and occurs as whole tokens in its quote, the
-/// quote was in the transcript that the CLI got, and the list did not know the heard text.
+/// A suspect validated by `WordQuestions.select`, unless loaded from a hand-edited `review.json`.
 struct WordQuestion: Codable, Equatable, Sendable {
     /// As the quote writes it, so typing it back means "correct as heard".
     let heard: String
@@ -13,7 +11,6 @@ struct WordQuestion: Codable, Equatable, Sendable {
     /// "Them at 00:12:31". Nil when no transcript line has the whole quote.
     let place: String?
 
-    /// Matches a question with its skip.
     var key: String { Self.key(of: heard) }
 
     /// The tokens of the heard text, as the list compares forms, so "Convio", "convio", and
@@ -82,7 +79,6 @@ struct WordReview: Equatable {
     /// know it when Ku-Ka asked, so it learned it since: from an answer in any meeting, or by hand.
     let known: Set<String>
 
-    /// In question order.
     var openQuestions: [WordQuestion] { questions.filter { !skipped.contains($0.key) && !known.contains($0.key) } }
     var isFinished: Bool { openQuestions.isEmpty }
     /// The list learned a word of this meeting since Ku-Ka asked, so Update Notes can change something.

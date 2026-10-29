@@ -5,11 +5,9 @@ struct TestError: LocalizedError {
     let errorDescription: String?
 }
 
-/// What the summary CLI writes in the meeting tests, unless a test says otherwise.
 let defaultNotes = "## Summary\nShip Friday."
 
 extension Result where Success == CommandResult, Failure == any Error {
-    /// A CLI run that exits 0 and writes `stdout`.
     static func reply(_ stdout: String) -> Self {
         .success(CommandResult(termination: .exited(0), stdout: stdout, stderr: ""))
     }
@@ -51,8 +49,6 @@ final class SuspendedTranscriber: FakeTranscriber {
     }
 }
 
-/// What the processor test classes share: a meeting with empty audio files in a temporary folder, two
-/// transcribers that hear the same short meeting, and the trash and progress of each run.
 @MainActor
 class MeetingProcessorTestCase: XCTestCase {
     var whisper: FakeTranscriber!
@@ -113,8 +109,6 @@ class MeetingProcessorTestCase: XCTestCase {
     }
 }
 
-/// What the controller test classes share: a real recorder and controller on a temporary meetings folder,
-/// with a fake capture, transcriber, room labeller, CLI runner, and notifier.
 @MainActor
 class MeetingNotesTestCase: XCTestCase {
     var root: URL!
@@ -139,7 +133,6 @@ class MeetingNotesTestCase: XCTestCase {
     var permissionWindows = 0
     var stateChanges = 0
     var controlsRequests: [MeetingControlsRequest] = []
-    /// The recorder of the newest `sut`.
     var recorder: MeetingRecorder!
     var sut: MeetingNotesController!
     var menu: NSMenu!

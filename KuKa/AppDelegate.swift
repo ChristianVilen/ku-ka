@@ -91,9 +91,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Permissions
-
-    /// Refresh permissions and show onboarding while a grant is missing.
     private func setupPermissions() {
         permissionHandlingEnabled = true
         permissions.onChange = { [weak self] in self?.permissionsChanged() }
@@ -147,8 +144,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Menu Bar
-
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         updateStatus()
@@ -160,15 +155,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = statusMenu.menu
     }
 
-    // MARK: - Clipboard History
-
-    /// Binds the panel to the controller's callback slots and wires the menu
-    /// toggle and screenshot-deletion hook. Called unconditionally from
-    /// `applicationDidFinishLaunching` — unlike `clipboardHistory.enable()`,
-    /// none of this touches the real pasteboard, so it doesn't need the
-    /// `isTesting` gate. Binding here (rather than leaving `clipboardPanel`
-    /// as an untouched lazy var) guarantees `bindController()` runs exactly
-    /// once, before the panel could ever be shown.
+    /// Binds callbacks once at launch, before presentation. Safe in tests: it does not read
+    /// the real pasteboard, unlike `clipboardHistory.enable()`.
     private func setupClipboardHistory() {
         clipboardPanel.bindController()
 
@@ -190,8 +178,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Hotkey
-
     private func setupHotkey() {
         hotkeyManager.onChange = { [weak self] in self?.updateStatus() }
         hotkeyManager.onAction = { [weak self] action in
@@ -208,8 +194,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager.start()
     }
 
-    /// Shows the panel on the cursor's screen, or dismisses it if a second
-    /// hotkey press catches it already open.
     private func toggleClipboardPanel() {
         if clipboardPanel.isVisible {
             clipboardPanel.dismiss()
@@ -217,8 +201,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             clipboardPanel.show()
         }
     }
-
-    // MARK: - Capture Flow
 
     private func startCapture(_ mode: CaptureFlow.Mode) {
         // Screen Recording can be revoked at any time, so re-check at press
@@ -236,8 +218,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await self.captureFlow.start(mode, layout: layout, mouseLocation: mouseLocation)
         }
     }
-
-    // MARK: - Thumbnail & Editor
 
     private func setupThumbnailStack() {
         thumbnailStack.onEdit = { [weak self] result in
@@ -265,12 +245,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let editor = EditorWindow(image: result.image, fileURL: result.fileURL, store: imageStore)
         editorWindow = editor
 
-        // Drop our reference once the window closes (Done/Delete/close button/Escape)
-        // so the editor and its full-resolution image deallocate. A second
-        // editor can be opened while one is up, so only clear the reference
-        // if it still points at the editor that closed. `editor` must be
-        // weak here: a strong capture in its own stored closure would be a
-        // retain cycle.
+        // Release the image when this editor closes, without clearing a newer editor.
+        // Capture `editor` weakly to avoid a cycle through its stored closure.
         editor.onClose = { [weak self, weak editor] in
             if let editor, self?.editorWindow === editor {
                 self?.editorWindow = nil

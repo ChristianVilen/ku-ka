@@ -2,18 +2,13 @@ import CoreMedia
 
 /// A moment on the host clock, in seconds. ScreenCaptureKit stamps audio buffers on this
 /// clock, so a click time read here compares directly with a buffer's presentation time.
-///
-/// A struct and not a `TimeInterval`, so a host time cannot be mixed up with a duration,
-/// a recorded time, or a file position.
 struct HostTime: Comparable, Hashable, Sendable {
     let seconds: TimeInterval
 
     init(seconds: TimeInterval) { self.seconds = seconds }
 
-    /// A presentation time from ScreenCaptureKit.
     init(_ time: CMTime) { seconds = time.seconds }
 
-    /// The production source. Tests inject literal values.
     static func now() -> HostTime { HostTime(CMClockGetTime(CMClockGetHostTimeClock())) }
 
     static func < (lhs: HostTime, rhs: HostTime) -> Bool { lhs.seconds < rhs.seconds }
@@ -144,7 +139,6 @@ struct RecordingClock: Equatable, Sendable {
     }
 }
 
-/// A recorded time as the menu, the panel, and its rows write it: "4:05", or "1:02:09" from an hour.
 enum RecordedTime {
     static func format(_ interval: TimeInterval) -> String {
         let seconds = Int(max(0, interval))
@@ -156,8 +150,7 @@ enum RecordedTime {
     }
 }
 
-/// What `RecordingClock.cut` decided for one buffer. Only the clock can make one (the
-/// initializers are fileprivate), so no other code can decide which frames to keep.
+/// Only `RecordingClock` can decide which frames to keep.
 struct BufferCut: Equatable {
     struct Piece: Equatable {
         /// 0 before the first pause, one more after each resume.

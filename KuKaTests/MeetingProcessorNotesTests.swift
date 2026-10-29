@@ -3,7 +3,6 @@ import XCTest
 
 @MainActor
 final class MeetingProcessorNotesTests: MeetingProcessorTestCase {
-    // MARK: - Known words
 
     private func hearConvio() {
         whisper.byFileName["them.caf"] = .success(TrackTranscript(
@@ -197,9 +196,6 @@ final class MeetingProcessorNotesTests: MeetingProcessorTestCase {
         XCTAssertFalse(exists(.questions, in: meeting))
     }
 
-    // MARK: - Update Notes
-
-    /// A done meeting whose notes Ku-Ka made with an empty list.
     private func makeDoneMeeting() async throws -> MeetingFolder {
         let meeting = try makeMeeting()
         hearConvio()
@@ -326,7 +322,6 @@ final class MeetingProcessorNotesTests: MeetingProcessorTestCase {
     }
 }
 
-/// Waits until its task is cancelled.
 private final class WaitingCommandRunner: CommandRunning {
     private(set) var started = false
 

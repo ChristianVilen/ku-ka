@@ -2,8 +2,6 @@ import XCTest
 @testable import KuKa
 
 final class KnownWordsListTests: XCTestCase {
-    /// An invented list with every line shape of a real correction map: front matter, prose, headings,
-    /// several heard forms, ✓ on one form, " · " segments, an arrow in a note, and lines Ku-Ka cannot read.
     static let fixture = """
     ---
     name: term-corrections
@@ -45,8 +43,6 @@ final class KnownWordsListTests: XCTestCase {
     private func confirmedForms(of right: String, in list: KnownWordsList) throws -> [String] {
         try word(right, in: list).heard.filter(\.isConfirmed).map(\.phrase.text)
     }
-
-    // MARK: - Entries and ✓
 
     func testTheFixtureGivesExactlyItsSixWords() {
         XCTAssertEqual(fixtureList.words.map(\.right), ["Konvio", "Brytlane", "Quorix", "QRS", "TUV", "Jyri"])
@@ -131,8 +127,6 @@ final class KnownWordsListTests: XCTestCase {
             KnownWord(right: "Konvio", heard: [HeardForm(phrase: Phrase("Convio")!, isConfirmed: false)]),
         ])
     }
-
-    // MARK: - Lines
 
     func testFrontMatterAndCodeBlocksAreNeverRead() {
         let list = KnownWordsList(markdown: """
@@ -234,8 +228,6 @@ final class KnownWordsListTests: XCTestCase {
         XCTAssertEqual(crlf, KnownWordsList(markdown: markdown))
         XCTAssertEqual(crlf.words.count, 6)
     }
-
-    // MARK: - Using the list
 
     func testTheCorrectorReplacesOnlyConfirmedFormsThatNothingElseClaims() {
         let list = KnownWordsList(markdown: """

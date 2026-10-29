@@ -427,8 +427,6 @@ final class TranscriptTests: XCTestCase {
         }
     }
 
-    // MARK: - Known words
-
     private func corrector(_ list: String) -> Corrector {
         KnownWordsList(markdown: list).corrector
     }

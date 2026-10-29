@@ -1,6 +1,5 @@
 import Cocoa
 
-/// The recorder's state as the rest of the app sees it.
 enum RecorderPhase: Equatable {
     case idle
     case starting
@@ -28,8 +27,7 @@ enum RecorderPhase: Equatable {
     }
 }
 
-/// Everything the meeting controls panel draws. The recorder builds it on demand from its one
-/// state, and the panel keeps no copy of it.
+/// Built on demand from recorder state; the panel keeps no copy.
 struct MeetingControls: Equatable {
     enum Status: Equatable {
         case starting
@@ -55,9 +53,6 @@ enum MeetingControlsRequest: Equatable {
     case restoreDefaultPosition
 }
 
-/// Records one meeting at a time: Start with its permission checks, Pause, Resume, Stop, the live
-/// transcript, and everything the meeting controls panel draws. A meeting that stopped or was
-/// interrupted goes to `onEnded`, and `MeetingNotesController` makes its notes.
 @MainActor
 final class MeetingRecorder {
     private enum State {
@@ -81,11 +76,8 @@ final class MeetingRecorder {
         case interrupted(reason: String)
     }
 
-    /// One meeting while it records or is paused. Dropped at Stop, interruption, or quit,
-    /// which releases the folder lock. So nothing in it, the live text and the drawer flag
-    /// included, can show in the next meeting.
+    /// Dropped at Stop, interruption, or quit to release the folder lock and all live state.
     private struct ActiveMeeting {
-        /// Everything that changes while the meeting records.
         struct State: Equatable {
             /// The only clock that changes. `handle` gets a copy after each change.
             var clock: RecordingClock
@@ -97,7 +89,6 @@ final class MeetingRecorder {
         let folder: MeetingFolder
         let lock: FileLock
         let handle: ActiveRecording
-        /// Applies the live engine's updates to `state.live`.
         let liveTask: Task<Void, Never>
         var state: State
     }
@@ -112,7 +103,6 @@ final class MeetingRecorder {
     private let alertStartFailure: @MainActor (_ reason: String, _ offersPermissions: Bool) -> Bool
     private let now: () -> Date
     private let hostNow: () -> HostTime
-    /// Runs its work once, a few seconds later.
     private let closeSavedNoticeLater: @MainActor (@escaping @MainActor () -> Void) -> Void
 
     private var state: State = .idle(notice: nil) {
@@ -122,8 +112,7 @@ final class MeetingRecorder {
             onControlsChange?()
         }
     }
-    /// Redraws the panel's recorded time. Runs only while recording, so the time stops while
-    /// paused.
+    /// Runs only while recording; the displayed time stops while paused.
     private var displayTimer: Timer?
 
     /// Fires on every change of `phase`, Starting and quit included: what the menu and the
@@ -219,7 +208,7 @@ final class MeetingRecorder {
             let meeting = try MeetingFolder.create(in: root(), startingAt: now())
             do {
                 let lock = try meeting.lock()
-                // Read just before the capture starts, so no captured buffer starts earlier.
+                // Read the origin just before starting capture to align both tracks and click times.
                 let clock = RecordingClock(origin: hostNow())
                 let handle = try await capture.start(into: meeting, clock: clock) { [weak self] reason in
                     self?.handleInterruption(of: meeting, reason: reason)
@@ -244,7 +233,6 @@ final class MeetingRecorder {
         }
     }
 
-    /// Nil when recording can start, otherwise the reason it cannot.
     private func missingGrant() async -> String? {
         permissions.refresh()
         guard permissions.screenRecording else {

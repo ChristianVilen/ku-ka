@@ -87,7 +87,6 @@ struct RoomVoices: Equatable, Sendable {
     }
 }
 
-/// What Ku-Ka knows about the voices on the microphone track of one meeting.
 enum RoomLabels: Equatable, Sendable {
     /// Nothing was diarized: the live view, or a microphone track without speech.
     case notDiarized
@@ -96,8 +95,6 @@ enum RoomLabels: Equatable, Sendable {
     case failed(RoomLabelFailure)
 }
 
-/// Tells apart the voices on a meeting's microphone track, with the same three steps as
-/// `Transcribing`: the caller downloads the model when it is missing, then labels.
 protocol RoomLabelling {
     var needsDownload: Bool { get }
     /// `onStart` runs only once this Ku-Ka holds the download lock and the model is still
@@ -112,12 +109,10 @@ enum RoomLabelFailure: Equatable, Sendable, CustomStringConvertible {
     /// Also when another Ku-Ka holds the download lock.
     case download(String)
     case load(String)
-    /// The audio could not be read, or SpeakerKit threw.
     case diarize(String)
     /// SpeakerKit drops an embedder error without telling the caller, so no voice on a track with
     /// speech is the only sign of one.
     case noVoices
-    /// The microphone track is longer than `longestTrack`, so it was not diarized.
     case tooLong
     /// An earlier attempt did not finish labelling. A crash there would repeat at every launch,
     /// so it was not tried again.

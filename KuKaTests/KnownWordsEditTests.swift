@@ -8,8 +8,6 @@ final class KnownWordsEditTests: XCTestCase {
         try XCTUnwrap(KnownWordsList(markdown: markdown).adding(addition, on: today))
     }
 
-    // MARK: - Where a line goes
-
     func testANewConfirmedFormGoesRightAfterTheLastLineWithTheSameRightForm() throws {
         let markdown = """
         ## Companies
@@ -160,8 +158,6 @@ final class KnownWordsEditTests: XCTestCase {
         XCTAssertEqual(heard.words, before.words)
     }
 
-    // MARK: - What a line says
-
     func testAnAnswerTheListAlreadyHasAddsNothing() throws {
         let list = KnownWordsList(markdown: KnownWordsListTests.fixture + "\n## Correct as heard\n- Aino\n")
 
@@ -190,8 +186,6 @@ final class KnownWordsEditTests: XCTestCase {
         XCTAssertEqual(KnownWordsList(markdown: result).words.last?.heard,
                        [HeardForm(phrase: try XCTUnwrap(Phrase("Yuri")), isConfirmed: true)])
     }
-
-    // MARK: - Line endings
 
     func testACRLFListKeepsCRLFAndItsNewLinesUseIt() throws {
         let fixture = KnownWordsListTests.fixture
@@ -239,8 +233,6 @@ final class KnownWordsEditTests: XCTestCase {
                        KnownWordsList.newFileHeader + "\n## Correct as heard\n\n- **Aino** (correct as heard; added by Ku-Ka 2026-10-28)\n")
         XCTAssertTrue(KnownWordsList(markdown: KnownWordsList.newFileHeader).words.isEmpty, "the header itself has no entry")
     }
-
-    // MARK: - The factories
 
     func testTheFactoriesRejectTextThatTheListWouldReadDifferently() throws {
         let rejected: [(text: String, error: KnownWordAdditionError)] = [

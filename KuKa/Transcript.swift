@@ -17,14 +17,12 @@ struct TranscriptLine: Equatable {
     let text: String
 }
 
-/// A transcript after known words, with what changed.
 struct CorrectedTranscript: Equatable, Sendable {
     /// The corrected text without the known-words note. It ends with a line break when a note
     /// follows it.
     let body: String
     let applied: [AppliedCorrection]
 
-    /// `body`, then a note that lists each replacement once, when there is one.
     var markdown: String {
         guard !applied.isEmpty else { return body }
         let pairs = applied.map { "\($0.heard) → \($0.right) (\($0.count))" }.joined(separator: ", ")
@@ -60,8 +58,8 @@ enum Transcript {
         return lines
     }
 
-    /// The microphone segments that `merge` keeps, in time order: each has text and is no echo of
-    /// a "Them" segment.
+    /// Microphone segments with text that pass the segment-echo filter, in time order.
+    /// `merge` can later remove segments from echo voices.
     static func microphoneSpeech(_ tracks: [MeetingTrack: [TranscriptSegment]]) -> [TranscriptSegment] {
         let them = tracks[.system] ?? []
         return withText(tracks[.microphone] ?? [])
@@ -97,7 +95,6 @@ enum Transcript {
         }
     }
 
-    /// What one voice said on the microphone track, added up over its segments.
     private struct VoiceStats {
         var time: TimeInterval = 0
         /// The part of `time` during "Them" speech.
@@ -112,7 +109,7 @@ enum Transcript {
         }
     }
 
-    /// One pass over the microphone segments, which are in time order.
+    /// `voiced` must be in time order for `timeOverlapping`.
     private static func voiceStats(_ voiced: [(segment: TranscriptSegment, voice: Int)],
                                    them: [TranscriptSegment]) -> [Int: VoiceStats] {
         var stats: [Int: VoiceStats] = [:]
@@ -129,8 +126,8 @@ enum Transcript {
         return stats
     }
 
-    /// Short echoes pass the echo rule, and diarization can give them a voice of their own. A person
-    /// in the room can also talk while Them speaks, but only an echo repeats Them's words.
+    /// Short echoes can pass the segment filter and get a voice of their own. The voice filter
+    /// uses both time overlap and repeated words as evidence of an echo.
     private static let echoVoiceTimeShare = 0.7
     private static let echoVoiceWordShare = 0.5
     private static let minimumRoomVoiceWords = 5
@@ -187,12 +184,9 @@ enum Transcript {
         return markdown
     }
 
-    /// Applies `corrector` to the spoken text of each transcript line, after `**[hh:mm:ss] Label:** `.
-    /// The title, duration, byline, legend, and labels never change. With no replacement the result
-    /// is `heard` byte for byte. Otherwise a note at the end lists each replacement once, in the order
-    /// of its first use: "Known words applied: Convio → Konvio (3), Yuri → Jyri (1)."
-    ///
-    /// `heard` must be the text as the transcriber wrote it, so a replacement is never applied twice.
+    /// Corrects only spoken text, leaving headers and labels unchanged. Without replacements,
+    /// returns `heard` byte for byte; otherwise the note lists each pair in order of first use.
+    /// `heard` must be the original transcript so replacements never apply twice.
     static func corrected(_ heard: String, by corrector: Corrector) -> CorrectedTranscript {
         var found: [AppliedCorrection] = []
         let lines = heard.components(separatedBy: "\n").map { line -> String in
@@ -208,14 +202,12 @@ enum Transcript {
         return CorrectedTranscript(body: text, applied: applied)
     }
 
-    /// `markdown` without the note that `corrected` adds.
     static func withoutCorrectionNote(_ markdown: String) -> String {
         guard let note = markdown.range(of: CorrectedTranscript.noteStart, options: .backwards) else { return markdown }
         return String(markdown[..<note.lowerBound])
     }
 
-    /// "Them at 00:12:31": the label and time of the first transcript line whose spoken text has
-    /// `quote`, both folded with `Phrase.fold`. Nil when no line has it.
+    /// Matches quotes in spoken text using `Phrase.fold`; returns a place such as "Them at 00:12:31".
     static func place(of quote: String, in markdown: String) -> String? {
         let quote = Phrase.fold(quote)
         guard !quote.isEmpty else { return nil }
@@ -241,7 +233,6 @@ enum Transcript {
         return summed
     }
 
-    /// The time, the label, and the spoken text of a line `**[00:12:31] Them:** text`.
     private static func spokenLine(_ line: Substring) -> (time: Substring, label: Substring, text: Substring)? {
         guard let prefix = line.prefixMatch(of: #/\*\*\[(\d{2,}:\d{2}:\d{2})\] ([^*\n]+):\*\* /#) else { return nil }
         return (prefix.1, prefix.2, line[prefix.range.upperBound...])

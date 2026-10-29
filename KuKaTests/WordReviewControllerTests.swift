@@ -4,7 +4,6 @@ import XCTest
 
 @MainActor
 final class WordReviewControllerTests: XCTestCase {
-    /// One question as `review.json` holds it.
     private struct Ask {
         var heard: String
         var suggestion: String?
@@ -44,7 +43,6 @@ final class WordReviewControllerTests: XCTestCase {
         sut.onChange = { [unowned self] in changes += 1 }
     }
 
-    /// A done meeting whose `review.json` asks `asks`, with the heard forms in `skipped` already skipped.
     @discardableResult
     private func reviewedMeeting(at date: Date, asking asks: [Ask], skipped: [String] = []) throws -> MeetingFolder {
         let meeting = try MeetingFolder.create(in: root, startingAt: date)
@@ -91,8 +89,6 @@ final class WordReviewControllerTests: XCTestCase {
     private func hasSkipFile(_ meeting: MeetingFolder) -> Bool {
         FileManager.default.fileExists(atPath: meeting.url(for: .skipped).path)
     }
-
-    // MARK: - Showing a meeting
 
     func testShowWithoutAMeetingOpensTheOldestUnfinishedReviewAtItsFirstOpenQuestion() throws {
         try reviewedMeeting(at: localDate(2026, 10, 22, 9, 0), asking: [convio], skipped: ["Convio"])
@@ -162,8 +158,6 @@ final class WordReviewControllerTests: XCTestCase {
                                            quote: .init(before: "", match: "Kworix", after: " moved the launch."),
                                            reason: nil, suggestion: "", isOrdinary: false))
     }
-
-    // MARK: - Answers
 
     func testSavingARightWordAddsAConfirmedLineAndWritesNothingElseAndMovesOn() throws {
         let meeting = try reviewedMeeting(at: localDate(2026, 10, 23, 9, 0), asking: [convio, yuri])
@@ -333,8 +327,6 @@ final class WordReviewControllerTests: XCTestCase {
         XCTAssertNil(list)
     }
 
-    // MARK: - The finished page
-
     func testTheFinishedPageOffersUpdateNotesOnlyWhenTheListLearnedAWordOfTheMeeting() throws {
         let skipped = try reviewedMeeting(at: localDate(2026, 10, 23, 9, 0), asking: [convio])
         let answered = try reviewedMeeting(at: localDate(2026, 10, 24, 9, 0), asking: [yuri])
@@ -459,8 +451,6 @@ final class WordReviewControllerTests: XCTestCase {
         XCTAssertEqual(questionPage?.meetingTitle, "Meeting on 2026-10-22 at 09:00")
     }
 
-    // MARK: - Changes
-
     func testCloseClearsTheScreenAndEveryChangeTellsTheWindowOnce() throws {
         let meeting = try reviewedMeeting(at: localDate(2026, 10, 23, 9, 0), asking: [convio, yuri])
 
@@ -476,8 +466,6 @@ final class WordReviewControllerTests: XCTestCase {
         sut.skip()
         XCTAssertEqual(skipped(in: meeting), ["convio"], "no answer without an open window")
     }
-
-    // MARK: - Ordinary words
 
     func testTheSpellCheckerFindsOrdinaryEnglishWordsButNotAName() throws {
         guard NSSpellChecker.shared.availableLanguages.contains(where: { $0 == "en" || $0.hasPrefix("en_") }) else {

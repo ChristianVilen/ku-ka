@@ -2,7 +2,6 @@ import AVFAudio
 import CoreMedia
 import Speech
 
-/// The live engine seam. Production: `AppleLiveTranscriber`.
 protocol LiveTranscribing {
     /// Starts live transcription of `audio` and returns its updates at once. When the reader of
     /// the returned stream goes away, the engine stops. Never downloads a model.
@@ -87,7 +86,6 @@ struct AppleLiveTranscriber: LiveTranscribing {
     }
 }
 
-/// One track's transcriber and analyzer.
 private struct TrackAnalysis {
     let track: MeetingTrack
     let audio: AsyncStream<WrittenAudio>

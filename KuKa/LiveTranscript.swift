@@ -13,10 +13,7 @@ struct LiveResult: Equatable, Sendable {
     let finalizedThrough: TimeInterval
 }
 
-/// What the live engine reports. A failure is a value, so the controller only stores it and
-/// has no error path for the live view.
 enum LiveUpdate: Equatable, Sendable {
-    /// Both analyzers are ready. Text can come.
     case started
     /// No live text for this meeting, with the reason to show. Never followed by a download.
     case unavailable(String)
@@ -25,7 +22,6 @@ enum LiveUpdate: Equatable, Sendable {
     case failed(String)
 }
 
-/// One row of the drawer.
 struct LiveRow: Equatable {
     enum Content: Equatable {
         case speech(Speaker, text: String, isFinal: Bool)
@@ -47,8 +43,7 @@ struct LivePreview: Equatable {
     let behind: TimeInterval?
 }
 
-/// The live text of one meeting. In memory only, never on disk. A pure value: tests feed it
-/// literal results.
+/// In memory only, never on disk.
 ///
 /// Per track: the final phrases and at most one volatile tail, in file positions. The final
 /// rows come from `Transcript.merge`, so their order and echo rule are the ones in
@@ -84,8 +79,7 @@ struct LiveTranscript: Equatable {
         var isSettled = false
     }
 
-    /// Applies one update. `now` and `clock` measure a result's lag on arrival, so silence
-    /// does not grow it.
+    /// Measures lag on arrival, so silence does not grow it.
     mutating func apply(_ update: LiveUpdate, now: HostTime, clock: RecordingClock) {
         let isRunning = status == .preparing || status == .live
         switch update {

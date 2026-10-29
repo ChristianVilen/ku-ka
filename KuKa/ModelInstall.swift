@@ -1,6 +1,5 @@
 import Foundation
 
-/// One model that Ku-Ka downloads once into `root` and then uses offline.
 /// `<name>/` exists only when the model is complete: that is the only install
 /// state. A download writes `.<name>.partial/`, which the next download
 /// continues in, and holds `.lock`, because the hub downloader appends to
@@ -8,7 +7,6 @@ import Foundation
 struct ModelInstall {
     let root: URL
     let name: String
-    /// Names the model in messages, such as "Whisper".
     let label: String
     /// How long `install` waits while another Ku-Ka holds the lock.
     var lockWait: Duration = .zero
@@ -32,8 +30,7 @@ struct ModelInstall {
         try FileManager.default.moveItem(at: partial, to: folder)
     }
 
-    /// Nil as soon as the model is installed while another Ku-Ka holds the lock: the other Ku-Ka
-    /// installed it, so there is nothing to wait for.
+    /// Nil if another Ku-Ka installed the model while holding the lock.
     private func acquireLock() async throws -> FileLock? {
         let clock = ContinuousClock()
         let deadline = clock.now + lockWait

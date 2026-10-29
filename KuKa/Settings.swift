@@ -1,7 +1,6 @@
 import Cocoa
 import ServiceManagement
 
-/// Test seam for the login-item registration KuKa can't exercise in tests.
 protocol LoginItemManaging {
     var isEnabled: Bool { get }
     func setEnabled(_ enabled: Bool) throws
@@ -19,7 +18,6 @@ struct SystemLoginItem: LoginItemManaging {
     }
 }
 
-/// Typed access to user preferences: every key and default defined once.
 final class Settings {
     private let defaults: UserDefaults
     private let loginItem: LoginItemManaging

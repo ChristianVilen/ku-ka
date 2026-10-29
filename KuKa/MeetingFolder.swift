@@ -49,9 +49,9 @@ enum MeetingDocument: String, CaseIterable {
     case failure = "error.md"
     /// The transcript as the transcriber wrote it, before known words.
     case heardTranscript = ".transcript-as-heard.md"
-    /// The questions about suspect words. Only the summarize step writes it, before `summary.md`.
+    /// Only the summarize step writes this, before `summary.md`.
     case questions = "review.json"
-    /// The questions that the user skipped. Only `saveSkip` writes it, after `summary.md`.
+    /// Only `saveSkip` writes this, after `summary.md`.
     case skipped = "review-skipped.json"
 }
 
@@ -67,13 +67,11 @@ enum MeetingStep: Equatable {
     }
 }
 
-/// A model that the transcribe step downloads before its first use.
 enum MeetingModel: Equatable {
     case speech
     case speaker
 }
 
-/// What `MeetingProcessor.process` reports while it runs. The menu shows `title`.
 enum MeetingProgress: Equatable {
     case step(MeetingStep)
     case downloading(MeetingModel)
@@ -119,10 +117,8 @@ enum MeetingStage: Equatable {
 }
 
 struct MeetingFolder: Hashable {
-    /// The meetings folder with every symlink resolved, as `realpath` gives it ("/private/var" for
-    /// "/var"), and then the meeting's own name. Every way to make a value gives this one form, so
-    /// two values for one meeting are equal: from the setting, from `all(in:)`, from a notification,
-    /// and before the folder exists.
+    /// Resolves the root with `realpath` (including "/var" to "/private/var") before adding the name,
+    /// so every value for one meeting compares equal, even before its folder exists.
     let url: URL
 
     init(url: URL) {
@@ -157,8 +153,6 @@ struct MeetingFolder: Hashable {
     }
 
     var title: String {
-        // folderName's yyyy-MM-dd_HH-mm, plus the -2, -3 suffix that create
-        // adds on a name clash.
         guard let match = name.wholeMatch(of: #/(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})(?:-(\d+))?/#) else {
             return name
         }
@@ -228,9 +222,8 @@ struct MeetingFolder: Hashable {
         try String(contentsOf: url(for: document), encoding: .utf8)
     }
 
-    /// The transcript as the transcriber wrote it. Without the copy (a meeting transcribed before
-    /// known words, or a deleted copy), it first saves `transcript.md` without its known-words note
-    /// as the copy, so a later run never corrects text twice.
+    /// When the heard copy is missing, saves `transcript.md` without its correction note as the copy.
+    /// Later runs use that copy so corrections never apply twice.
     func heardTranscript() throws -> String {
         do {
             return try read(.heardTranscript)

@@ -3,8 +3,6 @@ import XCTest
 
 @MainActor
 final class MeetingProcessorRoomLabelTests: MeetingProcessorTestCase {
-    /// Gives the microphone track two segments, each inside its own voice, so the transcript has
-    /// room labels.
     private func twoVoices(on transcriber: FakeTranscriber) throws -> RoomLabels {
         transcriber.byFileName["me.caf"] = .success(TrackTranscript(segments: [
             TranscriptSegment(start: 4, end: 5, text: "Sounds good, I can ship it"),

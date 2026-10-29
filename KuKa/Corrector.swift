@@ -13,7 +13,6 @@ struct Phrase: Hashable, Sendable {
     let text: String
     let tokens: [String]
 
-    /// Nil when `text` has no token, so no phrase can match empty text.
     init?(_ text: String) {
         let tokens = Token.all(in: text).map(\.folded)
         guard !tokens.isEmpty else { return nil }
@@ -36,15 +35,12 @@ struct PhraseMatch: Equatable {
     let phrase: Phrase
 }
 
-/// Finds phrases in text, token by token.
-///
 /// A match covers whole tokens only, and the tokens of a phrase may have any whitespace between
 /// them and nothing else. Case is ignored. At each token the phrase with the most tokens wins,
 /// then the longest text. Matches never overlap, and the scan never goes back into a matched range.
 struct PhraseMatcher: Sendable {
     /// In the order they win at one token. The sort is stable, so on a full tie the first given wins.
     private let phrases: [Phrase]
-    /// Indices into `phrases`, in order, by each phrase's first token.
     private let byFirstToken: [String: [Int]]
 
     init(_ phrases: [Phrase]) {
@@ -53,7 +49,6 @@ struct PhraseMatcher: Sendable {
         byFirstToken = Dictionary(grouping: ordered.indices) { ordered[$0].tokens[0] }
     }
 
-    /// Left to right.
     func matches(in text: String) -> [PhraseMatch] {
         let tokens = Token.all(in: text)
         var matches: [PhraseMatch] = []

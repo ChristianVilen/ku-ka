@@ -86,7 +86,6 @@ struct Summarizer {
         self.timeout = timeout
     }
 
-    /// `knownWords` has no default value, so a caller cannot forget them.
     @concurrent
     func summarize(transcript: String, knownWords: RelevantKnownWords) async -> SummaryResult {
         let prompt = SummaryPrompt.make(transcript: transcript, knownWords: knownWords)
@@ -201,7 +200,6 @@ enum SummaryPrompt {
         """
 }
 
-/// What a suspect word is, as the CLI says.
 enum WordKind: String, Codable, Sendable {
     case person, company, product, term, other
 }
@@ -218,7 +216,6 @@ struct SuspectWord: Equatable, Sendable {
     let reason: String?
 }
 
-/// The CLI's reply, split into the notes and the review block.
 struct SummaryReply: Equatable {
     static let infoString = "ku-ka-review"
     static let maximumSuspects = 10
@@ -279,7 +276,6 @@ struct SummaryReply: Equatable {
                            reason: text(item["reason"]))
     }
 
-    /// Trimmed. Nil for a value that is not a string, or has nothing but whitespace.
     private static func text(_ value: Any?) -> String? {
         guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
             return nil

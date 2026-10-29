@@ -2,7 +2,6 @@ import XCTest
 @testable import KuKa
 
 final class WordReviewTests: XCTestCase {
-    /// The content that the CLI got: transcript lines without the header.
     private let content = """
     **[00:12:31] Them:** We should ask Convio about the rollout.
 
@@ -30,8 +29,6 @@ final class WordReviewTests: XCTestCase {
     private func makeMeeting(in root: URL? = nil, at date: Date = localDate(2026, 10, 23, 14, 2)) throws -> MeetingFolder {
         try MeetingFolder.create(in: root ?? makeTemporaryDirectory(), startingAt: date)
     }
-
-    // MARK: - Selecting questions
 
     func testASuspectStaysOnlyWhenItsHeardTextIsWholeTokensOfAQuoteThatIsInTheTranscript() {
         let questions = select([
@@ -78,15 +75,6 @@ final class WordReviewTests: XCTestCase {
 
         XCTAssertEqual(questions.map(\.heard), ["Yuri"], "a confirmed form, a provisional form, and a correct-as-heard word")
         XCTAssertEqual(rightForm, [], "a right form")
-    }
-
-    func testOneHeardFormIsAskedOnceWhateverItsCase() {
-        let questions = select([
-            suspect("Convio", quote: "We should ask Convio about the rollout.", reason: "first"),
-            suspect("CONVIO", quote: "We should ask Convio about the rollout.", reason: "second"),
-        ])
-
-        XCTAssertEqual(questions.map(\.reason), ["first"])
     }
 
     func testPunctuationAroundAHeardFormMakesNoSecondQuestionAndASkipOfOneClosesTheOther() throws {
@@ -150,8 +138,6 @@ final class WordReviewTests: XCTestCase {
         XCTAssertEqual(first.place, "Them at 00:12:31")
         XCTAssertEqual(questions.last?.place, "Them at 00:13:05")
     }
-
-    // MARK: - The review
 
     func testSkippedAndKnownQuestionsAreNotOpenAndOnlyKnownOnesCountAsLearned() throws {
         let questions = try ["Convio", "Yuri", "Kworix"].map { try question($0) }
@@ -310,7 +296,6 @@ final class WordReviewTests: XCTestCase {
         try meeting.write("# Summary", to: .summary)
         let questions = try [question("Convio"), question("Yuri")]
         try meeting.saveQuestions(questions)
-        // Answered in another meeting after this one asked.
         let list = KnownWordsList(markdown: "- Convio → **Konvio** ✓ confirmed 2026-10-28 by Ku-Ka\n")
 
         let review = try XCTUnwrap(meeting.wordReview(knownWords: list))

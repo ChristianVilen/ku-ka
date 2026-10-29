@@ -1,14 +1,10 @@
 import Cocoa
 
-/// The Meeting Notes menu section and the queue that makes the notes of each meeting the
-/// `MeetingRecorder` ended, of each unfinished meeting at launch, and of each Update Notes.
+/// Owns the Meeting Notes menu and serial processing queue.
 @MainActor
 final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection {
-    /// One piece of work in the processing queue.
     private enum Job: Equatable {
-        /// Makes the notes of a stopped or unfinished meeting.
         case process(MeetingFolder)
-        /// Makes the transcript and the summary of a done meeting again, with the list as it is now.
         case updateNotes(MeetingFolder)
 
         var meeting: MeetingFolder {
@@ -27,7 +23,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private let openURL: (URL) -> Void
 
     private var queue: [Job] = []
-    /// The job that runs now, and what the progress item says about it.
     private var current: (job: Job, activity: String)?
     private var processingTask: Task<Void, Never>?
     private var menuIsOpen = false
@@ -48,8 +43,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
 
     /// Fires on every change of the recorder's `phase`, Starting and quit included.
     var onStateChange: (() -> Void)?
-    /// The menu's Check Words, with nil for the oldest unfinished review. The app opens the review
-    /// window.
+    /// Nil selects the oldest unfinished review.
     var onCheckWords: (@MainActor (MeetingFolder?) -> Void)?
 
     /// Claims the recorder's `onChange` and `onEnded`.
@@ -178,7 +172,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         reloadFromDisk()
     }
 
-    /// Queues Update Notes for a done meeting. The review window calls this.
     func updateNotes(_ meeting: MeetingFolder) {
         enqueue(.updateNotes(meeting))
     }
@@ -193,7 +186,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         openURL(root)
     }
 
-    /// An equal job that waits or runs is not added again.
     private func enqueue(_ job: Job) {
         guard !queue.contains(job), current?.job != job else { return }
         queue.append(job)
@@ -283,7 +275,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         }
     }
 
-    /// Nil while idle.
     private var statusLine: String? {
         guard recorder.phase != .starting else { return "Starting Recording" }
         guard let recorded = recorder.recordedTime.map(RecordedTime.format) else { return nil }
@@ -329,7 +320,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         meterView.show(levels)
     }
 
-    /// The failed meetings and the words to check, which change on disk outside this controller.
+    /// Other processes can change failures and word reviews on disk.
     private func reloadFromDisk() {
         let failed = MeetingFolder.all(in: root()).filter {
             if case .failed = $0.1 { return true }
@@ -342,7 +333,6 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         checkWordsItem.title = "Check Words (\(open))…"
     }
 
-    /// "1 word to check", "3 words to check".
     private static func wordCount(_ count: Int) -> String {
         count == 1 ? "1 word to check" : "\(count) words to check"
     }
