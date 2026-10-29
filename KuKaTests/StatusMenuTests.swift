@@ -24,8 +24,7 @@ final class StatusMenuTests: XCTestCase {
         let meetingNotes = MeetingNotesController(
             recorder: recorder,
             root: { [unowned self] in meetingsRoot },
-            processor: MeetingProcessor(transcribers: [FakeTranscriber()], roomLabeller: FakeRoomLabeller(),
-                                        knownWords: { .empty }),
+            processor: makeMeetingProcessor(),
             wordsToCheck: { [unowned self] in WordReview.openQuestionCount(of: $0, in: meetingsRoot, knownWords: .empty) },
             notifier: FakeNotifier())
         sut = StatusMenu(settings: settings, sections: [KeepAwakeController(defaults: defaults), meetingNotes])
