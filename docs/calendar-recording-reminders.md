@@ -20,6 +20,8 @@ Suggested explanation text is "Calendar events offer recording reminders. Ku-Ka 
 
 `CalendarReminderController` owns policy, receipts, event revisions, tokens, and recording associations. `CalendarReminderNotifications` builds native requests and categories through injectable `Calls`. `SystemNotifier` remains the only delegate. Its `onCalendarReminder` callback awaits the controller before the delegate completes the response. Existing file and Check Words routes remain available.
 
+The controller holds one optional offer whose kind carries the event and, for an end offer, the recording session. Its recording link is either validating Start or associated. The association's end reminder is waiting, offered at a deadline, or continued. The notification adapter owns pending-add cancellation and failed-add cleanup. Removing a token prevents an in-flight add from leaving a visible request. An old add failure can clear only its own controller offer.
+
 `CalendarReminderDriver` owns EventKit-change, wake, clock-change, and time-zone-change observers. It owns a 60-second safety timer and one replaceable next-boundary timer. `schedule(at: nil)` cancels only the boundary. `stop()` removes all resources. Tests replace the observers and timers through `Calls`.
 
 `AppDelegate` constructs the integration outside its test-host guard only. Its existing `meetingNotes.onStateChange` updates the status icon and forwards `recorderDidChange()`. It does not replace recorder callbacks. Quit cancels startup and shuts down calendar watchers before meeting processing. The notification adapter removes stale pending and delivered requests with the `calendar-recording.` prefix at launch, while preserving other requests and categories.
@@ -33,6 +35,8 @@ The controller queries from two minutes before now through 24 hours ahead and re
 Recurring identities include the original recurrence date, including detached occurrences whose start moved. Nonrecurring identities never use the mutable start date. Exact recurrence reads use fresh predicates around the original date and last observed start. They never accept the first series occurrence merely because its identifier matches.
 
 Within one source lifetime, an external identifier can preserve identity across a calendar move or local identifier change. The alias includes the provider account and original recurrence date. The previous calendar and item must no longer resolve before a new locator can take its identity. Duplicate external identities permanently disable that alias for this source instance. Narrow exact reads cannot establish aliases. A different account never inherits an alias. No match uses a title.
+
+`CalendarEventFields` requires an explicit provider source. Native mapping supplies `calendar.source.sourceIdentifier`. Only test fixtures use `"synthetic"`.
 
 Provider identity changes after restart, a cache reset beyond 4,096 observed identities, and detached events moved outside both exact-read windows can lose the association. A series that still resolves under its old identifier can prevent a detached alias from moving. These cases fail closed. They can miss a reminder or treat a changed identifier as a new occurrence. Ku-Ka cannot prove identity across a full provider resync. Provider sync delays can also delay edits. The app must be running. A long sleep can miss starts outside the two-minute grace period.
 

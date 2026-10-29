@@ -23,6 +23,8 @@ A lightweight macOS app to replace the default `Shift+Command+4` selected area s
 
 Calendar reminders use `CalendarOccurrence`, `CalendarReminderController`, `CalendarReminderStore`, `EventKitCalendarSource`, `CalendarReminderNotifications`, and `CalendarReminderDriver`. `AppDelegate.calendarReminders` is the optional app-owned controller for the #43 Settings UI. Enable through `setEnabled(_:) async`, never a defaults-only write. Keep native construction outside the existing XCTest and `--uitesting` guard. `SystemNotifier` is the sole notification delegate. Forward recorder changes through the existing Meeting Notes callback. See `docs/calendar-recording-reminders.md` for exact interfaces and identity limits. Tests must inject calendar fields, notification-center calls, and driver signals. Never use a real EventKit store, real notification delivery, capture, or model downloads in these tests.
 
+The reminder controller owns one typed offer and one validating or associated recording link. Only the notification adapter cleans up pending or failed native adds. `CalendarEventFields` requires the provider source. Use `"synthetic"` only in tests.
+
 Optional `meeting.json` display-title metadata does not change dated folder names or meeting stages. `MeetingRecorder.displayTitle` fixes the title for its session. `MeetingNotesController` shows a bounded title in the existing status line and retains the full title in its tooltip and accessibility label.
 
 ### File Structure

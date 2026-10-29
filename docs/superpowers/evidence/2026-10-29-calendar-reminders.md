@@ -80,3 +80,13 @@ One Minor coverage gap remains. Driver restart and AppDelegate startup ordering 
 The decision-trail review used `gpt-6-sol`. Its handoff points are preserved here: #43 owns the Settings switch, native checks remain pending, warnings and skips must stay visible, and app-running and provider-identity limits remain part of the contract. App-owned reminders can miss starts during a long sleep or while Ku-Ka is quit. An uncertain provider identity loses its association instead of guessing which event to use.
 
 The implementation used the existing worktree and serial code workers. Routine design choices proceeded under the user's delegation. No sibling branch was merged, and no push, PR publication, app installation, or issue closure was performed.
+
+## Judo refactor verification
+
+The judo refactor starts at `0b609fd`. B1 uses one typed offer, one validating or associated recording link, and one explicit end-reminder state. The controller grows from 304 to 332 lines. It removes dictionary scans and paired link clearing, but does not reduce the total line count. S1 places pending-add cancellation and failed-add cleanup in the native notification adapter. C1 requires an explicit provider source when constructing calendar fields.
+
+Before edits, the unchanged calendar suites passed 43 tests. B1 passed those same behavior tests, including concurrent unchanged refresh and deleted-event post-start validation. The new partial-native-add failure test failed before cleanup changed because pending and delivered request identifiers remained. After cleanup, 45 calendar tests passed. Preparation cancellation and controller disable also exercise the actual adapter through an injected center. The final focused calendar, recorder, and notifier run passed 77 tests.
+
+The full unit run passed 854 tests, skipped five opt-in checks, and failed none. Its result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-44-21-+0200.xcresult`. Both raw and `TEST_RUNNER_` real-service opt-ins were unset. No real calendar, notification delivery, capture, private transcript, or model access was used.
+
+Xcode again printed CoreDevice, CoreSimulator, duplicate-destination, and Info.plist warnings. The full result contains a QoS priority-inversion warning in unchanged `WordReviewWindowTests.swift`. Its cause remains unclassified. The native checks listed above remain pending. Independent review of the refactor follows this verification.
