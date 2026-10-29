@@ -53,6 +53,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func show() {
+        loginError.stringValue = ""
+        loginError.isHidden = true
         refresh()
         guard let window else { return }
         activation.open(window)

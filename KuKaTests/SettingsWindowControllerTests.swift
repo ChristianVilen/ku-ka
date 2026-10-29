@@ -107,6 +107,21 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(sut.loginError.stringValue.contains("Registration refused"))
     }
 
+    func testReopeningAfterExternalLoginApprovalClearsPreviousError() {
+        login.errorToThrow = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Registration refused"])
+        sut.show()
+        sut.launchAtLogin.performClick(nil)
+        XCTAssertEqual(sut.launchAtLogin.state, .off)
+        XCTAssertFalse(sut.loginError.isHidden)
+        XCTAssertTrue(sut.loginError.stringValue.contains("Registration refused"))
+        sut.close()
+        login.isEnabled = true
+        sut.show()
+        XCTAssertEqual(sut.launchAtLogin.state, .on)
+        XCTAssertTrue(sut.loginError.isHidden)
+        XCTAssertEqual(sut.loginError.stringValue, "")
+    }
+
     func testLoginRequestThatNeedsSystemApprovalShowsActualStateAndGuidance() {
         struct PendingLoginItem: LoginItemManaging {
             var isEnabled: Bool { false }
