@@ -29,7 +29,7 @@ Calendar #28 and Teams #41 can add controls to the Meeting Notes group after the
 
 The same suite sends native Command-W events and checks actual onboarding and word-review windows in both close orders beside Settings. Each test closes its windows. `StatusMenuTests` sends Command-comma through the application menu, checks the single Settings entry, and rejects persistent preference controls in the status menu.
 
-The app host selects isolated `KuKa.TestHost` defaults and an inert login service before any runtime setup. XCTest starts no app polling, permissions, hotkeys, or recording. `--uitesting` retains Settings and the static menu with the same isolated preferences and no operational feature sections or runtime callbacks. The revised `--uitesting` host was not launched during this task.
+`main.swift` selects the launch host once. XCTest has no app delegate and never constructs production services. `--uitesting` selects `SettingsPreviewAppDelegate` with isolated `KuKa.TestHost` defaults, an inert login service, Settings, and the static menu. XCTest takes priority when both markers exist. `AppLaunchModeTests` checks selection and invokes both preview Settings commands with injected presentation and activation. The revised `--uitesting` host was not launched on the desktop during this task.
 
 Use one runner with DerivedData in `build/task-verification`:
 
@@ -48,6 +48,8 @@ xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
 ```
 
 ## Test results and method
+
+The B1 host regression first failed against `02ed968` with `XCTAssertFalse failed - XCTest must not construct the production AppDelegate`. After host separation and the S1 thumbnail refactor, the focused `AppLaunchModeTests` and `SettingsWindowControllerTests` run passed 17 tests with no failures. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-28-14-+0200.xcresult`. S1 used the existing native-action and saved-custom-value tests, with literal menu labels instead of row-index and tag assumptions. The earlier full-suite results below remain historical; the parent task runs the final full suite.
 
 The final full KuKaTests run at `18593df` passed 818 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_17-06-17-+0200.xcresult`. A prior full run at `3a7037b` passed 817 tests before the final regression test was added.
 

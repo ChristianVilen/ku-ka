@@ -4,7 +4,13 @@ import Cocoa
 // visible to the compiler so the @MainActor AppDelegate can be created here.
 MainActor.assumeIsolated {
     let app = NSApplication.shared
-    let delegate = AppDelegate()
+    let mode = AppLaunchMode(environment: ProcessInfo.processInfo.environment, arguments: CommandLine.arguments)
+    let delegate: (any NSApplicationDelegate)?
+    switch mode {
+    case .production: delegate = AppDelegate()
+    case .xctest: delegate = nil
+    case .settingsPreview: delegate = SettingsPreviewAppDelegate()
+    }
     app.delegate = delegate
-    app.run()
+    withExtendedLifetime(delegate) { app.run() }
 }

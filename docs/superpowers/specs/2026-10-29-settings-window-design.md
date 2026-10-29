@@ -50,6 +50,8 @@ Keep knownWordsFile, meetingLocale, panel geometry, and onboarding bookkeeping u
 
 `Settings` owns persistence. `SummaryTool` is a three-case enum with one candidate list per case. `SettingsWindowController` owns the native window and actions; a separate view file may contain layout. `AppDelegate` connects its typed callbacks to existing runtime owners. Avoid a generic settings registry or observation framework.
 
+`main.swift` selects one host through `AppLaunchMode`. XCTest has no application delegate and takes priority over `--uitesting`. The preview argument selects `SettingsPreviewAppDelegate`, with isolated defaults, inert login management, one Settings window, and a static menu. Production `AppDelegate` contains no test-mode branches. One title-and-duration table defines thumbnail choices, and each native menu item carries its duration directly.
+
 At the start of each queued job, `MeetingNotesController` reads the tool preference once and passes the value through `MeetingProcessor` into `Summarizer`. Retry and Update Notes use this same boundary. A running transcription keeps its tool even if Settings changes before its summary. Queued jobs read the new choice when they start. Keep the setting out of queue identity.
 
 Automatic keeps the current agy-then-claude fallback. Explicit choices have one candidate and return its existing useful failure details. Preserve executable search paths, invocation flags, timeout, empty working folder, fixed PATH, known-word filtering, context-file reads, review parsing, heard-text updates, and cancellation. `SummaryDocument` already omits CLI attribution; keep its output unchanged.

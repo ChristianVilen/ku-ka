@@ -5,16 +5,7 @@ import UserNotifications
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let hotkeyManager = HotkeyManager()
-    static var isTesting: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            || CommandLine.arguments.contains("--uitesting")
-    }
-    let settings: Settings = {
-        if isTesting {
-            return Settings(defaults: UserDefaults(suiteName: "KuKa.TestHost")!, loginItem: DisabledLoginItem())
-        }
-        return Settings()
-    }()
+    private let settings = Settings()
     private let imageStore = ImageStore()
     private lazy var captureFlow = CaptureFlow(
         selection: SelectionSession(),
@@ -57,16 +48,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         requestUpdate: { [weak self] in self?.meetingNotes.updateNotes($0) }
     )
     private lazy var wordReviewWindow = WordReviewWindowController(controller: wordReview)
-    private lazy var statusMenu = StatusMenu(sections: Self.isTesting ? [] : [keepAwake, meetingNotes])
+    private lazy var statusMenu = StatusMenu(sections: [keepAwake, meetingNotes])
     private lazy var settingsWindow = SettingsWindowController(settings: settings)
     private let permissions = PermissionsManager()
     private var onboardingController: OnboardingWindowController?
-    /// False in UI-test runs, where permission handling is skipped entirely
-    /// (also keeps the warning badge off the status icon there).
+    // Hotkey setup can report changes before permission monitoring starts.
     private var permissionHandlingEnabled = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard !Self.isTesting else { return .terminateNow }
         guard meetingRecorder.phase.isCapturing else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "Stop Recording and Quit?"
@@ -78,7 +67,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        guard !Self.isTesting else { return }
         hotkeyManager.stop()
         keepAwake.deactivate()
         clipboardHistory.disable()
@@ -89,10 +77,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if Self.isTesting {
-            if CommandLine.arguments.contains("--uitesting") { setupMenuBar() }
-            return
-        }
         setupMenuBar()
         setupThumbnailStack()
         setupKeepAwake()
@@ -184,7 +168,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenu.onShowSettings = { [weak self] in self?.settingsWindow.show() }
         statusItem.menu = statusMenu.menu
         NSApp.mainMenu = statusMenu.applicationMenu()
-        guard !Self.isTesting else { return }
         settingsWindow.onTilingChanged = { [weak self] enabled in
             self?.hotkeyManager.tilingEnabled = enabled
         }
@@ -296,10 +279,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateStatus() {
-        if Self.isTesting {
-            statusItem.button?.image = statusMenu.icon(keepAwakeActive: false, recording: nil, warning: nil)
-            return
-        }
         let health = permissionHandlingEnabled
             ? HotkeyHealth(accessibilityMissing: !permissions.accessibility, issues: hotkeyManager.issues)
             : .healthy
@@ -322,9 +301,4 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.toolTip = phase.statusDescription.map { "Ku-Ka: \($0)" }
         scheduleScreenshotSetup()
     }
-}
-
-private struct DisabledLoginItem: LoginItemManaging {
-    var isEnabled: Bool { false }
-    func setEnabled(_ enabled: Bool) throws {}
 }

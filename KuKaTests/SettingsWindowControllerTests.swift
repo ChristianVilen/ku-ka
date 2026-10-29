@@ -37,7 +37,7 @@ final class SettingsWindowControllerTests: XCTestCase {
         sut.windowTiling.performClick(nil)
         sut.clipboardHistory.performClick(nil)
         sut.displayAwake.performClick(nil)
-        sut.thumbnailDuration.selectItem(withTag: 15)
+        sut.thumbnailDuration.selectItem(withTitle: "15 seconds")
         fire(sut.thumbnailDuration)
         sut.summaryTool.selectItem(withTag: 2)
         fire(sut.summaryTool)
@@ -93,7 +93,10 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertTrue(sut.window === window)
         XCTAssertEqual(sut.windowTiling.state, .off)
         XCTAssertEqual(settings.thumbnailDuration, 7.5)
-        XCTAssertEqual(sut.thumbnailDuration.itemArray.prefix(4).map(\.tag), [3, 5, 15, 0])
+        XCTAssertEqual(sut.thumbnailDuration.itemTitles, ["3 seconds", "5 seconds", "15 seconds", "Forever", "Custom (7.5 seconds)"])
+        XCTAssertEqual(sut.thumbnailDuration.titleOfSelectedItem, "Custom (7.5 seconds)")
+        fire(sut.thumbnailDuration)
+        XCTAssertEqual(settings.thumbnailDuration, 7.5)
         defaults.removeObject(forKey: "windowTilingEnabled")
         XCTAssertEqual(defaults.persistentDomain(forName: "SettingsWindowControllerTests")! as NSDictionary, before)
         XCTAssertEqual(login.setCalls, [])
@@ -138,8 +141,9 @@ final class SettingsWindowControllerTests: XCTestCase {
 
     func testEveryPermanentThumbnailAndSummaryChoiceSavesThroughNativeActions() {
         sut.show()
-        for duration in [3, 5, 15, 0] {
-            sut.thumbnailDuration.selectItem(withTag: duration)
+        XCTAssertEqual(sut.thumbnailDuration.itemTitles, ["3 seconds", "5 seconds", "15 seconds", "Forever"])
+        for (title, duration) in [("3 seconds", 3.0), ("5 seconds", 5), ("15 seconds", 15), ("Forever", 0)] {
+            sut.thumbnailDuration.selectItem(withTitle: title)
             fire(sut.thumbnailDuration)
             XCTAssertEqual(settings.thumbnailDuration, Double(duration))
         }
@@ -267,16 +271,6 @@ final class SettingsWindowControllerTests: XCTestCase {
         add(attachment)
         XCTAssertEqual(content.bounds.size, NSSize(width: 580, height: 600))
         XCTAssertEqual(bitmap.pixelsWide * 600, bitmap.pixelsHigh * 580)
-    }
-
-    func testAppHostUsesIsolatedDefaultsAndInertLogin() throws {
-        let host = try XCTUnwrap(NSApp.delegate as? AppDelegate)
-        XCTAssertTrue(AppDelegate.isTesting)
-        XCTAssertFalse(host.settings.launchAtLogin)
-        let oldValue = host.settings.summaryTool
-        defer { host.settings.summaryTool = oldValue }
-        host.settings.summaryTool = .claude
-        XCTAssertEqual(Settings(defaults: UserDefaults(suiteName: "KuKa.TestHost")!, loginItem: FakeLoginItem()).summaryTool, .claude)
     }
 
     private func fire(_ control: NSControl) {

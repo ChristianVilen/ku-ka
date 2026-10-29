@@ -31,7 +31,9 @@ Optional `meeting.json` display-title metadata does not change dated folder name
 
 ```
 KuKa/
-├── main.swift           # App entry point (NSApplication.shared.run())
+├── main.swift           # Selects the launch host once and runs NSApplication
+├── AppLaunchMode.swift  # Production, passive XCTest, or Settings preview, parsed at startup
+├── SettingsPreviewAppDelegate.swift # Isolated Settings-only preview host for --uitesting
 ├── SettingsWindowController.swift # Native grouped Settings form, immediate saves, typed effects, injected sheets and presentation
 ├── OrdinaryWindowActivation.swift # Shared ordinary-window activation for Settings, onboarding, and word review
 ├── AppDelegate.swift    # NSStatusItem menu bar, wires hotkey → overlay → capture → thumbnail → editor pipeline
@@ -130,7 +132,7 @@ To keep a file out of the build, put it outside these two folders.
 
 | Class | Responsibility |
 |-------|---------------|
-| `AppDelegate` | Menu bar icon and retained Settings window with typed runtime callbacks, orchestrates the capture flow, multi-monitor overlay management; owns `ClipboardHistoryController` and `ClipboardPanel`, wires the Settings clipboard-history callback (persisted as `clipboardHistoryEnabled`) to enable/disable and dismiss the panel; and wires `ImageStore.onDeletedHash` to `controller.removeItem(hash:)` so deleting a screenshot drops its history row. Owns one `MeetingRecorder` (root read from `Settings.meetingsFolder`, live-transcript locale from `Settings.meetingLocale`) and wires its `onShowPermissions` to onboarding. Owns `MeetingNotesController`, which gets that recorder, wires its `onStateChange` to the icon, and calls `resumeUnfinished()` at launch outside tests and `shutDown()` at quit. Owns `MeetingControlsPanel`, which gets the same recorder, and calls its `bindRecorder()` at production launch. Owns the one `KnownWordsFile` (path from `Settings.knownWordsFile`), shared by `MeetingProcessor`, the `wordsToCheck` closure it gives `MeetingNotesController` (`WordReview.openQuestionCount(of:in:knownWords:)` with the list read at each call, for the Check Words count and the "words to check" notification), and the `WordReviewController` (root from `Settings.meetingsFolder`, `isOrdinary` from `OrdinaryWords.spellChecker` in `Settings.meetingLocale`, `requestUpdate` to `MeetingNotesController.updateNotes(_:)`), and its `WordReviewWindowController`, whose `bindController()` runs at production launch. XCTest returns before runtime setup and uses isolated defaults with an inert login service. `--uitesting` keeps the Settings and static menu available with the same isolation and without operational feature sections or runtime callbacks. `meetingNotes.onCheckWords` opens the window through `WordReviewWindowController.show(_:)`. Outside tests, installs `SystemNotifier.shared` as the notification center's delegate and points its `onCheckWords` at the same `show(_:)`. It gives `StatusMenu.icon` the mark from the recorder's `RecorderPhase.recordingMark`. While a meeting records or is paused, it labels the status item for VoiceOver ("recording meeting" or "recording paused") and sets a tooltip, and `applicationShouldTerminate` asks before Quit stops the recording |
+| `AppDelegate` | Production host only, selected by `main.swift`. Owns private Settings, the menu bar icon, and the retained Settings window with typed runtime callbacks. Orchestrates capture and multi-monitor overlays. Owns `ClipboardHistoryController` and `ClipboardPanel`; the Settings callback enables or disables history and dismisses its panel, and `ImageStore.onDeletedHash` removes deleted screenshots from history. Owns one `MeetingRecorder`, with root and locale from Settings, and routes missing permissions to onboarding. Owns `MeetingNotesController`, wires its state to the icon, calls `resumeUnfinished()` at launch and `shutDown()` at quit. Owns `MeetingControlsPanel` and binds it at launch. Shares one `KnownWordsFile` between `MeetingProcessor`, the Check Words count, and `WordReviewController`. The review controller uses the Settings root and locale, `OrdinaryWords.spellChecker`, and `MeetingNotesController.updateNotes(_:)`. Owns and binds `WordReviewWindowController`; Check Words and notification clicks open it. Installs `SystemNotifier.shared` as the notification center delegate. The status icon uses `RecorderPhase.recordingMark`, with recording and paused VoiceOver labels and tooltips. Quit asks before stopping a recording. XCTest never constructs this host; `--uitesting` uses the separate `SettingsPreviewAppDelegate`. |
 | `HotkeyManager` | Owns feature toggles, the 5-second retry timer, wake/session observers, and reported issues. Calls `CarbonHotkeyRegistrar.reconcile(desired:)` and forwards its actions. Has no registration map or generation tokens. `stop()` reports any release failures; stop and deinit clean up the timer and observers. |
 | `HotkeyShortcut` / `CarbonHotkeyRegistrar` | `HotkeyShortcut` defines each key, modifier set, label, and action. The registrar alone owns registration IDs and references in one map with active/pending-release states. It checks system conflicts, applies desired registrations, rejects stale events, retries releases, and reports failures even for disabled shortcuts. `CarbonHotkeyAPI` supplies five injectable C calls without any registration policy. |
 | `OverlayWindow` | Full-screen borderless `NSWindow` covering each display |
@@ -404,13 +406,13 @@ KuKaTests/                    # Unit tests (XCTest, macOS 26.0+)
 └── Mocks.swift               # MockFileManager, MockClipboard, MockScreenCapture, MockWindowListProvider, MockWindowControlling, MockStageManagerDetecting, FakeSleepPreventer, FakePasteboard, FakeKeystrokeSender, FakeNotifier, FakeMeetingAudioCapture, FakeActiveRecording, FakeLiveTranscriber, FakeTranscriber, FakeRoomLabeller, FakeCommandRunner, a one-phrase LiveResult init, a TeamsSpeakerObservation init from an optional name (nil is `noHighlightedTile`), and the makeTemporaryDirectory, waitUntil and localDate helpers
 ```
 
-No `KuKaUITests` target exists yet; `AppDelegate`'s `--uitesting` guard (below) is ready for one but nothing currently exercises it.
+No `KuKaUITests` target exists yet. `--uitesting` selects the Settings preview host for future UI tests.
 
 ### Test-Mode Guard
 
-When running under XCTest, `AppDelegate` skips permission setup and shortcut registration. This avoids TCC prompts and real shortcut claims. The same `isTesting` guard skips `clipboardHistory.enable()` at startup so tests never poll the real pasteboard, and skips `meetingNotes.resumeUnfinished()` so tests never read the real meetings folder or start a transcription. `MeetingRecorder.init`, `MeetingNotesController.init`, and their default adapters touch no microphone, stream, disk, or process. `MeetingControlsPanel.bindRecorder()` runs also under tests, because it touches no hardware and writes no setting. The panel stays hidden until a meeting starts. So does `WordReviewWindowController.bindController()`, which touches no disk; the window stays hidden until a review opens. Only outside tests does a notification click reach the review window. Meeting tests use a temporary folder, never `~/Meetings`:
-- Unit tests: detected via `XCTestConfigurationFilePath` environment variable
-- UI tests: detected via the `--uitesting` launch argument (no UI-test target currently exists)
+`main.swift` selects the host once through `AppLaunchMode`. `XCTestConfigurationFilePath` selects a passive host with no application delegate, even when `--uitesting` is also present. XCTest never constructs `AppDelegate` or its production controllers and services. Meeting tests use a temporary folder, never `~/Meetings`.
+
+Without XCTest, `--uitesting` selects `SettingsPreviewAppDelegate`. It owns isolated `KuKa.TestHost` defaults, an inert login adapter, one Settings window, and `StatusMenu(sections: [])` with a static icon. Menu Settings and Command-comma open the same window. The preview has no runtime feature callbacks, permission handling, polling, recovery, or model work. Production uses `AppDelegate` with private Settings and no test-mode branches.
 
 ### Running Tests
 
@@ -468,13 +470,13 @@ When running under XCTest, `AppDelegate` skips permission setup and shortcut reg
 
 ### Settings window
 
-- `SettingsWindowController` owns one 580-point-wide, scrollable native form. `show()` refreshes values without writing defaults. Custom thumbnail values remain intact. The permanent choices are 3, 5, 15 seconds, and Forever.
+- `SettingsWindowController` owns one 580-point-wide, scrollable native form. `show()` refreshes values without writing defaults. One title-and-duration table defines the permanent thumbnail choices, 3, 5, 15 seconds, and Forever. Native menu items carry their Double durations in `representedObject`, including saved custom values.
 - `Settings` owns `keepDisplayAwake` under the same key and true default. `KeepAwakeController` receives the value and applies changes to the active assertion without writing defaults.
 - `Settings.meetingContextFile` reads and writes the optional background-file path. Nil removes the preference and never deletes a file. Native file and folder selection use sheets, with injected pickers in tests.
 - `StatusMenu.onShowSettings` replaces menu preference callbacks. The status menu keeps commands, Keep Awake duration, and Turn Off. The application menu handles Command-comma while active. The Settings window handles Command-W directly.
 - `AppDelegate` wires Settings callbacks for tiling, clipboard history, display awake, and meetings folder. Folder changes call `MeetingNotesController.meetingsFolderChanged()` to refresh disk counts without moving active or queued jobs.
 - Calendar #28 and Teams #41 must use the Meeting Notes group and their own typed callbacks once their APIs are ready. This branch adds no integration controls or calendar operations.
-- XCTest uses `KuKa.TestHost` defaults and an inert login adapter before runtime setup. It starts no app polling, hotkeys, recording, permissions, or model work. `--uitesting` keeps only Settings and the static menu available.
+- `main.swift` selects a passive XCTest host before production objects can be constructed. `--uitesting` selects the separate Settings preview host with `KuKa.TestHost` defaults and an inert login adapter. XCTest takes priority when both markers exist.
 
 ### Keep Awake implementation
 

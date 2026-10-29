@@ -2,6 +2,9 @@ import Cocoa
 
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    private static let thumbnailChoices: [(title: String, duration: Double)] = [
+        ("3 seconds", 3), ("5 seconds", 5), ("15 seconds", 15), ("Forever", 0)
+    ]
     typealias Picker = @MainActor (NSWindow, URL?, @escaping (URL?) -> Void) -> Void
     let launchAtLogin = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
     let windowTiling = NSButton(checkboxWithTitle: "Enable window tiling", target: nil, action: nil)
@@ -70,13 +73,18 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         windowTiling.state = settings.windowTilingEnabled ? .on : .off
         clipboardHistory.state = settings.clipboardHistoryEnabled ? .on : .off
         displayAwake.state = settings.keepDisplayAwake ? .on : .off
-        if thumbnailDuration.numberOfItems > 4 { thumbnailDuration.removeItem(at: 4) }
         let duration = settings.thumbnailDuration
-        if [3.0, 5.0, 15.0, 0.0].contains(duration) {
-            thumbnailDuration.selectItem(withTag: Int(duration))
+        thumbnailDuration.removeAllItems()
+        for choice in Self.thumbnailChoices {
+            thumbnailDuration.addItem(withTitle: choice.title)
+            thumbnailDuration.lastItem?.representedObject = choice.duration
+        }
+        if let item = thumbnailDuration.itemArray.first(where: { $0.representedObject as? Double == duration }) {
+            thumbnailDuration.select(item)
         } else {
             thumbnailDuration.addItem(withTitle: "Custom (\(duration) seconds)")
-            thumbnailDuration.selectItem(at: 4)
+            thumbnailDuration.lastItem?.representedObject = duration
+            thumbnailDuration.select(thumbnailDuration.lastItem)
         }
         summaryTool.selectItem(at: SummaryTool.allCases.firstIndex(of: settings.summaryTool)!)
         folderPath.stringValue = settings.meetingsFolder.path
@@ -106,10 +114,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         clearBackground.setAccessibilityLabel("Clear background file")
         folderPath.setAccessibilityLabel("Meetings folder")
         backgroundPath.setAccessibilityLabel("Background file")
-        for (title, tag) in [("3 seconds", 3), ("5 seconds", 5), ("15 seconds", 15), ("Forever", 0)] {
-            thumbnailDuration.addItem(withTitle: title)
-            thumbnailDuration.lastItem?.tag = tag
-        }
         for (index, tool) in SummaryTool.allCases.enumerated() {
             summaryTool.addItem(withTitle: tool.title)
             summaryTool.lastItem?.tag = index
@@ -204,8 +208,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func durationChanged() {
-        guard thumbnailDuration.indexOfSelectedItem < 4, let selected = thumbnailDuration.selectedItem else { return }
-        settings.thumbnailDuration = Double(selected.tag)
+        guard let duration = thumbnailDuration.selectedItem?.representedObject as? Double else { return }
+        settings.thumbnailDuration = duration
     }
 
     @objc private func toolChanged() {
