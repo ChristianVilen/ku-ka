@@ -47,6 +47,14 @@ xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
   -only-testing:KuKaTests/SummaryToolJobTests
 ```
 
+## Test results and method
+
+The full KuKaTests run at `3a7037b` passed 817 tests, skipped 5, and failed none. The result bundle is `build/task-verification/Logs/Test/Test-KuKa-2026.10.29_16-57-16-+0200.xcresult`.
+
+The skipped tests are the optional meeting-panel image capture, two real live-transcript tests, the real Whisper audio test, and the real SpeakerKit test. They need explicit fixture or model paths and were not enabled. Xcode reported the existing CoreDevice and CoreSimulator mismatches, the Info.plist resource warning, and a thread-priority warning in WordReviewWindowTests. The run was successful, not warning-free.
+
+The summary-tool and native-control changes used observed red-green test cycles. The separate menu-migration red check was retrospective. It confirmed that the new test rejects the old menu, but it did not follow the planned test-before-migration order. The worker reports distinguish that regression check from TDD.
+
 ## Native rendering evidence
 
 ![Offscreen native Settings form](../evidence/settings-window/settings-offscreen-aqua-580x600.png)
@@ -61,5 +69,6 @@ The before state is the source inventory above. The earlier live baseline attemp
 - Check names, values, and login error announcements with VoiceOver.
 - Check real login registration and native file sheets in a signed app.
 - Check light and dark appearance on the desktop.
+- Check editor focus after Settings closes, and Command-A, C, X, V, and Z in the word-review text field.
 
-The parent runs the full KuKaTests suite and independent code review after this task.
+Task reviews approved the summary policy and the Settings migration. The final whole-branch review is pending. A task reviewer found a stale login error after reopening Settings; the final fix pass will address it.
