@@ -159,16 +159,16 @@ final class SettingsWindowControllerTests: XCTestCase {
         settings.meetingsFolder = URL(fileURLWithPath: path).deletingLastPathComponent()
         settings.meetingContextFile = URL(fileURLWithPath: path)
         sut.show()
-        let scroll = try XCTUnwrap(sut.window?.contentView as? NSScrollView)
+        let scroll = try XCTUnwrap(descendants(try XCTUnwrap(sut.window?.contentView)).compactMap { $0 as? NSScrollView }.first { !$0.isHidden })
         scroll.layoutSubtreeIfNeeded()
-        XCTAssertEqual(sut.window?.contentView?.bounds.width, 580)
+        XCTAssertEqual(sut.window?.contentView?.bounds.width, 760)
         XCTAssertTrue(try XCTUnwrap(scroll.documentView).isFlipped)
         let labels = descendants(try XCTUnwrap(scroll.documentView)).compactMap { $0 as? NSTextField }
         let background = try XCTUnwrap(labels.first { $0.accessibilityLabel() == "Background file" })
         XCTAssertEqual(background.accessibilityValue(), path)
         XCTAssertEqual(background.toolTip, path)
-        XCTAssertLessThan(background.frame.width, 300)
-        sut.window?.setContentSize(NSSize(width: 580, height: 300))
+        XCTAssertLessThan(background.frame.width, scroll.contentView.bounds.width)
+        sut.window?.setContentSize(NSSize(width: 640, height: 420))
         scroll.layoutSubtreeIfNeeded()
         XCTAssertGreaterThan(try XCTUnwrap(scroll.documentView).bounds.height, scroll.contentView.bounds.height)
     }
@@ -252,13 +252,13 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(sut.chooseMeetingsFolder.accessibilityLabel(), "Choose meetings folder")
         XCTAssertEqual(sut.chooseBackground.accessibilityLabel(), "Choose background file")
         XCTAssertEqual(sut.clearBackground.accessibilityLabel(), "Clear background file")
-        let controls: [NSView] = [sut.launchAtLogin, sut.windowTiling, sut.clipboardHistory, sut.displayAwake,
+        let controls: [NSView] = sut.pageButtons + [sut.launchAtLogin, sut.windowTiling, sut.clipboardHistory, sut.displayAwake,
             sut.thumbnailDuration, sut.chooseMeetingsFolder, sut.summaryTool, sut.chooseBackground, sut.clearBackground]
-        for (control, next) in zip(controls, controls.dropFirst() + [sut.launchAtLogin]) {
+        for (control, next) in zip(controls, controls.dropFirst() + [sut.pageButtons[0]]) {
             XCTAssertTrue(control.nextKeyView === next)
         }
         let content = try XCTUnwrap(sut.window?.contentView)
-        let scroll = try XCTUnwrap(content as? NSScrollView)
+        let scroll = try XCTUnwrap(descendants(content).compactMap { $0 as? NSScrollView }.first { !$0.isHidden })
         scroll.drawsBackground = true
         scroll.backgroundColor = .windowBackgroundColor
         content.layoutSubtreeIfNeeded()
@@ -266,11 +266,11 @@ final class SettingsWindowControllerTests: XCTestCase {
         content.cacheDisplay(in: content.bounds, to: bitmap)
         let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
-        attachment.name = "settings-offscreen-580x600"
+        attachment.name = "settings-offscreen-760x700"
         attachment.lifetime = .keepAlways
         add(attachment)
-        XCTAssertEqual(content.bounds.size, NSSize(width: 580, height: 600))
-        XCTAssertEqual(bitmap.pixelsWide * 600, bitmap.pixelsHigh * 580)
+        XCTAssertEqual(content.bounds.size, NSSize(width: 760, height: 700))
+        XCTAssertEqual(bitmap.pixelsWide * 700, bitmap.pixelsHigh * 760)
     }
 
     private func fire(_ control: NSControl) {

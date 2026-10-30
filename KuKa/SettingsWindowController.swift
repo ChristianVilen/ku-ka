@@ -6,10 +6,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         ("3 seconds", 3), ("5 seconds", 5), ("15 seconds", 15), ("Forever", 0)
     ]
     typealias Picker = @MainActor (NSWindow, URL?, @escaping (URL?) -> Void) -> Void
-    let launchAtLogin = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
-    let windowTiling = NSButton(checkboxWithTitle: "Enable window tiling", target: nil, action: nil)
-    let clipboardHistory = NSButton(checkboxWithTitle: "Record clipboard history", target: nil, action: nil)
-    let displayAwake = NSButton(checkboxWithTitle: "Keep display awake during Keep Awake", target: nil, action: nil)
+    let launchAtLogin = NSSwitch()
+    let windowTiling = NSSwitch()
+    let clipboardHistory = NSSwitch()
+    let displayAwake = NSSwitch()
     let thumbnailDuration = NSPopUpButton()
     let summaryTool = NSPopUpButton()
     let chooseMeetingsFolder = NSButton(title: "Choose…", target: nil, action: nil)
@@ -23,6 +23,20 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let chooseContext: Picker
     private let present: (NSWindow) -> Void
     private let activation: OrdinaryWindowActivation
+    private(set) var selectedPage: SettingsPage = .settings
+    let pageButtons = SettingsPage.allCases.map { page in
+        let button = NSButton(title: page.title, image: NSImage(systemSymbolName: page.symbol, accessibilityDescription: nil)!, target: nil, action: nil)
+        button.tag = page.rawValue
+        button.setButtonType(.pushOnPushOff)
+        button.bezelStyle = .glass
+        button.alignment = .left
+        button.imagePosition = .imageLeading
+        button.setAccessibilityLabel(page.title)
+        return button
+    }
+    private var pages: [SettingsPage: NSScrollView] = [:]
+    private let instructions = SettingsInstructionsView()
+    private var displayObserver: NSObjectProtocol?
     var onTilingChanged: ((Bool) -> Void)?
     var onClipboardChanged: ((Bool) -> Void)?
     var onDisplayAwakeChanged: ((Bool) -> Void)?
@@ -38,15 +52,23 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.chooseContext = chooseContext
         self.present = present
         self.activation = activation
-        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 600),
+        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
                                     styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: true)
         window.title = "Ku-Ka Settings"
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 580, height: 400)
-        window.maxSize = NSSize(width: 580, height: 1000)
+        window.contentMinSize = NSSize(width: 640, height: 420)
         super.init(window: window)
         window.delegate = self
         buildForm()
+        displayObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyDisplayOptions(.current) }
+        }
+    }
+
+    deinit {
+        if let displayObserver { NSWorkspace.shared.notificationCenter.removeObserver(displayObserver) }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -61,6 +83,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         loginError.stringValue = ""
         loginError.isHidden = true
         refresh()
+        selectPage(.settings)
         guard let window else { return }
         activation.open(window)
         present(window)
@@ -110,6 +133,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             control.action = action
         }
         thumbnailDuration.setAccessibilityLabel("Show thumbnail for")
+        launchAtLogin.setAccessibilityLabel("Launch at login")
+        windowTiling.setAccessibilityLabel("Enable window tiling")
+        clipboardHistory.setAccessibilityLabel("Record clipboard history")
+        displayAwake.setAccessibilityLabel("Keep display awake during Keep Awake")
         summaryTool.setAccessibilityLabel("Summary tool")
         chooseMeetingsFolder.setAccessibilityLabel("Choose meetings folder")
         chooseBackground.setAccessibilityLabel("Choose background file")
@@ -120,71 +147,119 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             summaryTool.addItem(withTitle: tool.title)
             summaryTool.lastItem?.tag = index
         }
-        let content = NSStackView()
-        content.orientation = .vertical
-        content.alignment = .leading
-        content.spacing = 12
-        func heading(_ title: String) {
-            let label = NSTextField(labelWithString: title)
-            label.font = .boldSystemFont(ofSize: 13)
-            content.addArrangedSubview(label)
-        }
-        func row(_ title: String, _ views: [NSView]) {
-            let label = NSTextField(labelWithString: title)
-            label.widthAnchor.constraint(equalToConstant: 125).isActive = true
-            let row = NSStackView(views: [label] + views)
-            row.spacing = 8
-            content.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        }
-        heading("General")
-        for view in [launchAtLogin, loginError, windowTiling, clipboardHistory, displayAwake] {
-            content.addArrangedSubview(view)
-        }
+        let content = SettingsLayout.page(title: "Settings", subtitle: "Make Ku-Ka work your way.")
+        func add(_ view: NSView) { SettingsLayout.add(view, to: content) }
+        add(SettingsLayout.heading("General", symbol: "gearshape.fill", color: .systemBlue))
+        let login = SettingsLayout.stack([SettingsLayout.row("Launch at login", control: launchAtLogin), loginError], spacing: 6)
+        loginError.widthAnchor.constraint(equalTo: login.widthAnchor).isActive = true
+        login.arrangedSubviews[0].widthAnchor.constraint(equalTo: login.widthAnchor).isActive = true
+        add(SettingsLayout.group([
+            login,
+            SettingsLayout.row("Window tiling", detail: "Move windows with Control + Option.", control: windowTiling),
+            SettingsLayout.row("Clipboard history", detail: "Keep recent copies until you quit Ku-Ka.", control: clipboardHistory),
+            SettingsLayout.row("Keep display awake", detail: "While a Keep Awake session is active.", control: displayAwake)
+        ]))
         loginError.textColor = .systemRed
         loginError.isHidden = true
-        heading("Screenshots")
-        row("Show thumbnail for", [thumbnailDuration])
-        heading("Meeting Notes")
-        row("Meetings folder", [folderPath, chooseMeetingsFolder])
-        row("Summary tool", [summaryTool])
-        let toolNote = NSTextField(wrappingLabelWithString: "Automatic tries Antigravity, then Claude Code. An explicit choice uses only that tool. Changes apply when the next job starts.")
-        toolNote.textColor = .secondaryLabelColor
-        content.addArrangedSubview(toolNote)
-        row("Background file", [backgroundPath, chooseBackground, clearBackground])
-        let contextNote = NSTextField(wrappingLabelWithString: "The complete background file goes with the transcript. Automatic may send it to both providers on fallback. Clear keeps the file.")
-        contextNote.textColor = .secondaryLabelColor
-        content.addArrangedSubview(contextNote)
+        add(SettingsLayout.heading("Screenshots", symbol: "camera.fill", color: .systemPurple))
+        add(SettingsLayout.group([SettingsLayout.row("Show thumbnail for", control: thumbnailDuration)]))
+        add(SettingsLayout.heading("Meeting notes", symbol: "waveform", color: .systemOrange))
+        func pathRow(_ title: String, path: NSTextField, buttons: [NSView]) -> NSView {
+            let column = SettingsLayout.stack(spacing: 6)
+            SettingsLayout.add(SettingsLayout.row(title, control: NSStackView(views: buttons)), to: column)
+            SettingsLayout.add(path, to: column)
+            return column
+        }
+        add(SettingsLayout.group([
+            pathRow("Meetings folder", path: folderPath, buttons: [chooseMeetingsFolder]),
+            SettingsLayout.row("Summary tool", control: summaryTool)
+        ]))
+        add(SettingsLayout.label("Automatic tries Antigravity, then Claude Code. An explicit choice uses only that tool. Changes apply when the next job starts.", size: 11, secondary: true))
+        add(SettingsLayout.group([pathRow("Background file", path: backgroundPath, buttons: [chooseBackground, clearBackground])]))
+        add(SettingsLayout.label("The complete background file goes with the transcript. Automatic may send it to both providers on fallback. Clear keeps the file.", size: 11, secondary: true))
+        add(SettingsLayout.label("Changes save automatically", size: 11, secondary: true))
         for label in [folderPath, backgroundPath] {
             label.lineBreakMode = .byTruncatingMiddle
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             label.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
-        let document = SettingsDocument()
-        scroll.documentView = document
-        content.translatesAutoresizingMaskIntoConstraints = false
-        document.addSubview(content)
-        document.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 24),
-            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -24),
-            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 24),
-            content.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -24),
-        ])
-        for note in [toolNote, contextNote, loginError] {
-            note.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        let root = SettingsBackground()
+        window?.contentView = root
+        let sidebar = SettingsGlass(radius: 16)
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(sidebar)
+        let brand = SettingsLayout.heading("Ku-Ka", symbol: "viewfinder", color: .systemBlue)
+        let navigation = SettingsLayout.stack(spacing: 8)
+        SettingsLayout.add(brand, to: navigation)
+        navigation.setCustomSpacing(24, after: brand)
+        for button in pageButtons {
+            button.target = self
+            button.action = #selector(pageClicked(_:))
+            button.heightAnchor.constraint(equalToConstant: 36).isActive = true
+            SettingsLayout.add(button, to: navigation)
         }
-        window?.contentView = scroll
-        let controls: [NSView] = [launchAtLogin, windowTiling, clipboardHistory, displayAwake,
-                                 thumbnailDuration, chooseMeetingsFolder, summaryTool, chooseBackground, clearBackground]
-        for (control, next) in zip(controls, controls.dropFirst() + [launchAtLogin]) {
-            control.nextKeyView = next
+        navigation.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.content.addSubview(navigation)
+        NSLayoutConstraint.activate([
+            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 10),
+            sidebar.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+            sidebar.widthAnchor.constraint(equalToConstant: 170),
+            navigation.leadingAnchor.constraint(equalTo: sidebar.content.leadingAnchor, constant: 12),
+            navigation.trailingAnchor.constraint(equalTo: sidebar.content.trailingAnchor, constant: -12),
+            navigation.topAnchor.constraint(equalTo: sidebar.content.topAnchor, constant: 24)
+        ])
+        pages = [.settings: SettingsLayout.scroll(content), .instructions: SettingsLayout.scroll(instructions)]
+        for scroll in pages.values {
+            scroll.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(scroll)
+            NSLayoutConstraint.activate([
+                scroll.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: 2),
+                scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+                scroll.topAnchor.constraint(equalTo: root.topAnchor),
+                scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor)
+            ])
         }
         window?.initialFirstResponder = launchAtLogin
+        selectPage(.settings)
+        applyDisplayOptions(.current)
+    }
+
+    @objc private func pageClicked(_ sender: NSButton) {
+        guard let page = SettingsPage(rawValue: sender.tag) else { return }
+        selectPage(page)
+    }
+
+    private func selectPage(_ page: SettingsPage) {
+        selectedPage = page
+        for (candidate, scroll) in pages { scroll.isHidden = candidate != page }
+        for button in pageButtons {
+            let selected = button.tag == page.rawValue
+            button.state = selected ? .on : .off
+            button.isBordered = selected
+            button.contentTintColor = selected ? .controlAccentColor : .labelColor
+        }
+        let controls: [NSView]
+        switch page {
+        case .settings:
+            controls = [launchAtLogin, windowTiling, clipboardHistory, displayAwake, thumbnailDuration,
+                        chooseMeetingsFolder, summaryTool, chooseBackground, clearBackground]
+        case .instructions:
+            controls = instructions.guideButtons
+        }
+        let keyViews: [NSView] = pageButtons + controls
+        for (control, next) in zip(keyViews, keyViews.dropFirst() + [pageButtons[0]]) { control.nextKeyView = next }
+        window?.makeFirstResponder(pageButtons[page.rawValue])
+    }
+
+    func applyDisplayOptions(_ options: SettingsDisplayOptions) {
+        func apply(in view: NSView) {
+            (view as? SettingsBackground)?.apply(options)
+            (view as? SettingsGlass)?.apply(options)
+            for child in view.subviews { apply(in: child) }
+        }
+        for button in pageButtons { button.bezelStyle = options.reduceTransparency ? .push : .glass }
+        if let root = window?.contentView { apply(in: root) }
     }
 
     @objc private func loginChanged() {
@@ -262,7 +337,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         panel.beginSheetModal(for: window) { result in completion(result == .OK ? panel.url : nil) }
     }
 }
-
 private final class SettingsWindow: NSWindow {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
@@ -272,8 +346,4 @@ private final class SettingsWindow: NSWindow {
         }
         return super.performKeyEquivalent(with: event)
     }
-}
-
-private final class SettingsDocument: NSView {
-    override var isFlipped: Bool { true }
 }
