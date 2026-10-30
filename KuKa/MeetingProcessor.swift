@@ -15,10 +15,7 @@ enum MeetingOutcome: Equatable {
 /// when every CLI fails.
 enum NotesUpdateOutcome: Equatable {
     case updated(summary: URL)
-    /// Every summary CLI failed. `transcript.md` was already written again, with the answers.
     case summaryToolFailed(message: String)
-    /// Anything else failed, for example a read or a write in the meeting folder. `summary.md` did
-    /// not change, and `transcript.md` may or may not have.
     case failed(message: String)
     case cancelled
     /// Another recorder or processor holds the folder's lock.
@@ -55,7 +52,20 @@ struct MeetingProcessor {
     }
 
     /// Asks no new questions and leaves both review files alone.
-    func updateNotes(_ meeting: MeetingFolder, tool: SummaryTool) async -> NotesUpdateOutcome {
+    func updateNotes(_ meeting: MeetingFolder, tool: SummaryTool,
+                     summaryInput: (String) -> Void = { _ in }) async -> NotesUpdateOutcome {
+        await update(meeting, source: .correctedTranscript, tool: tool, summaryInput: summaryInput)
+    }
+
+    func updateSummary(_ meeting: MeetingFolder, tool: SummaryTool,
+                       summaryInput: (String) -> Void = { _ in }) async -> NotesUpdateOutcome {
+        await update(meeting, source: .savedTranscript, tool: tool, summaryInput: summaryInput)
+    }
+
+    private enum SummarySource { case correctedTranscript, savedTranscript }
+
+    private func update(_ meeting: MeetingFolder, source: SummarySource, tool: SummaryTool,
+                        summaryInput: (String) -> Void) async -> NotesUpdateOutcome {
         let lock: FileLock
         do {
             lock = try meeting.lock()
@@ -67,7 +77,16 @@ struct MeetingProcessor {
         defer { lock.release() }
         guard meeting.stage() == .done else { return .notReady }
         do {
-            switch try await correctAndSummarize(meeting, tool: tool).result {
+            let result: SummaryResult
+            switch source {
+            case .correctedTranscript:
+                result = try await correctAndSummarize(meeting, tool: tool, summaryInput: summaryInput).result
+            case .savedTranscript:
+                let content = Transcript.contentForSummary(Transcript.withoutCorrectionNote(try meeting.read(.transcript)))
+                result = try await summarizeContent(content, in: meeting, list: knownWords(), tool: tool,
+                                                    summaryInput: summaryInput)
+            }
+            switch result {
             case .written(let notes, _, _, _):
                 try meeting.write(SummaryDocument.markdown(title: meeting.title, body: notes), to: .summary)
             case .failed(let failures):
@@ -82,6 +101,7 @@ struct MeetingProcessor {
     }
 
     func process(_ meeting: MeetingFolder, speakers: TeamsSpeakerEvidence = .empty, tool: SummaryTool,
+                 summaryInput: (String) -> Void = { _ in },
                  progress: (MeetingProgress) -> Void) async -> MeetingOutcome {
         let lock: FileLock
         do {
@@ -113,7 +133,7 @@ struct MeetingProcessor {
                     case .transcribe:
                         guard try await transcribe(meeting, speakers: speakers, progress: progress) else { return .noSpeech }
                     case .summarize:
-                        try await summarize(meeting, tool: tool)
+                        try await summarize(meeting, tool: tool, summaryInput: summaryInput)
                     }
                 } catch {
                     if Task.isCancelled { return .cancelled }
@@ -131,8 +151,6 @@ struct MeetingProcessor {
         return .failed(step, message: message)
     }
 
-    /// False when nobody spoke. The meeting is then done, and its audio stays
-    /// in the folder.
     private func transcribe(_ meeting: MeetingFolder, speakers: TeamsSpeakerEvidence,
                             progress: (MeetingProgress) -> Void) async throws -> Bool {
         let (tracks, transcriber, failures) = try await transcribeTracks(meeting, progress: progress)
@@ -141,7 +159,9 @@ struct MeetingProcessor {
         let lines = Transcript.merge(tracks.mapValues(\.segments), rooms: rooms, speakers: speakers)
         if let line = speakers.scans.mergeLine(for: lines) { Log.teams.notice(line) }
         let duration = tracks.values.map(\.duration).max() ?? 0
-        if lines.isEmpty {
+        let silentWithoutNotes = lines.isEmpty && (try? MeetingTypedNotesFile.read(in: meeting))?
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true
+        if silentWithoutNotes {
             // Summary first: it marks the meeting done, so a crash before the
             // transcript is written cannot run the summary step, which would
             // trash the audio.
@@ -151,7 +171,7 @@ struct MeetingProcessor {
                                         by: transcriber, after: failures, rooms: rooms, teams: speakers.scans)
         try meeting.write(heard, to: .heardTranscript)
         try meeting.write(heard, to: .transcript)
-        return !lines.isEmpty
+        return !silentWithoutNotes
     }
 
     /// The session lives only in here, so the Whisper model is released
@@ -238,7 +258,7 @@ struct MeetingProcessor {
         throw MeetingStepError(failures.map(\.description).joined(separator: "\n"))
     }
 
-    private func summarize(_ meeting: MeetingFolder, tool: SummaryTool) async throws {
+    private func summarize(_ meeting: MeetingFolder, tool: SummaryTool, summaryInput: (String) -> Void) async throws {
         // Trash the audio here, not right after writing transcript.md: this
         // step runs only once transcript.md exists, so it also cleans up after
         // a crash between the two.
@@ -247,7 +267,7 @@ struct MeetingProcessor {
         } catch {
             NSLog("Ku-Ka: could not move meeting audio to the Trash: \(error)")
         }
-        let summary = try await correctAndSummarize(meeting, tool: tool)
+        let summary = try await correctAndSummarize(meeting, tool: tool, summaryInput: summaryInput)
         switch summary.result {
         case .written(let notes, let suspects, _, _):
             // The questions, or the removal of old ones, go before `summary.md`, which marks the meeting done.
@@ -261,19 +281,30 @@ struct MeetingProcessor {
     /// Rebuilds `transcript.md` from the heard copy, so corrections never apply twice and a removed
     /// list line undoes its replacement. This also replaces hand edits to `transcript.md`.
     /// Throws only for meeting-folder reads or writes; the caller handles CLI failure and writes `summary.md`.
-    private func correctAndSummarize(_ meeting: MeetingFolder, tool: SummaryTool) async throws
+    private func correctAndSummarize(_ meeting: MeetingFolder, tool: SummaryTool,
+                                     summaryInput: (String) -> Void) async throws
         -> (result: SummaryResult, content: String, list: KnownWordsList) {
         let heard = try meeting.heardTranscript()
         let list = knownWords()
         let corrected = Transcript.corrected(heard, by: list.corrector)
         try meeting.write(corrected.markdown, to: .transcript)
         let content = Transcript.contentForSummary(corrected.body)
-        let result = await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content), tool: tool)
+        let result = try await summarizeContent(content, in: meeting, list: list, tool: tool, summaryInput: summaryInput)
+        return (result, content, list)
+    }
+
+    private func summarizeContent(_ content: String, in meeting: MeetingFolder, list: KnownWordsList,
+                                  tool: SummaryTool, summaryInput: (String) -> Void) async throws -> SummaryResult {
+        let typedNotes = try MeetingTypedNotesFile.read(in: meeting)
+        summaryInput(typedNotes)
+        let result = await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content), tool: tool,
+                                                typedNotes: typedNotes)
+        try Task.checkCancellation()
         if case .written(_, _, let cli, let earlier) = result, !earlier.isEmpty {
             NSLog("Ku-Ka: %@ wrote the notes of %@. Tried first: %@", cli.rawValue, meeting.name,
                   earlier.map(\.description).joined(separator: "; "))
         }
-        return (result, content, list)
+        return result
     }
 
     static func failureText(step: MeetingStep, message: String, at date: Date) -> String {
