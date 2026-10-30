@@ -10,12 +10,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     let windowTiling = NSSwitch()
     let clipboardHistory = NSSwitch()
     let displayAwake = NSSwitch()
+    let calendarReminders = NSSwitch()
+    let teamsSpeakerNames = NSSwitch()
     let thumbnailDuration = NSPopUpButton()
     let summaryTool = NSPopUpButton()
     let chooseMeetingsFolder = NSButton(title: "Choose…", target: nil, action: nil)
     let chooseBackground = NSButton(title: "Choose…", target: nil, action: nil)
     let clearBackground = NSButton(title: "Clear", target: nil, action: nil)
     let loginError = NSTextField(wrappingLabelWithString: "")
+    let calendarStatus = NSTextField(wrappingLabelWithString: "")
     private let folderPath = NSTextField(labelWithString: "")
     private let backgroundPath = NSTextField(labelWithString: "")
     private let settings: Settings
@@ -41,6 +44,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var onClipboardChanged: ((Bool) -> Void)?
     var onDisplayAwakeChanged: ((Bool) -> Void)?
     var onMeetingsFolderChanged: ((URL) -> Void)?
+    var onCalendarRemindersChanged: ((Bool) -> Void)?
 
     init(settings: Settings,
          chooseFolder: @escaping Picker = SettingsWindowController.folderPicker,
@@ -52,7 +56,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.chooseContext = chooseContext
         self.present = present
         self.activation = activation
-        let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
                                     styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: true)
         window.title = "Ku-Ka Settings"
         window.isReleasedWhenClosed = false
@@ -98,6 +102,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         windowTiling.state = settings.windowTilingEnabled ? .on : .off
         clipboardHistory.state = settings.clipboardHistoryEnabled ? .on : .off
         displayAwake.state = settings.keepDisplayAwake ? .on : .off
+        calendarReminders.state = settings.calendarRecordingRemindersEnabled ? .on : .off
+        teamsSpeakerNames.state = settings.teamsSpeakerNamesEnabled ? .on : .off
         let duration = settings.thumbnailDuration
         thumbnailDuration.removeAllItems()
         for choice in Self.thumbnailChoices {
@@ -125,6 +131,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         for (control, action) in [
             (launchAtLogin, #selector(loginChanged)), (windowTiling, #selector(tilingChanged)),
             (clipboardHistory, #selector(clipboardChanged)), (displayAwake, #selector(displayChanged)),
+            (calendarReminders, #selector(calendarChanged)), (teamsSpeakerNames, #selector(teamsChanged)),
             (chooseMeetingsFolder, #selector(folderClicked)), (chooseBackground, #selector(contextClicked)),
             (clearBackground, #selector(clearClicked)), (thumbnailDuration, #selector(durationChanged)),
             (summaryTool, #selector(toolChanged))
@@ -137,6 +144,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         windowTiling.setAccessibilityLabel("Enable window tiling")
         clipboardHistory.setAccessibilityLabel("Record clipboard history")
         displayAwake.setAccessibilityLabel("Keep display awake during Keep Awake")
+        calendarReminders.setAccessibilityLabel("Calendar recording reminders")
+        teamsSpeakerNames.setAccessibilityLabel("Teams speaker names")
         summaryTool.setAccessibilityLabel("Summary tool")
         chooseMeetingsFolder.setAccessibilityLabel("Choose meetings folder")
         chooseBackground.setAccessibilityLabel("Choose background file")
@@ -149,12 +158,17 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         let content = SettingsLayout.page(title: "Settings", subtitle: "Make Ku-Ka work your way.")
         func add(_ view: NSView) { SettingsLayout.add(view, to: content) }
+        func column(_ views: [NSView]) -> NSView {
+            let column = SettingsLayout.stack(spacing: 6)
+            for view in views { SettingsLayout.add(view, to: column) }
+            return column
+        }
+        func pathRow(_ title: String, path: NSTextField, buttons: [NSView]) -> NSView {
+            column([SettingsLayout.row(title, control: NSStackView(views: buttons)), path])
+        }
         add(SettingsLayout.heading("General", symbol: "gearshape.fill", color: .systemBlue))
-        let login = SettingsLayout.stack([SettingsLayout.row("Launch at login", control: launchAtLogin), loginError], spacing: 6)
-        loginError.widthAnchor.constraint(equalTo: login.widthAnchor).isActive = true
-        login.arrangedSubviews[0].widthAnchor.constraint(equalTo: login.widthAnchor).isActive = true
         add(SettingsLayout.group([
-            login,
+            column([SettingsLayout.row("Launch at login", control: launchAtLogin), loginError]),
             SettingsLayout.row("Window tiling", detail: "Move windows with Control + Option.", control: windowTiling),
             SettingsLayout.row("Clipboard history", detail: "Keep recent copies until you quit Ku-Ka.", control: clipboardHistory),
             SettingsLayout.row("Keep display awake", detail: "While a Keep Awake session is active.", control: displayAwake)
@@ -164,12 +178,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         add(SettingsLayout.heading("Screenshots", symbol: "camera.fill", color: .systemPurple))
         add(SettingsLayout.group([SettingsLayout.row("Show thumbnail for", control: thumbnailDuration)]))
         add(SettingsLayout.heading("Meeting notes", symbol: "waveform", color: .systemOrange))
-        func pathRow(_ title: String, path: NSTextField, buttons: [NSView]) -> NSView {
-            let column = SettingsLayout.stack(spacing: 6)
-            SettingsLayout.add(SettingsLayout.row(title, control: NSStackView(views: buttons)), to: column)
-            SettingsLayout.add(path, to: column)
-            return column
-        }
         add(SettingsLayout.group([
             pathRow("Meetings folder", path: folderPath, buttons: [chooseMeetingsFolder]),
             SettingsLayout.row("Summary tool", control: summaryTool)
@@ -177,6 +185,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         add(SettingsLayout.label("Automatic tries Antigravity, then Claude Code. An explicit choice uses only that tool. Changes apply when the next job starts.", size: 11, secondary: true))
         add(SettingsLayout.group([pathRow("Background file", path: backgroundPath, buttons: [chooseBackground, clearBackground])]))
         add(SettingsLayout.label("The complete background file goes with the transcript. Automatic may send it to both providers on fallback. Clear keeps the file.", size: 11, secondary: true))
+        add(SettingsLayout.group([
+            column([SettingsLayout.row("Calendar reminders", detail: "Calendar events offer recording reminders. Ku-Ka never starts or stops recording automatically.",
+                                       control: calendarReminders), calendarStatus]),
+            SettingsLayout.row("Teams speaker names", detail: "Experimental. After Stop, names remote speakers from the Teams app. Applies from the next recording.",
+                               control: teamsSpeakerNames)
+        ]))
+        calendarStatus.isHidden = true
         add(SettingsLayout.label("Changes save automatically", size: 11, secondary: true))
         for label in [folderPath, backgroundPath] {
             label.lineBreakMode = .byTruncatingMiddle
@@ -243,7 +258,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         switch page {
         case .settings:
             controls = [launchAtLogin, windowTiling, clipboardHistory, displayAwake, thumbnailDuration,
-                        chooseMeetingsFolder, summaryTool, chooseBackground, clearBackground]
+                        chooseMeetingsFolder, summaryTool, chooseBackground, clearBackground, calendarReminders,
+                        teamsSpeakerNames]
         case .instructions:
             controls = instructions.guideButtons
         }
@@ -282,6 +298,28 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func displayChanged() {
         settings.keepDisplayAwake = displayAwake.state == .on
         onDisplayAwakeChanged?(settings.keepDisplayAwake)
+    }
+
+    @objc private func calendarChanged() {
+        onCalendarRemindersChanged?(calendarReminders.state == .on)
+    }
+
+    func showCalendarStatus(_ status: CalendarReminderController.Status) {
+        calendarReminders.state = settings.calendarRecordingRemindersEnabled ? .on : .off
+        let text = switch status {
+        case .off, .ready: ""
+        case .requestingAccess: "Asking for Calendar access…"
+        case .calendarAccessRequired: "Allow Calendar access for Ku-Ka in System Settings > Privacy & Security > Calendars."
+        case .notificationsRequired: "Allow notifications for Ku-Ka in System Settings > Notifications."
+        case .readFailed: "Ku-Ka could not read your calendars. It tries again every minute."
+        }
+        calendarStatus.stringValue = text
+        calendarStatus.isHidden = text.isEmpty
+        calendarStatus.textColor = status == .requestingAccess ? .secondaryLabelColor : .systemRed
+    }
+
+    @objc private func teamsChanged() {
+        settings.teamsSpeakerNamesEnabled = teamsSpeakerNames.state == .on
     }
 
     @objc private func durationChanged() {
@@ -335,15 +373,5 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         panel.prompt = "Choose"
         panel.title = directory ? "Choose meetings folder" : "Choose background file"
         panel.beginSheetModal(for: window) { result in completion(result == .OK ? panel.url : nil) }
-    }
-}
-private final class SettingsWindow: NSWindow {
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
-           event.charactersIgnoringModifiers?.lowercased() == "w" {
-            performClose(nil)
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
     }
 }

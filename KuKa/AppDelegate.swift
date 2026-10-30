@@ -101,6 +101,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         SystemNotifier.shared.onCalendarReminder = { [weak controller] action, token in
             await controller?.handle(action, token: token)
         }
+        controller.onStatusChange = { [weak self, weak controller] in
+            guard let controller else { return }
+            self?.settingsWindow.showCalendarStatus(controller.status)
+        }
         calendarReminderStartup = Task { [weak self] in
             guard !Task.isCancelled, let self else { return }
             self.calendarReminders = controller
@@ -165,11 +169,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         updateStatus()
-        statusMenu.onShowSettings = { [weak self] in self?.settingsWindow.show() }
+        statusMenu.onShowSettings = { [weak self] in
+            self?.settingsWindow.show()
+            Task { await self?.calendarReminders?.refresh() }
+        }
         statusItem.menu = statusMenu.menu
         NSApp.mainMenu = statusMenu.applicationMenu()
         settingsWindow.onTilingChanged = { [weak self] enabled in
             self?.hotkeyManager.tilingEnabled = enabled
+        }
+        settingsWindow.onCalendarRemindersChanged = { [weak self] enabled in
+            Task { await self?.calendarReminders?.setEnabled(enabled) }
         }
         settingsWindow.onDisplayAwakeChanged = { [weak self] in self?.keepAwake.setDisplayAwake($0) }
         settingsWindow.onMeetingsFolderChanged = { [weak self] _ in self?.meetingNotes.meetingsFolderChanged() }

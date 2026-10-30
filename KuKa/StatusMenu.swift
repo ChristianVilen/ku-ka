@@ -151,24 +151,38 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     @objc private func openKeyboardSettings() { onOpenKeyboardSettings?() }
 
+    /// The menu bar while an ordinary window makes Ku-Ka a regular app. Without these items,
+    /// Command-W, Command-Q, and copy and paste do nothing in Ku-Ka's windows.
     func applicationMenu() -> NSMenu {
+        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        let menus: [(title: String, items: [NSMenuItem])] = [
+            ("Ku-Ka", [settingsItem(), .separator(),
+                       NSMenuItem(title: "Quit Ku-Ka", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")]),
+            ("File", [NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")]),
+            ("Edit", [NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"), redo, .separator(),
+                      NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
+                      NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
+                      NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
+                      NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")])
+        ]
         let mainMenu = NSMenu()
-        let appItem = NSMenuItem()
-        let appMenu = NSMenu()
-        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
-        settingsItem.target = self
-        settingsItem.keyEquivalentModifierMask = .command
-        appMenu.addItem(settingsItem)
-        appItem.submenu = appMenu
-        mainMenu.addItem(appItem)
+        for (title, items) in menus {
+            let submenu = NSMenu(title: title)
+            items.forEach(submenu.addItem)
+            mainMenu.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = submenu
+        }
         return mainMenu
     }
 
+    private func settingsItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        item.target = self
+        return item
+    }
+
     private func build() {
-        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
-        settingsItem.target = self
-        settingsItem.keyEquivalentModifierMask = .command
-        menu.addItem(settingsItem)
+        menu.addItem(settingsItem())
         menu.addItem(.separator())
 
         for section in sections {

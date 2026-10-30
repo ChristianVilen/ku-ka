@@ -101,6 +101,27 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertNotNil(item(titled: "⌘⇧C to open clipboard history"), "missing clipboard history feature line")
     }
 
+    func testApplicationMenuGivesOrdinaryWindowsTheStandardCommands() throws {
+        let commands = sut.applicationMenu().items.flatMap { $0.submenu?.items ?? [] }
+        let expected: [(title: String, key: String, modifiers: NSEvent.ModifierFlags, action: Selector)] = [
+            ("Quit Ku-Ka", "q", .command, #selector(NSApplication.terminate(_:))),
+            ("Close", "w", .command, #selector(NSWindow.performClose(_:))),
+            ("Undo", "z", .command, Selector(("undo:"))),
+            ("Redo", "z", [.command, .shift], Selector(("redo:"))),
+            ("Cut", "x", .command, #selector(NSText.cut(_:))),
+            ("Copy", "c", .command, #selector(NSText.copy(_:))),
+            ("Paste", "v", .command, #selector(NSText.paste(_:))),
+            ("Select All", "a", .command, #selector(NSText.selectAll(_:)))
+        ]
+        for command in expected {
+            let item = try XCTUnwrap(commands.first { $0.title == command.title }, command.title)
+            XCTAssertEqual(item.keyEquivalent, command.key, command.title)
+            XCTAssertEqual(item.keyEquivalentModifierMask, command.modifiers, command.title)
+            XCTAssertEqual(item.action, command.action, command.title)
+            XCTAssertNil(item.target, "\(command.title) must reach the key window through the responder chain")
+        }
+    }
+
     func testCommandCommaInApplicationMenuOpensSettings() throws {
         var opened = 0
         sut.onShowSettings = { opened += 1 }

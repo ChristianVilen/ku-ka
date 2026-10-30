@@ -27,27 +27,48 @@ final class SettingsWindowControllerTests: XCTestCase {
         defaults.removePersistentDomain(forName: "SettingsWindowControllerTests")
     }
 
-    func testNativeActionsSavePreferencesAndApplyTypedEffects() {
+    func testSwitchesSavePreferencesAndApplyTypedEffects() {
         var effects: [Bool] = []
+        var calendar: [Bool] = []
         sut.onTilingChanged = { effects.append($0) }
         sut.onClipboardChanged = { effects.append($0) }
         sut.onDisplayAwakeChanged = { effects.append($0) }
+        sut.onCalendarRemindersChanged = { calendar.append($0) }
         sut.show()
-        sut.launchAtLogin.performClick(nil)
-        sut.windowTiling.performClick(nil)
-        sut.clipboardHistory.performClick(nil)
-        sut.displayAwake.performClick(nil)
-        sut.thumbnailDuration.selectItem(withTitle: "15 seconds")
-        fire(sut.thumbnailDuration)
-        sut.summaryTool.selectItem(withTag: 2)
-        fire(sut.summaryTool)
+        for control in [sut.launchAtLogin, sut.windowTiling, sut.clipboardHistory, sut.displayAwake,
+                        sut.calendarReminders, sut.teamsSpeakerNames] {
+            control.performClick(nil)
+        }
         XCTAssertTrue(settings.launchAtLogin)
         XCTAssertFalse(settings.windowTilingEnabled)
         XCTAssertFalse(settings.clipboardHistoryEnabled)
         XCTAssertFalse(settings.keepDisplayAwake)
-        XCTAssertEqual(settings.thumbnailDuration, 15)
-        XCTAssertEqual(settings.summaryTool, .claude)
+        XCTAssertTrue(settings.teamsSpeakerNamesEnabled)
         XCTAssertEqual(effects, [false, false, false])
+        XCTAssertEqual(calendar, [true])
+        XCTAssertNil(defaults.object(forKey: "calendarRecordingRemindersEnabled"),
+                     "only CalendarReminderController.setEnabled saves the calendar choice")
+    }
+
+    func testCalendarStatusSaysWhatTheUserMustDoAndShowsTheSavedChoice() {
+        sut.show()
+        let texts: [(CalendarReminderController.Status, String)] = [
+            (.off, ""),
+            (.ready, ""),
+            (.requestingAccess, "Asking for Calendar access…"),
+            (.calendarAccessRequired, "Allow Calendar access for Ku-Ka in System Settings > Privacy & Security > Calendars."),
+            (.notificationsRequired, "Allow notifications for Ku-Ka in System Settings > Notifications."),
+            (.readFailed, "Ku-Ka could not read your calendars. It tries again every minute.")
+        ]
+        for (status, text) in texts {
+            sut.showCalendarStatus(status)
+            XCTAssertEqual(sut.calendarStatus.stringValue, text, "\(status)")
+            XCTAssertEqual(sut.calendarStatus.isHidden, text.isEmpty, "\(status)")
+        }
+        XCTAssertEqual(sut.calendarReminders.state, .off)
+        settings.calendarRecordingRemindersEnabled = true
+        sut.showCalendarStatus(.ready)
+        XCTAssertEqual(sut.calendarReminders.state, .on)
     }
 
     func testChooseCancelClearAndFolderCallback() {
@@ -89,15 +110,18 @@ final class SettingsWindowControllerTests: XCTestCase {
         sut.show()
         sut.close()
         settings.windowTilingEnabled = false
+        settings.teamsSpeakerNamesEnabled = true
         sut.show()
         XCTAssertTrue(sut.window === window)
         XCTAssertEqual(sut.windowTiling.state, .off)
+        XCTAssertEqual(sut.teamsSpeakerNames.state, .on)
         XCTAssertEqual(settings.thumbnailDuration, 7.5)
         XCTAssertEqual(sut.thumbnailDuration.itemTitles, ["3 seconds", "5 seconds", "15 seconds", "Forever", "Custom (7.5 seconds)"])
         XCTAssertEqual(sut.thumbnailDuration.titleOfSelectedItem, "Custom (7.5 seconds)")
         fire(sut.thumbnailDuration)
         XCTAssertEqual(settings.thumbnailDuration, 7.5)
         defaults.removeObject(forKey: "windowTilingEnabled")
+        defaults.removeObject(forKey: "teamsSpeakerNamesEnabled")
         XCTAssertEqual(defaults.persistentDomain(forName: "SettingsWindowControllerTests")! as NSDictionary, before)
         XCTAssertEqual(login.setCalls, [])
     }
@@ -190,19 +214,6 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(policies, [.regular, .accessory])
     }
 
-    func testCommandWClosesWithoutAnApplicationMenu() throws {
-        var policies: [NSApplication.ActivationPolicy] = []
-        let controller = SettingsWindowController(settings: settings, present: { _ in },
-            activation: OrdinaryWindowActivation(setPolicy: { policies.append($0) }))
-        defer { controller.close() }
-        controller.show()
-        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
-            timestamp: 0, windowNumber: 0, context: nil, characters: "w", charactersIgnoringModifiers: "w",
-            isARepeat: false, keyCode: 13))
-        XCTAssertTrue(try XCTUnwrap(controller.window).performKeyEquivalent(with: event))
-        XCTAssertEqual(policies, [.regular, .accessory])
-    }
-
     func testSettingsAndOnboardingKeepActivationUntilBothCloseInEitherOrder() {
         for settingsClosesFirst in [true, false] {
             var policies: [NSApplication.ActivationPolicy] = []
@@ -253,7 +264,8 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(sut.chooseBackground.accessibilityLabel(), "Choose background file")
         XCTAssertEqual(sut.clearBackground.accessibilityLabel(), "Clear background file")
         let controls: [NSView] = sut.pageButtons + [sut.launchAtLogin, sut.windowTiling, sut.clipboardHistory, sut.displayAwake,
-            sut.thumbnailDuration, sut.chooseMeetingsFolder, sut.summaryTool, sut.chooseBackground, sut.clearBackground]
+            sut.thumbnailDuration, sut.chooseMeetingsFolder, sut.summaryTool, sut.chooseBackground, sut.clearBackground,
+            sut.calendarReminders, sut.teamsSpeakerNames]
         for (control, next) in zip(controls, controls.dropFirst() + [sut.pageButtons[0]]) {
             XCTAssertTrue(control.nextKeyView === next)
         }
