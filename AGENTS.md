@@ -32,6 +32,9 @@ Optional `meeting.json` display-title metadata does not change dated folder name
 ```
 KuKa/
 ├── main.swift           # App entry point (NSApplication.shared.run())
+├── LogLine.swift        # LogLevel and LogLine: single-line text, timestamp offsets, formatting and parsing
+├── LogFiles.swift       # Queued daily file writes, owner-only permissions, retention, and deletion; not wired at launch yet
+├── LogFilter.swift      # LogRow, LogRange, and LogFilter: parsed rows, range/category/error filters, newest 5,000
 ├── AppDelegate.swift    # NSStatusItem menu bar, wires hotkey → overlay → capture → thumbnail → editor pipeline
 ├── HotkeyManager.swift  # Desired shortcuts, feature toggles, retry timer, wake handling and reported issues
 ├── HotkeyShortcut.swift # Seven shortcut definitions, actions, labels and registration failures
@@ -191,6 +194,33 @@ To keep a file out of the build, put it outside these two folders.
 | `Transcribing` / `TranscriptionSession` / `TranscriberFailure` | `Transcribing` is one speech-to-text engine with a `name`. `MeetingProcessor` owns an ordered list, `[WhisperKitTranscriber(), SpeechTranscriberAdapter()]` by default, and uses the first one whose `needsDownload(for:)`, `download(for:onStart:)` (when needed), and `load(for:)` succeed. `load` returns a `TranscriptionSession` that holds the model for one meeting and transcribes both tracks. `TranscriberFailure` records why a transcriber could not start: the stage (`unavailable`, `download`, or `load`) and the message. `download(for:onStart:)` calls `onStart` right before the download starts. With a download lock, it calls it only once this Ku-Ka holds the lock and the model is still missing, as `RoomLabelling.download(onStart:)` does. `MeetingProcessor` reports the download only then, so the menu shows it as its own step |
 | `WhisperKitTranscriber` / `WhisperKitClient` / `WhisperKitLibrary` | The default transcriber, named "Whisper large-v3-v20240930_turbo". `needsDownload(for:)` throws for a language that Whisper does not know, then checks that the model folder exists. `download(for:onStart:)` installs the model through a `ModelInstall` labelled "Whisper"; `onStart` runs only when this Ku-Ka holds the lock and the model is still missing. `load(for:)` returns a session that holds the loaded model and the Whisper language code. `languageCode(for:)` maps a locale to Whisper's code, and `trackTranscript(_:duration:)` maps WhisperKit segments to a `TrackTranscript` and drops the silence phrases. `WhisperKitClient` is the seam: `WhisperKitLibrary` makes the real WhisperKit calls, and tests use a fake that never downloads or loads a model |
 | `SpeechTranscriberAdapter` | The fallback, named "Apple speech recognition". `needsDownload(for:)` throws for a locale that `SpeechTranscriber.supportedLocales` lacks (exact BCP 47 match) and says whether the model is installed; `download(for:onStart:)` calls `onStart` at once and installs it through `AssetInventory`; `load(for:)` returns a session that holds the locale. The session's `transcribe(_:)` runs `SpeechTranscriber(locale:preset: .transcription)` and `SpeechAnalyzer` over one track file, returning `TrackTranscript` |
+
+### Log storage implementation
+
+- `LogLine`, `LogFiles`, and `LogFilter` are independent components pending app
+  integration after PR #49 and PR #51 merge. Do not enable file logging, add
+  `Show Log…`, or duplicate #51's `LogMessage` privacy interpolation in this stage.
+- `LogLine` takes already-redacted text. It escapes message line breaks and
+  keeps 2,000 characters plus an ellipsis when cut. Parsing uses the timestamp's
+  UTC offset. Category names are strings supplied by the logger.
+- `LogFiles` requires an explicit folder and error handler. Its serial queue
+  owns file access and cleanup state. The clock and error handler are Sendable.
+  The error handler must not write through the file logger. `flush()` waits for
+  queued work, and `deleteAll()` reports failures to its caller.
+- The folder mode is 0700 and the file mode is 0600. A write opens, appends one
+  complete UTF-8 line, and closes the file. Startup and the first append of a new
+  local day remove files older than 14 calendar days, then oldest files above
+  20,000,000 total bytes. Today's file is exempt from size eviction. Only regular
+  files named exactly `Ku-Ka-YYYY-MM-DD.log` with a valid date belong to the store.
+- `LogRow` parses once. `LogFilter` combines range, category, and error filters
+  before retaining the newest 5,000 rows. Last 7 days includes today and six prior
+  calendar days. Unknown rows use the source-file day for date ranges, remain
+  unchanged under All, and cannot match This launch, a category, or Errors only.
+- `LogLineTests`, `LogFilesTests`, and `LogFilterTests` cover formatting, offsets,
+  Unicode, retention, permissions, concurrent writers, deletion and recreation,
+  file ownership, filters, ordering, and the row cap. File tests use temporary
+  folders only. The design and remaining work are in
+  `docs/superpowers/specs/2026-10-30-log-storage-design.md`.
 
 ### Flow
 
