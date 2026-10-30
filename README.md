@@ -424,6 +424,22 @@ Unit tests never download or load the Whisper or SpeakerKit model. `RealMeetingA
 
 When running under XCTest, the app skips real shortcut registration, permission setup, clipboard polling, and meeting recovery. Meeting tests use a temporary folder, never `~/Meetings`. Tests use the real registrar with fake Carbon calls. Detection uses `XCTestConfigurationFilePath` (unit tests) and the `--uitesting` launch argument (no UI-test target currently exists).
 
+### Log storage development
+
+The log viewer's file storage and filtering are implemented but are not connected
+to the app yet. There is no **Show Log…** menu item or daily file output in this
+branch. Integration waits for the Settings and Teams logging changes.
+
+`LogLine` formats single-line messages with local time, UTC offset, process ID,
+level, and category. `LogFiles` writes to an explicit folder, removes files older
+than 14 days, and limits storage to 20 MB while keeping today's file. Tests use
+temporary folders and check owner-only permissions, concurrent writes, cleanup,
+and deletion. `LogFilter` selects the time range, category, and error level before
+keeping the newest 5,000 rows.
+
+The [log storage design](docs/superpowers/specs/2026-10-30-log-storage-design.md)
+records the privacy boundary and remaining integration work.
+
 ## Acknowledgements
 
 Meeting Notes transcribes with [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) (`argmaxinc/argmax-oss-swift`), which is under the MIT License.
