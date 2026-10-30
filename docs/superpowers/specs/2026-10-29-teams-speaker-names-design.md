@@ -18,7 +18,7 @@ The parent chose this design under the user's delegation of implementation choic
 
 `TeamsSpeakerName` is a validated display name with a read-only `value`. Reject empty names, control characters, newlines, markup delimiters `*`, `[`, `]`, backslash, backtick, `<`, and `>`, reserved labels `Me`, `Them`, and `Room N`, and names over 80 characters or 256 UTF-8 bytes. Keep normal Unicode names, spaces, apostrophes, hyphens, and parentheses. Do not correct or infer names through known words.
 
-`TeamsSpeakerObservation` contains scan start/end `HostTime`, a sequence number, a source-context identifier, and an optional `TeamsSpeakerName`. Nil means unavailable, silent, overlapping, or otherwise uncertain. These are observations, not voice identities. The source-context identifier is session-local and never persisted.
+`TeamsSpeakerObservation` contains scan start/end `HostTime`, a sequence number, a source-context identifier, a `TeamsScanResult`, and the number of AX nodes that the scan read. `.unnamed(reason)` means unavailable, silent, overlapping, or otherwise uncertain, and the reason says which. Diagnostics lists the reasons. These are observations, not voice identities. The source-context identifier is session-local and never persisted.
 
 `TeamsSpeakerHistory` is a pure bounded value. `append(_:runID:)` records observations for one stream run and reports whether collection can continue. `finish(clock:endingAt:)` returns immutable `TeamsSpeakerEvidence`. The evidence supplies `name(for: TranscriptSegment)` and `.empty`.
 
@@ -55,9 +55,59 @@ The tile must own exactly one name text node within its subtree. Do not choose a
 
 The bounded metadata traversal is the one place that decides ancestry. For each node it records the ownership facts it inherits from its ancestors (the shared bounds, whether the ancestor roles allow root ownership, self metadata, and the qualified toolbar) and its subtree range. Meeting-control and tile decisions use only these qualified references. The root, toolbar-interior, and tile-interior rules stay different on purpose. Marker tiles are counted before a tile is validated, so an invalid second marker still makes the result ambiguous.
 
-Bound scans to 512 nodes, depth 16, 40 children per node, eight windows, and a 150 ms soft deadline. Set each AX message timeout to at most 50 ms or the remaining budget. Exceeding a limit or an unexpected AX failure invalidates the whole observation. Unsupported optional attributes and absent optional values are missing metadata, not transport failures; missing required evidence cannot produce a name. Read only candidate labels, each with a 256-byte content cap. AX can return more bytes than the output cap, so do not claim a hard IPC memory bound. No raw tree, labels, or observations go to logs or disk.
+Bound scans to 512 nodes, depth 16, 40 children per node, eight windows, and a 150 ms soft deadline. Set each AX message timeout to at most 50 ms or the remaining budget. Exceeding a limit or an unexpected AX failure invalidates the whole observation. Unsupported optional attributes and absent optional values are missing metadata, not transport failures; missing required evidence cannot produce a name. Read only candidate labels, each with a 256-byte content cap. AX can return more bytes than the output cap, so do not claim a hard IPC memory bound. No raw tree, label text, name, or single observation goes to a log or to disk. Logs get only the codes and counts that Diagnostics lists.
 
 These selectors and the tile relationship are unverified assumptions. They can yield only `Them`, or misread a persistent last-speaker highlight. The feature is experimental and opt-in. Fake tests cannot validate Teams' actual UI semantics. Keep the diagnostic available for a later call.
+
+## Diagnostics
+
+On 2026-10-30 a review found that every failed scan returned `.uncertain` without a reason. With the feature on and a scan that fails every time, `transcript.md` was the same as with the feature off. The user asked for logs that say why a scan gives no name, and for one line in the transcript.
+
+### Scan result
+
+`TeamsAccessibility.snapshot()` returns one `TeamsScanResult`: `.named(TeamsSpeakerName)` or `.unnamed(TeamsScanReason)`. The snapshot and `TeamsSpeakerObservation` carry this result in place of the optional name, together with the number of AX nodes that the scan read. Each `TeamsScanReason` case has a clause that completes the transcript sentence "In N of M scans, …":
+
+| Case | Clause |
+|---|---|
+| `notTrusted` | Ku-Ka had no Accessibility permission |
+| `noTeamsApp` | the Teams app was not running |
+| `noMeetingWindow` | no Teams window showed meeting controls with Hang up or Leave |
+| `multipleMeetingWindows` | more than one Teams window showed meeting controls |
+| `noHighlightedTile` | no video tile had a speaking border |
+| `multipleHighlightedTiles` | more than one video tile had a speaking border |
+| `unsupportedTile` | the highlighted tile did not have the supported structure |
+| `selfTile` | the highlighted tile was your own video |
+| `nameRejected` | the name text of the tile was not a usable name |
+| `scanLimit` | the Teams windows had more elements or text than one scan reads |
+| `deadline` | the scan took longer than 150 ms |
+| `axError(code)` | an Accessibility call failed with error <code> |
+| `unexpectedAXValue` | Teams returned unexpected Accessibility data |
+
+The native reader reports the 8-window and 40-child limits as `scanLimit`, not as a shape error. A label over 256 bytes is also `scanLimit`, except the name text, which is `nameRejected`. A name "You" or one that ends in "(you)" is `selfTile`. A node that appears twice in one window is `unexpectedAXValue`. A cancelled scan is `deadline`. `noHighlightedTile` is also the normal result while nobody speaks.
+
+### Log lines
+
+`KuKa/Log.swift` adds `Log`, with the subsystem `com.kuka.screenshot` and one category for each area of the app. Its privacy rule matches `os.Logger`: numbers, Booleans, and reason codes are public, and a string is private unless the call marks it public. `Log` writes `<private>` in place of each private value before it writes the line. This branch uses only `Log.teams`, which writes to the unified log. The logging branch adds daily log files and the log viewer. Until then, read the lines with `/usr/bin/log stream --predicate 'subsystem == "com.kuka.screenshot"'`. The full path matters, because zsh has a builtin named `log`.
+
+`Log.teams` writes these lines at notice level:
+
+- At Start, one line: the feature is off, or it is on and Accessibility is granted or not granted.
+- The result of the first scan of a recording.
+- When the result code changes from one scan to the next: the old code and the new code. At most one line goes out every 2 s. When the limit held changes back, the first scan after the 2 s writes one line with the current code and the number of changes since the last line.
+- When collection stops at the 36,000-observation cap.
+- At Stop or interruption: the number of scans, the number of scans with a name, the count for each reason code, the median and the longest scan time, and the largest node count.
+- After the merge: "N of M remote lines named".
+
+A line holds only codes, counts, durations, and AX error codes. It never holds a name, label text, a window title, DOM classes, or a source identifier. A pure `TeamsScanTally` counts the results and decides which change lines go out. It uses the host times of the observations, so its tests need no clock.
+
+`TeamsSpeakerEvidence` carries the Stop counts as a name-free `TeamsScanSummary`, so the processor can log the merge line and write the transcript line. Recovery and Retry use `.empty`, which has no scans, so they log no merge line and write no transcript line.
+
+### Transcript line
+
+`transcript.md` gets one diagnostic line when all three are true: the summary has at least one scan, the transcript has at least one "Them" line, and no line got a Teams name. The line goes after the byline and any failure lines and before the legend, like the room-label failure line, so `contentForSummary` removes it. It starts with "Teams speaker names were on, but no remote line got a name." The second sentence is one of these:
+
+- If at least one scan was `named`: "In 120 of 412 scans, Teams showed a name, but no remote line had enough matching evidence."
+- If no scan was `named`: "In 380 of 412 scans, <clause of the most common reason>." `noHighlightedTile` counts only when no other reason occurred. When two reasons have the same count, the one that comes first in the table wins.
 
 ## Summary ownership and privacy
 
@@ -67,9 +117,9 @@ Raw observations stay in memory and disappear when their job completes. Only nam
 
 ## Verification and integration boundaries
 
-Use fake AX, fake capture, temporary meeting folders, and isolated defaults. Use `build/task-verification` for Xcode. Prove pure attribution, boundary failures, source cleanup, pause mapping, stale callbacks, queue delay, recovery fallback, named transcript formatting, room/echo preservation, and summary rules with TDD. Capture before/after transcript output from synthetic data. There is no new app UI to screenshot.
+Use fake AX, fake capture, temporary meeting folders, and isolated defaults. Use `build/task-verification` for Xcode. Prove pure attribution, boundary failures, source cleanup, pause mapping, stale callbacks, queue delay, recovery fallback, named transcript formatting, room/echo preservation, summary rules, each scan reason from a fake AX tree, the reason counts and the 2 s limit on change lines, and the transcript diagnostic line with TDD. Capture before/after transcript output from synthetic data. There is no new app UI to screenshot.
 
-Shared changes are limited to `Speaker`, recorder handoff and starting state, the `RecordingClock` interval API, processing job payload, processor merge argument, Settings property, and AppDelegate injection. Task #43 consumes `Settings.teamsSpeakerNamesEnabled`; it owns the control. Task #28 keeps calendar association separate. When the branches combine, its existing recorder Session ID becomes the payload of `.starting`; do not add a second startup ID. Task #27 remains remote diarization. Do not merge sibling branches or change other checkouts.
+Shared changes are limited to `Speaker`, recorder handoff and starting state, the `RecordingClock` interval API, processing job payload, processor merge argument, the diagnostic line in `Transcript.markdown`, the `Log` namespace in `KuKa/Log.swift` (which the logging branch extends with log files and a viewer), Settings property, and AppDelegate injection. Task #43 consumes `Settings.teamsSpeakerNamesEnabled`; it owns the control. Task #28 keeps calendar association separate. When the branches combine, its existing recorder Session ID becomes the payload of `.starting`; do not add a second startup ID. Task #27 remains remote diarization. Do not merge sibling branches or change other checkouts.
 
 ## Implementation reconciliation
 

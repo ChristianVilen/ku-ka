@@ -24,7 +24,8 @@ final class TranscriptTeamsTests: XCTestCase {
     }
 
     private func markdown(_ lines: [TranscriptLine], rooms: RoomLabels = .notDiarized) -> String {
-        Transcript.markdown(lines, title: "Synthetic meeting", duration: 4, by: "Fake transcriber", after: [], rooms: rooms)
+        Transcript.markdown(lines, title: "Synthetic meeting", duration: 4, by: "Fake transcriber", after: [], rooms: rooms,
+                            teams: .empty)
     }
 
     func testNamesAreAssignedBeforeJoiningAndUseTheSystemTrack() {
@@ -65,6 +66,36 @@ final class TranscriptTeamsTests: XCTestCase {
 
         """)
         XCTAssertTrue(text.contains("best-effort Teams meeting UI observations"))
+    }
+
+    func testUnnamedTranscriptSaysWhyAfterTheFailureLinesAndBeforeTheLegend() {
+        let lines = Transcript.merge([.system: system], rooms: .notDiarized, speakers: .empty)
+        let scans = TeamsScanSummary((0..<4).map { index in
+            TeamsSpeakerObservation(began: HostTime(seconds: Double(index)), ended: HostTime(seconds: Double(index) + 0.01),
+                                    sequence: index, sourceID: nil, result: .unnamed(.noMeetingWindow), nodes: 3)
+        })
+        let text = Transcript.markdown(lines, title: "Synthetic meeting", duration: 4, by: "Fake transcriber", after: [],
+                                       rooms: .failed(.noVoices), teams: scans)
+        XCTAssertEqual(text, """
+        # Synthetic meeting
+
+        Duration: 00:00:04
+
+        Transcript by Fake transcriber.
+
+        There are no room labels. \(RoomLabelFailure.noVoices)
+
+        Teams speaker names were on, but no remote line got a name. In 4 of 4 scans, no Teams window showed meeting controls with Hang up or Leave.
+
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
+
+        **[00:00:00] Them:** Ship Convio. On Friday. That sounds good.
+
+        """)
+        XCTAssertEqual(Transcript.contentForSummary(text), """
+        **[00:00:00] Them:** Ship Convio. On Friday. That sounds good.
+
+        """)
     }
 
     func testOverlappingSystemSegmentsKeepThem() {

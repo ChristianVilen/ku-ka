@@ -133,6 +133,26 @@ Pause stops observation. Resume starts a new observation run, and final timestam
 
 Observations stay in memory through the processing queue and disappear when that job finishes. Quit, a crash, or a retry before the transcript exists can lose them, so those lines fall back to "Them". Once names are in the heard transcript, Update Notes preserves them. Named labels in the final transcript go to the summary CLI with the rest of the transcript. No separate participant list, raw AX tree, or voice profile is saved.
 
+If the feature was on and every remote line stayed "Them", a line near the top of `transcript.md` says why. It gives the most common reason, for example:
+
+> Teams speaker names were on, but no remote line got a name. In 380 of 412 scans, no Teams window showed meeting controls with Hang up or Leave.
+
+If Teams showed a name in some scans, the line says in how many scans instead.
+
+Ku-Ka also writes the scan results and their counts to the macOS log. To watch the lines while you record, run this command:
+
+```bash
+/usr/bin/log stream --predicate 'subsystem == "com.kuka.screenshot" AND category == "teams"'
+```
+
+To see the lines of the last two hours, run this command:
+
+```bash
+/usr/bin/log show --last 2h --predicate 'subsystem == "com.kuka.screenshot" AND category == "teams"'
+```
+
+Use the full path `/usr/bin/log`, because zsh has its own `log` command. These log lines hold only reason codes, counts, and scan times. They never hold a name or other text from Teams.
+
 To turn the feature off for future recordings, run this command and restart Ku-Ka:
 
 ```bash

@@ -29,6 +29,45 @@ final class MeetingProcessorTests: MeetingProcessorTestCase {
         XCTAssertTrue(runner.calls.last?.arguments.last?.contains("Friday (Teams):** Let's ship on Tuesday") == true)
     }
 
+    func testTeamsScansWithoutANameSayWhyBeforeTheLegendAndEmptyEvidenceSaysNothing() async throws {
+        var history = TeamsSpeakerHistory()
+        let run = UUID()
+        for index in 0..<4 {
+            let time = Double(index) * 0.5
+            _ = history.append(TeamsSpeakerObservation(began: HostTime(seconds: time), ended: HostTime(seconds: time + 0.01),
+                                                      sequence: index, sourceID: "call",
+                                                      result: .unnamed(.noMeetingWindow), nodes: 3), runID: run)
+        }
+        let evidence = history.finish(clock: RecordingClock(origin: HostTime(seconds: 0)), endingAt: HostTime(seconds: 3))
+        let scanned = try makeMeeting()
+        let processor = makeProcessor()
+
+        let outcome = await processor.process(scanned, speakers: evidence) { _ in }
+
+        XCTAssertEqual(outcome, .done(summary: scanned.url(for: .summary)))
+        XCTAssertEqual(try scanned.read(.transcript), """
+        # Meeting on 2026-10-23 at 14:02
+
+        Duration: 00:01:00
+
+        Transcript by Whisper.
+
+        Teams speaker names were on, but no remote line got a name. In 4 of 4 scans, no Teams window showed meeting controls with Hang up or Leave.
+
+        "Me" is the microphone of the Mac that recorded the meeting. It hears the person who recorded the meeting and anyone in the same room. "Them" is everyone else on the call.
+
+        **[00:00:01] Them:** Let's ship on Friday
+
+        **[00:00:04] Me:** Sounds good
+
+        """)
+        XCTAssertFalse(runner.calls.last?.arguments.last?.contains("Teams speaker names") ?? true)
+
+        let unscanned = try makeMeeting()
+        _ = await processor.process(unscanned, speakers: .empty) { _ in }
+        XCTAssertFalse(try unscanned.read(.transcript).contains("Teams speaker names"))
+    }
+
     func testFirstRunWritesTranscriptAndSummaryAndTrashesTheAudio() async throws {
         let meeting = try makeMeeting()
 

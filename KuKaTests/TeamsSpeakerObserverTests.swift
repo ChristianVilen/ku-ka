@@ -18,7 +18,9 @@ final class TeamsSpeakerObserverTests: XCTestCase {
         }
         await consumer.value
         XCTAssertEqual(samples.map(\.sequence), [1, 2, 3])
-        XCTAssertEqual(samples.map(\.speaker?.value), ["Ada", nil, "Ada"])
+        XCTAssertEqual(samples.map(\.result), [.named(TeamsSpeakerName("Ada")!), .unnamed(.noHighlightedTile),
+                                               .named(TeamsSpeakerName("Ada")!)])
+        XCTAssertEqual(samples.map(\.nodes), [5, 3, 5])
         XCTAssertEqual(samples.map(\.began.seconds), [1, 3, 5])
         XCTAssertEqual(samples.map(\.ended.seconds), [2, 4, 6])
         XCTAssertEqual(samples.map(\.sourceID), ["window", nil, "window"])
@@ -92,7 +94,7 @@ private final class ReleasingSource: TeamsSnapshotReading {
     func snapshot() -> TeamsAXSnapshot {
         scanned.fulfill()
         gate?.wait()
-        return TeamsAXSnapshot(sourceID: "window", speaker: TeamsSpeakerName("Ada"))
+        return TeamsAXSnapshot(sourceID: "window", result: .named(TeamsSpeakerName("Ada")!))
     }
     deinit { released.fulfill() }
 }
@@ -106,7 +108,7 @@ private final class BufferedPollState: TeamsSnapshotReading, @unchecked Sendable
     func snapshot() -> TeamsAXSnapshot {
         lock.lock(); defer { lock.unlock() }
         scans += 1
-        return TeamsAXSnapshot(sourceID: "window", speaker: TeamsSpeakerName("Ada"))
+        return TeamsAXSnapshot(sourceID: "window", result: .named(TeamsSpeakerName("Ada")!))
     }
     func resume() { lock.lock(); resumed = true; lock.unlock() }
     private func state() -> (Int, Bool) {
@@ -159,6 +161,8 @@ private final class PollState: TeamsSnapshotReading, @unchecked Sendable {
         lock.lock()
         active -= 1
         lock.unlock()
-        return scan == 2 ? .uncertain : TeamsAXSnapshot(sourceID: "window", speaker: TeamsSpeakerName("Ada"))
+        return scan == 2
+            ? TeamsAXSnapshot(result: .unnamed(.noHighlightedTile), nodes: 3)
+            : TeamsAXSnapshot(sourceID: "window", result: .named(TeamsSpeakerName("Ada")!), nodes: 5)
     }
 }

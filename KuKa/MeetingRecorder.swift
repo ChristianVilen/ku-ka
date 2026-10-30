@@ -244,6 +244,8 @@ final class MeetingRecorder {
                 if let reason = handle.endReason {
                     endRecording(meeting, interruptedBecause: reason)
                 } else {
+                    Log.teams.notice(TeamsSpeakerRecording.startLine(enabled: namesEnabled,
+                                                                     accessibilityGranted: permissions.accessibility))
                     let speakers = namesEnabled ? TeamsSpeakerRecording(observer: teamsSpeakerObserver) : nil
                     speakers?.resume(at: hostNow())
                     let updates = liveTranscriber.updates(locale: locale(), audio: handle.writtenAudio)

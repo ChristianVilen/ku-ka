@@ -26,6 +26,52 @@ final class RecordingSpeakerSource: TeamsSpeakerObserving, @unchecked Sendable {
 
 @MainActor
 final class TeamsSpeakerRecordingTests: XCTestCase {
+    private var logged: [String] = []
+
+    private func makeRecording(_ source: RecordingSpeakerSource) -> TeamsSpeakerRecording {
+        TeamsSpeakerRecording(observer: source, log: { [unowned self] in logged.append($0.text) })
+    }
+
+    func testLogsTheFirstAcceptedScanAndAChangeOfResultAcrossAPause() async {
+        let source = RecordingSpeakerSource()
+        let recording = makeRecording(source)
+        recording.resume(at: HostTime(seconds: 100))
+        source.yield(99.5, sequence: 1, name: nil)
+        source.yield(100, sequence: 2)
+        await waitUntil { self.logged.count == 1 }
+        recording.pause()
+        recording.resume(at: HostTime(seconds: 110))
+        source.yield(110, sequence: 1, name: nil, run: 1)
+        await waitUntil { self.logged.count == 2 }
+
+        XCTAssertEqual(logged, ["Teams scan result: named (first scan).",
+                                "Teams scan result: named → noHighlightedTile."])
+    }
+
+    func testFinishLogsTheStopLineOnceAndPauseLogsNone() async {
+        let source = RecordingSpeakerSource()
+        let recording = makeRecording(source)
+        recording.resume(at: HostTime(seconds: 100))
+        source.yield(100, sequence: 1)
+        await waitUntil { self.logged.count == 1 }
+        recording.pause()
+        XCTAssertEqual(logged.count, 1)
+
+        _ = recording.finish(clock: RecordingClock(origin: HostTime(seconds: 100)), endingAt: HostTime(seconds: 101))
+
+        XCTAssertEqual(logged.dropFirst(), ["Teams speaker names at Stop. Scans: 1, named: 1. Reasons: none. "
+                                            + "Scan time: median 0.000 s, longest 0.000 s. Largest node count: 5."])
+    }
+
+    func testStartLineSaysWhetherTheFeatureIsOnAndAccessibilityIsGranted() {
+        XCTAssertEqual(TeamsSpeakerRecording.startLine(enabled: false, accessibilityGranted: true).text,
+                       "Teams speaker names: off.")
+        XCTAssertEqual(TeamsSpeakerRecording.startLine(enabled: true, accessibilityGranted: true).text,
+                       "Teams speaker names: on. Accessibility: granted.")
+        XCTAssertEqual(TeamsSpeakerRecording.startLine(enabled: true, accessibilityGranted: false).text,
+                       "Teams speaker names: on. Accessibility: not granted.")
+    }
+
     func testFinishFreezesTheRecordingAndCancelsTheSource() async {
         let source = RecordingSpeakerSource()
         let recording = TeamsSpeakerRecording(observer: source)
@@ -84,7 +130,7 @@ final class TeamsSpeakerRecordingTests: XCTestCase {
 
     func testReachingTheHistoryCapCancelsCollectionAndNeverStartsAnotherRun() async {
         let source = RecordingSpeakerSource()
-        let recording = TeamsSpeakerRecording(observer: source)
+        let recording = makeRecording(source)
         recording.resume(at: HostTime(seconds: 100))
         for index in 0..<36_001 { source.yield(100 + Double(index) * 0.3, sequence: index) }
         await waitUntil { source.terminations == 1 }
@@ -95,5 +141,6 @@ final class TeamsSpeakerRecordingTests: XCTestCase {
         XCTAssertEqual(evidence.name(for: TranscriptSegment(start: 0, end: 0.6, text: "Hello"))?.value, "Alice")
         recording.resume(at: HostTime(seconds: 12_000))
         XCTAssertEqual(source.starts, 1)
+        XCTAssertEqual(logged.filter { $0 == "Teams speaker names: collection stopped at the cap of 36000 scans." }.count, 1)
     }
 }

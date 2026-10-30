@@ -139,6 +139,7 @@ struct MeetingProcessor {
         let rooms = try await labelRooms(meeting, tracks: tracks, progress: progress)
         try Task.checkCancellation()
         let lines = Transcript.merge(tracks.mapValues(\.segments), rooms: rooms, speakers: speakers)
+        if let line = speakers.scans.mergeLine(for: lines) { Log.teams.notice(line) }
         let duration = tracks.values.map(\.duration).max() ?? 0
         if lines.isEmpty {
             // Summary first: it marks the meeting done, so a crash before the
@@ -147,7 +148,7 @@ struct MeetingProcessor {
             try meeting.write(SummaryDocument.noSpeech(title: meeting.title), to: .summary)
         }
         let heard = Transcript.markdown(lines, title: meeting.title, duration: duration,
-                                        by: transcriber, after: failures, rooms: rooms)
+                                        by: transcriber, after: failures, rooms: rooms, teams: speakers.scans)
         try meeting.write(heard, to: .heardTranscript)
         try meeting.write(heard, to: .transcript)
         return !lines.isEmpty

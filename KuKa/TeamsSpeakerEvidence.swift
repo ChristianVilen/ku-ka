@@ -21,7 +21,10 @@ struct TeamsSpeakerObservation: Equatable, Sendable {
     let ended: HostTime
     let sequence: Int
     let sourceID: String?
-    let speaker: TeamsSpeakerName?
+    let result: TeamsScanResult
+    let nodes: Int
+
+    var speaker: TeamsSpeakerName? { result.speaker }
 }
 
 struct TeamsSpeakerHistory {
@@ -31,7 +34,7 @@ struct TeamsSpeakerHistory {
     }
 
     private var entries: [Entry] = []
-    private static let capacity = 36_000
+    static let capacity = 36_000
 
     mutating func append(_ sample: TeamsSpeakerObservation, runID: UUID) -> Bool {
         guard entries.count < Self.capacity else { return false }
@@ -46,6 +49,7 @@ struct TeamsSpeakerHistory {
         var observed: [SpeakerSpan] = []
         var previous: Entry?
         var latestEnd = -Double.infinity
+        var scans: [TeamsSpeakerObservation] = []
         for entry in entries {
             let sample = entry.sample
             guard sample.began.seconds.isFinite, sample.ended.seconds.isFinite else {
@@ -53,6 +57,7 @@ struct TeamsSpeakerHistory {
                 continue
             }
             guard sample.began <= stop, sample.ended <= stop else { continue }
+            scans.append(sample)
             let ordered = sample.began.seconds >= latestEnd
             latestEnd = max(latestEnd, sample.began.seconds, sample.ended.seconds)
             let mappedScan = clock.fileIntervalInOneRun(from:sample.began, to: sample.ended)
@@ -85,7 +90,8 @@ struct TeamsSpeakerHistory {
             }
             previous = entry
         }
-        return TeamsSpeakerEvidence(positive: positive, uncertain: mergedUncertainty(uncertain), observed: observed)
+        return TeamsSpeakerEvidence(positive: positive, uncertain: mergedUncertainty(uncertain), observed: observed,
+                                    scans: TeamsScanSummary(scans))
     }
 
     private func mergedUncertainty(_ spans: [SpeakerSpan]) -> [SpeakerSpan] {
@@ -102,10 +108,11 @@ struct TeamsSpeakerHistory {
 }
 
 struct TeamsSpeakerEvidence: Equatable, Sendable {
-    static let empty = Self(positive: [], uncertain: [], observed: [])
+    static let empty = Self(positive: [], uncertain: [], observed: [], scans: .empty)
     fileprivate let positive: [SpeakerSpan]
     fileprivate let uncertain: [SpeakerSpan]
     fileprivate let observed: [SpeakerSpan]
+    let scans: TeamsScanSummary
 
     func name(for segment: TranscriptSegment) -> TeamsSpeakerName? {
         guard segment.start.isFinite, segment.end.isFinite, segment.start >= 0,

@@ -42,7 +42,8 @@ struct TeamsSpeakerObserver: TeamsSpeakerObserving {
                     guard !Task.isCancelled else { break }
                     sequence += 1
                     let sample = TeamsSpeakerObservation(began: began, ended: ended, sequence: sequence,
-                                                         sourceID: snapshot.sourceID, speaker: snapshot.speaker)
+                                                         sourceID: snapshot.sourceID, result: snapshot.result,
+                                                         nodes: snapshot.nodes)
                     if case .terminated = continuation.yield(sample) { break }
                     do { try await wait(0.3) } catch { break }
                 }

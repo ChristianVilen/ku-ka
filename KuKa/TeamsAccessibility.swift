@@ -22,20 +22,38 @@ func makeNativeTeamsSnapshotSource() -> any TeamsSnapshotReading {
     TeamsAccessibility(reader: NativeTeamsAX())
 }
 
+/// How `NativeTeamsAX` reads the status and the counts that the AX API gives back.
+enum TeamsAXRules {
+    /// False for an attribute that the element does not have; any other failure ends the scan.
+    static func hasValue(_ status: AXError) throws -> Bool {
+        switch status {
+        case .success: return true
+        case .attributeUnsupported, .noValue: return false
+        default: throw TeamsScanReason.axError(status.rawValue)
+        }
+    }
+
+    static func checkCount(_ count: Int, limit: Int) throws {
+        guard count >= 0 else { throw TeamsScanReason.unexpectedAXValue }
+        guard count <= limit else { throw TeamsScanReason.scanLimit }
+    }
+}
+
 private final class NativeTeamsAX: TeamsAXReading {
     struct Node: Hashable {
         let element: AXUIElement
         static func == (lhs: Node, rhs: Node) -> Bool { CFEqual(lhs.element, rhs.element) }
         func hash(into hasher: inout Hasher) { hasher.combine(CFHash(element)) }
     }
-    private enum Failure: Error { case ax(AXError), shape, deadline }
 
     func isTrusted() -> Bool { AXIsProcessTrusted() }
 
     func windows(timeout: TimeInterval) throws -> [Node] {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.microsoft.teams2")
+        guard !apps.isEmpty else { throw TeamsScanReason.noTeamsApp }
         var result: [Node] = []
-        for app in NSRunningApplication.runningApplications(withBundleIdentifier: "com.microsoft.teams2") {
+        for app in apps {
             let root = AXUIElementCreateApplication(app.processIdentifier)
             result += try elements(root, attribute: kAXWindowsAttribute, limit: 8, deadline: deadline)
             if result.count > 8 { break }
@@ -48,18 +66,18 @@ private final class NativeTeamsAX: TeamsAXReading {
         let role = try string(node.element, kAXRoleAttribute, deadline: deadline) ?? ""
         let identifier = try string(node.element, kAXIdentifierAttribute, deadline: deadline) ?? ""
         let rawClasses = try value(node.element, "AXDOMClassList", deadline: deadline)
-        guard let classes = TeamsAXMetadata.domClasses(rawClasses) else { throw Failure.shape }
+        guard let classes = TeamsAXMetadata.domClasses(rawClasses) else { throw TeamsScanReason.unexpectedAXValue }
         let position = try value(node.element, kAXPositionAttribute, deadline: deadline)
         let size = try value(node.element, kAXSizeAttribute, deadline: deadline)
         var point = CGPoint.zero
         var dimensions = CGSize.zero
         if let position {
             guard CFGetTypeID(position) == AXValueGetTypeID(),
-                  AXValueGetValue(position as! AXValue, .cgPoint, &point) else { throw Failure.shape }
+                  AXValueGetValue(position as! AXValue, .cgPoint, &point) else { throw TeamsScanReason.unexpectedAXValue }
         }
         if let size {
             guard CFGetTypeID(size) == AXValueGetTypeID(),
-                  AXValueGetValue(size as! AXValue, .cgSize, &dimensions) else { throw Failure.shape }
+                  AXValueGetValue(size as! AXValue, .cgSize, &dimensions) else { throw TeamsScanReason.unexpectedAXValue }
         }
         let enabled = try boolean(node.element, kAXEnabledAttribute, deadline: deadline) ?? false
         let hidden = try boolean(node.element, "AXHidden", deadline: deadline) ?? false
@@ -92,50 +110,46 @@ private final class NativeTeamsAX: TeamsAXReading {
 
     private func prepare(_ element: AXUIElement, deadline: TimeInterval) throws {
         let remaining = deadline - ProcessInfo.processInfo.systemUptime
-        guard !Task.isCancelled, remaining > 0 else { throw Failure.deadline }
+        guard !Task.isCancelled, remaining > 0 else { throw TeamsScanReason.deadline }
         let status = AXUIElementSetMessagingTimeout(element, Float(min(0.05, remaining)).nextDown)
-        guard status == .success else { throw Failure.ax(status) }
-    }
-
-    private func optional(_ status: AXError) throws -> Bool {
-        switch status {
-        case .success: return true
-        case .attributeUnsupported, .noValue: return false
-        default: throw Failure.ax(status)
-        }
+        guard status == .success else { throw TeamsScanReason.axError(status.rawValue) }
     }
 
     private func value(_ element: AXUIElement, _ attribute: String, deadline: TimeInterval) throws -> CFTypeRef? {
         try prepare(element, deadline: deadline)
         var result: CFTypeRef?
-        guard try optional(AXUIElementCopyAttributeValue(element, attribute as CFString, &result)) else { return nil }
+        guard try TeamsAXRules.hasValue(AXUIElementCopyAttributeValue(element, attribute as CFString, &result)) else {
+            return nil
+        }
         return result
     }
 
     private func string(_ element: AXUIElement, _ attribute: String, deadline: TimeInterval) throws -> String? {
         guard let raw = try value(element, attribute, deadline: deadline) else { return nil }
-        guard let text = raw as? String else { throw Failure.shape }
+        guard let text = raw as? String else { throw TeamsScanReason.unexpectedAXValue }
         return text
     }
 
     private func boolean(_ element: AXUIElement, _ attribute: String, deadline: TimeInterval) throws -> Bool? {
         guard let raw = try value(element, attribute, deadline: deadline) else { return nil }
-        guard CFGetTypeID(raw) == CFBooleanGetTypeID() else { throw Failure.shape }
+        guard CFGetTypeID(raw) == CFBooleanGetTypeID() else { throw TeamsScanReason.unexpectedAXValue }
         return (raw as! CFBoolean) == kCFBooleanTrue
     }
 
     private func elements(_ element: AXUIElement, attribute: String, limit: Int, deadline: TimeInterval) throws -> [Node] {
         try prepare(element, deadline: deadline)
         var count: CFIndex = 0
-        guard try optional(AXUIElementGetAttributeValueCount(element, attribute as CFString, &count)) else { return [] }
-        guard count >= 0, count <= limit else { throw Failure.shape }
+        guard try TeamsAXRules.hasValue(AXUIElementGetAttributeValueCount(element, attribute as CFString, &count)) else {
+            return []
+        }
+        try TeamsAXRules.checkCount(count, limit: limit)
         guard count > 0 else { return [] }
         try prepare(element, deadline: deadline)
         var raw: CFArray?
-        guard try optional(AXUIElementCopyAttributeValues(element, attribute as CFString, 0, count, &raw)),
+        guard try TeamsAXRules.hasValue(AXUIElementCopyAttributeValues(element, attribute as CFString, 0, count, &raw)),
               let raw else { return [] }
         return try (raw as [AnyObject]).map { item in
-            guard CFGetTypeID(item) == AXUIElementGetTypeID() else { throw Failure.shape }
+            guard CFGetTypeID(item) == AXUIElementGetTypeID() else { throw TeamsScanReason.unexpectedAXValue }
             return Node(element: item as! AXUIElement)
         }
     }
@@ -154,8 +168,9 @@ protocol TeamsAXReading {
 
 struct TeamsAXSnapshot: Equatable, Sendable {
     var sourceID: String?
-    var speaker: TeamsSpeakerName?
-    static let uncertain = Self()
+    var result: TeamsScanResult
+    /// The AX nodes whose metadata the scan read.
+    var nodes = 0
 }
 
 final class TeamsAccessibility<Reader: TeamsAXReading> {
@@ -184,19 +199,20 @@ final class TeamsAccessibility<Reader: TeamsAXReading> {
         var tiles: Set<Int> = []
         var controls: [MeetingControls] = []
 
-        var participant: (tile: Reader.Node, name: Reader.Node)? {
-            guard tiles.count == 1, let index = tiles.first else { return nil }
+        func participant() throws -> (tile: Reader.Node, name: Reader.Node) {
+            guard let index = tiles.first else { throw TeamsScanReason.noHighlightedTile }
+            guard tiles.count == 1 else { throw TeamsScanReason.multipleHighlightedTiles }
             let tile = items[index]
-            guard tile.metadata.role == "AXGroup", tile.rootOwned, !tile.selfOwned else { return nil }
+            guard !tile.selfOwned else { throw TeamsScanReason.selfTile }
+            guard tile.metadata.role == "AXGroup", tile.rootOwned else { throw TeamsScanReason.unsupportedTile }
             let members = items[tile.subtree]
-            guard members.allSatisfy(\.tileMember) else { return nil }
+            guard members.allSatisfy(\.tileMember) else { throw TeamsScanReason.unsupportedTile }
             let names = members.filter { $0.metadata.role == "AXStaticText" }
             guard names.count == 1, let name = names.first,
-                  name.metadata.visible, name.bounded else { return nil }
+                  name.metadata.visible, name.bounded else { throw TeamsScanReason.unsupportedTile }
             return (tile.node, name.node)
         }
     }
-    private enum Invalid: Error { case scan }
     private static var borders: Set<String> { ["frwhdur", "f578s74", "f4mjgsl", "f1xul6tz", "fj20gam", "f3ve9t9"] }
     private var contexts: [Reader.Node: String] = [:]
     let reader: Reader
@@ -206,13 +222,13 @@ final class TeamsAccessibility<Reader: TeamsAXReading> {
         self.now = now
     }
     func snapshot() -> TeamsAXSnapshot {
-        guard reader.isTrusted() else { return .uncertain }
+        guard reader.isTrusted() else { return TeamsAXSnapshot(result: .unnamed(.notTrusted)) }
         let deadline = now() + 0.15
+        var count = 0
         do {
             let windows = try reader.windows(timeout: budget(deadline))
-            guard windows.count <= 8 else { throw Invalid.scan }
+            guard windows.count <= 8 else { throw TeamsScanReason.scanLimit }
             contexts = contexts.filter { windows.contains($0.key) }
-            var count = 0
             var meetings: [(Tree, Reader.Node)] = []
             for window in windows {
                 var tree = Tree()
@@ -220,20 +236,28 @@ final class TeamsAccessibility<Reader: TeamsAXReading> {
                          tree: &tree, count: &count, deadline: deadline)
                 if try isMeeting(tree.controls, deadline: deadline) { meetings.append((tree, window)) }
             }
-            guard meetings.count == 1, let (tree, window) = meetings.first else { return .uncertain }
+            guard meetings.count <= 1 else { throw TeamsScanReason.multipleMeetingWindows }
+            guard let (tree, window) = meetings.first else { throw TeamsScanReason.noMeetingWindow }
             if contexts[window] == nil { contexts[window] = UUID().uuidString }
-            guard let participant = tree.participant else { return .uncertain }
+            let participant = try tree.participant()
             let tileLabel = try reader.label(participant.tile, kind: .tile, timeout: budget(deadline))
-            guard tileLabel?.utf8.count ?? 0 <= 256 else { throw Invalid.scan }
-            guard tileLabel?.lowercased().hasPrefix("myself video") != true else { return .uncertain }
-            guard
-                  let text = try reader.label(participant.name, kind: .name, timeout: budget(deadline)),
-                  text.utf8.count <= 256, let speaker = TeamsSpeakerName(text),
-                  speaker.value.lowercased() != "you", !speaker.value.lowercased().hasSuffix("(you)") else { return .uncertain }
+            guard tileLabel?.utf8.count ?? 0 <= 256 else { throw TeamsScanReason.scanLimit }
+            guard tileLabel?.lowercased().hasPrefix("myself video") != true else { throw TeamsScanReason.selfTile }
+            guard let text = try reader.label(participant.name, kind: .name, timeout: budget(deadline)),
+                  text.utf8.count <= 256, let speaker = TeamsSpeakerName(text) else {
+                throw TeamsScanReason.nameRejected
+            }
+            guard speaker.value.lowercased() != "you", !speaker.value.lowercased().hasSuffix("(you)") else {
+                throw TeamsScanReason.selfTile
+            }
             _ = try budget(deadline)
-            guard reader.isTrusted() else { return .uncertain }
-            return TeamsAXSnapshot(sourceID: contexts[window], speaker: speaker)
-        } catch { return .uncertain }
+            guard reader.isTrusted() else { throw TeamsScanReason.notTrusted }
+            return TeamsAXSnapshot(sourceID: contexts[window], result: .named(speaker), nodes: count)
+        } catch {
+            let reason = error as? TeamsScanReason ?? .unexpectedAXValue
+            if reason == .noTeamsApp { contexts = [:] }
+            return TeamsAXSnapshot(result: .unnamed(reason), nodes: count)
+        }
     }
 
     private func validBounds(_ bounds: CGRect) -> Bool {
@@ -243,13 +267,14 @@ final class TeamsAccessibility<Reader: TeamsAXReading> {
 
     private func budget(_ deadline: TimeInterval) throws -> TimeInterval {
         let remaining = deadline - now()
-        guard !Task.isCancelled, remaining > 0 else { throw Invalid.scan }
+        guard !Task.isCancelled, remaining > 0 else { throw TeamsScanReason.deadline }
         return min(0.05, remaining)
     }
 
     private func walk(_ node: Reader.Node, parent: Int?, ownership: Ownership, depth: Int, tree: inout Tree, count: inout Int,
                       deadline: TimeInterval) throws {
-        guard depth <= 16, count < 512, !tree.items.contains(where: { $0.node == node }) else { throw Invalid.scan }
+        guard depth <= 16, count < 512 else { throw TeamsScanReason.scanLimit }
+        guard !tree.items.contains(where: { $0.node == node }) else { throw TeamsScanReason.unexpectedAXValue }
         count += 1
         let metadata = try reader.metadata(node, timeout: budget(deadline))
         let index = tree.items.count
@@ -285,7 +310,7 @@ final class TeamsAccessibility<Reader: TeamsAXReading> {
             selfScope: selfScope,
             control: control)
         let children = try reader.children(node, timeout: budget(deadline))
-        guard children.count <= 40 else { throw Invalid.scan }
+        guard children.count <= 40 else { throw TeamsScanReason.scanLimit }
         for child in children {
             try walk(child, parent: index, ownership: descendants, depth: depth + 1,
                      tree: &tree, count: &count, deadline: deadline)
@@ -309,13 +334,13 @@ final class TeamsAccessibility<Reader: TeamsAXReading> {
             if ["meeting-controls", "calling-controls"].contains(control.identifier) { knownScope = true }
             else {
                 let label = try reader.label(control.node, kind: .control, timeout: budget(deadline))
-                guard label?.utf8.count ?? 0 <= 256 else { throw Invalid.scan }
+                guard label?.utf8.count ?? 0 <= 256 else { throw TeamsScanReason.scanLimit }
                 knownScope = label == "Meeting controls" || label == "Calling controls"
             }
             guard knownScope else { continue }
             for button in control.buttons {
                 let label = try reader.label(button, kind: .control, timeout: budget(deadline))
-                guard label?.utf8.count ?? 0 <= 256 else { throw Invalid.scan }
+                guard label?.utf8.count ?? 0 <= 256 else { throw TeamsScanReason.scanLimit }
                 if label == "Hang up" || label == "Leave" { return true }
             }
         }

@@ -252,12 +252,14 @@ enum Transcript {
     }
 
     static func markdown(_ lines: [TranscriptLine], title: String, duration: TimeInterval,
-                         by transcriber: String, after failures: [TranscriberFailure], rooms: RoomLabels) -> String {
+                         by transcriber: String, after failures: [TranscriberFailure], rooms: RoomLabels,
+                         teams: TeamsScanSummary) -> String {
         let byline = failures.isEmpty
             ? "Transcript by \(transcriber)."
             : "Transcript by \(transcriber). Tried first:\n\n" + failures.map { "- \($0)" }.joined(separator: "\n")
         var header = [byline]
         if case .failed(let failure) = rooms { header.append("There are no room labels. \(failure)") }
+        if let note = teams.transcriptNote(for: lines) { header.append(note) }
         let hasRooms = lines.contains { line in
             if case .room = line.speaker { return true }
             return false
