@@ -58,8 +58,13 @@ final class MeetingRecorder {
     private enum State {
         /// `notice` is what the panel says about the meeting that just ended, until it closes.
         case idle(notice: EndNotice?)
-        case starting
+        case starting(id: UUID)
         case active(ActiveMeeting)
+
+        var startingID: UUID? {
+            guard case .starting(let id) = self else { return nil }
+            return id
+        }
 
         var phase: RecorderPhase {
             switch self {
@@ -90,6 +95,7 @@ final class MeetingRecorder {
         let lock: FileLock
         let handle: ActiveRecording
         let liveTask: Task<Void, Never>
+        let speakers: TeamsSpeakerRecording?
         var state: State
     }
 
@@ -98,6 +104,8 @@ final class MeetingRecorder {
     private let locale: () -> Locale
     private let capture: MeetingAudioCapturing
     private let liveTranscriber: LiveTranscribing
+    private let teamsSpeakerNamesEnabled: () -> Bool
+    private let teamsSpeakerObserver: any TeamsSpeakerObserving
     private let notifier: Notifying
     /// Returns true when the user chose Open Permissions.
     private let alertStartFailure: @MainActor (_ reason: String, _ offersPermissions: Bool) -> Bool
@@ -121,7 +129,7 @@ final class MeetingRecorder {
     var onShowPermissions: (() -> Void)?
     /// A meeting stopped or was interrupted, so its notes can be made. A quit leaves the meeting
     /// for the next launch and calls nothing.
-    var onEnded: ((MeetingFolder) -> Void)?
+    var onEnded: ((RecordedMeeting) -> Void)?
     /// The meeting controls panel: anything it draws changed.
     var onControlsChange: (@MainActor () -> Void)?
     var onControlsRequest: (@MainActor (MeetingControlsRequest) -> Void)?
@@ -161,6 +169,8 @@ final class MeetingRecorder {
          locale: @escaping () -> Locale = { Locale(identifier: "en-US") },
          capture: MeetingAudioCapturing = ScreenCaptureMeetingAudio(),
          liveTranscriber: LiveTranscribing = AppleLiveTranscriber(),
+         teamsSpeakerNamesEnabled: @escaping () -> Bool = { false },
+         teamsSpeakerObserver: any TeamsSpeakerObserving = TeamsSpeakerObserver(),
          notifier: Notifying = SystemNotifier.shared,
          alertStartFailure: @escaping @MainActor (String, Bool) -> Bool = MeetingRecorder.showStartFailureAlert,
          now: @escaping () -> Date = { Date() },
@@ -171,6 +181,8 @@ final class MeetingRecorder {
         self.locale = locale
         self.capture = capture
         self.liveTranscriber = liveTranscriber
+        self.teamsSpeakerNamesEnabled = teamsSpeakerNamesEnabled
+        self.teamsSpeakerObserver = teamsSpeakerObserver
         self.notifier = notifier
         self.alertStartFailure = alertStartFailure
         self.now = now
@@ -180,6 +192,7 @@ final class MeetingRecorder {
 
     isolated deinit {
         displayTimer?.invalidate()
+        if case .active(let meeting) = state { meeting.speakers?.pause() }
     }
 
     /// The recording's audio levels, for the menu's meters. Nil outside a meeting.
@@ -197,9 +210,17 @@ final class MeetingRecorder {
     }
 
     private func start() async {
-        state = .starting
+        let id = UUID()
+        let namesEnabled = teamsSpeakerNamesEnabled()
+        state = .starting(id: id)
         notifier.requestPermission()
-        if let reason = await missingGrant() {
+        let missing = await missingGrant()
+        guard state.startingID == id else { return }
+        guard !Task.isCancelled else {
+            state = .idle(notice: nil)
+            return
+        }
+        if let reason = missing {
             state = .idle(notice: nil)
             if alertStartFailure(reason, true) { onShowPermissions?() }
             return
@@ -213,14 +234,23 @@ final class MeetingRecorder {
                 let handle = try await capture.start(into: meeting, clock: clock) { [weak self] reason in
                     self?.handleInterruption(of: meeting, reason: reason)
                 }
+                guard state.startingID == id, !Task.isCancelled else {
+                    handle.stop()
+                    if state.startingID == id {
+                        state = .idle(notice: nil)
+                    }
+                    return
+                }
                 if let reason = handle.endReason {
                     endRecording(meeting, interruptedBecause: reason)
                 } else {
+                    let speakers = namesEnabled ? TeamsSpeakerRecording(observer: teamsSpeakerObserver) : nil
+                    speakers?.resume(at: hostNow())
                     let updates = liveTranscriber.updates(locale: locale(), audio: handle.writtenAudio)
                     let liveTask = Task { [weak self] in
                         for await update in updates { self?.applyLive(update, to: meeting) }
                     }
-                    state = .active(ActiveMeeting(folder: meeting, lock: lock, handle: handle, liveTask: liveTask,
+                    state = .active(ActiveMeeting(folder: meeting, lock: lock, handle: handle, liveTask: liveTask, speakers: speakers,
                                                   state: ActiveMeeting.State(clock: clock)))
                 }
             } catch {
@@ -228,7 +258,9 @@ final class MeetingRecorder {
                 throw error
             }
         } catch {
+            guard state.startingID == id else { return }
             state = .idle(notice: nil)
+            guard !Task.isCancelled else { return }
             _ = alertStartFailure(error.localizedDescription, false)
         }
     }
@@ -247,13 +279,14 @@ final class MeetingRecorder {
     /// The one Stop, for the menu and the meeting controls. Never starts a meeting.
     func stopRecording() {
         guard case .active(let meeting) = state else { return }
+        let speakers = meeting.speakers?.finish(clock: meeting.state.clock, endingAt: hostNow()) ?? .empty
         meeting.liveTask.cancel()
-        meeting.handle.stop()
         // Not `meeting`: it holds the folder lock, which processing needs now.
         let folder = meeting.folder
         state = .idle(notice: .saved(folder))
+        meeting.handle.stop()
         closeSavedNoticeLater { [weak self] in self?.closeNotice(ifSavedFor: folder) }
-        onEnded?(folder)
+        onEnded?(RecordedMeeting(folder: folder, speakers: speakers))
     }
 
     private func closeNotice(ifSavedFor meeting: MeetingFolder) {
@@ -264,21 +297,30 @@ final class MeetingRecorder {
     /// Quit: the recording stops, and the meeting waits for the next launch.
     func shutDown() {
         if case .active(let meeting) = state {
+            meeting.speakers?.pause()
             meeting.liveTask.cancel()
+            state = .idle(notice: nil)
             meeting.handle.stop()
+            return
         }
         state = .idle(notice: nil)
     }
 
     func pause() {
+        let time = hostNow()
         updateActive { state in
-            guard state.clock.pause(at: hostNow()) else { return }
+            guard state.clock.pause(at: time) else { return }
+            if case .active(let meeting) = self.state { meeting.speakers?.pause() }
             state.live.settleTails()
         }
     }
 
     func resume() {
-        updateActive { $0.clock.resume(at: hostNow()) }
+        let time = hostNow()
+        updateActive {
+            guard $0.clock.resume(at: time) else { return }
+            if case .active(let meeting) = self.state { meeting.speakers?.resume(at: time) }
+        }
     }
 
     func togglePause() {
@@ -330,14 +372,16 @@ final class MeetingRecorder {
 
     private func handleInterruption(of meeting: MeetingFolder, reason: String) {
         guard case .active(let active) = state, active.folder == meeting else { return }
+        let speakers = active.speakers?.finish(clock: active.state.clock, endingAt: hostNow()) ?? .empty
         active.liveTask.cancel()
-        endRecording(meeting, interruptedBecause: reason)
+        endRecording(meeting, interruptedBecause: reason, speakers: speakers)
     }
 
-    private func endRecording(_ meeting: MeetingFolder, interruptedBecause reason: String) {
+    private func endRecording(_ meeting: MeetingFolder, interruptedBecause reason: String,
+                              speakers: TeamsSpeakerEvidence = .empty) {
         state = .idle(notice: .interrupted(reason: reason))
         notifier.post(title: "Recording Stopped", body: MeetingPanelCopy.interruptedNote(reason), onClick: nil)
-        onEnded?(meeting)
+        onEnded?(RecordedMeeting(folder: meeting, speakers: speakers))
     }
 
     private func reconcileDisplayTimer() {

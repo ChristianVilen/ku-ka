@@ -3,6 +3,32 @@ import XCTest
 
 @MainActor
 final class MeetingProcessorTests: MeetingProcessorTestCase {
+    func testTeamsNamesSurviveCorrectionsAndUpdateNotesInTranscriptAndSummaryInput() async throws {
+        let meeting = try makeMeeting()
+        var history = TeamsSpeakerHistory()
+        let run = UUID()
+        for index in 0...6 {
+            _ = history.append(TeamsSpeakerObservation(began: HostTime(seconds: Double(index) * 0.5),
+                                                      ended: HostTime(seconds: Double(index) * 0.5), sequence: index,
+                                                      sourceID: "call", speaker: TeamsSpeakerName("Friday")), runID: run)
+        }
+        let evidence = history.finish(clock: RecordingClock(origin: HostTime(seconds: 0)), endingAt: HostTime(seconds: 3))
+        knownWords = KnownWordsList(markdown: "- Friday → **Monday** ✓")
+        let processor = makeProcessor()
+
+        let outcome = await processor.process(meeting, speakers: evidence) { _ in }
+        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
+        XCTAssertTrue(try meeting.read(.heardTranscript).contains("Friday (Teams):** Let's ship on Friday"))
+        XCTAssertTrue(try meeting.read(.transcript).contains("Friday (Teams):** Let's ship on Monday"))
+        XCTAssertTrue(runner.calls.last?.arguments.last?.contains("Friday (Teams):** Let's ship on Monday") == true)
+
+        knownWords = KnownWordsList(markdown: "- Friday → **Tuesday** ✓")
+        let updated = await processor.updateNotes(meeting)
+        XCTAssertEqual(updated, .updated(summary: meeting.url(for: .summary)))
+        XCTAssertTrue(try meeting.read(.transcript).contains("Friday (Teams):** Let's ship on Tuesday"))
+        XCTAssertTrue(runner.calls.last?.arguments.last?.contains("Friday (Teams):** Let's ship on Tuesday") == true)
+    }
+
     func testFirstRunWritesTranscriptAndSummaryAndTrashesTheAudio() async throws {
         let meeting = try makeMeeting()
 
