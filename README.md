@@ -406,6 +406,35 @@ Unit tests never download or load the Whisper or SpeakerKit model. `RealMeetingA
 
 When running under XCTest, the app skips real shortcut registration, permission setup, clipboard polling, and meeting recovery. Meeting tests use a temporary folder, never `~/Meetings`. Tests use the real registrar with fake Carbon calls. Detection uses `XCTestConfigurationFilePath` (unit tests) and the `--uitesting` launch argument (no UI-test target currently exists).
 
+### Log storage development
+
+All app log calls use the shared logger and macOS unified logging. Private
+values become `<private>` before they reach an output. Error descriptions and
+summary-tool output remain private. Fixed reasons, error codes, and approved
+file paths remain visible.
+
+`LogOutput` connects the shared logger to optional daily files. Both outputs
+receive the same redacted, single-line message. File output is off until explicitly
+enabled. App startup and the **Show Log…** window remain pending the Settings
+changes, so the app does not yet create daily log files.
+
+`LogLine` formats single-line messages with local time, UTC offset, process ID,
+level, and category. `LogFiles` writes to an explicit folder, removes files older
+than 14 days, and limits storage to 20 MB while keeping today's file. Tests use
+temporary folders and check owner-only permissions, concurrent writes, cleanup,
+and deletion. `LogFilter` selects the time range, category, and error level before
+keeping the newest 5,000 rows.
+
+To view current app logs, run:
+
+```sh
+/usr/bin/log stream --predicate 'subsystem == "com.kuka.screenshot"' --info
+```
+
+The [log storage design](docs/superpowers/specs/2026-10-30-log-storage-design.md)
+and [output integration plan](docs/superpowers/plans/2026-10-30-log-outputs.md)
+record the privacy boundary and remaining work.
+
 ## Acknowledgements
 
 Meeting Notes transcribes with [WhisperKit](https://github.com/argmaxinc/argmax-oss-swift) (`argmaxinc/argmax-oss-swift`), which is under the MIT License.

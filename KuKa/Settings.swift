@@ -121,7 +121,7 @@ final class Settings {
         do {
             try loginItem.setEnabled(enabled)
         } catch {
-            NSLog("Launch at login toggle failed: \(error)")
+            Log.app.error("Launch at login toggle failed (code \((error as NSError).code)): \(error.localizedDescription)")
         }
     }
 }
