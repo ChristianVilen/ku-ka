@@ -16,7 +16,7 @@ enum MeetingOutcome: Equatable {
 enum NotesUpdateOutcome: Equatable {
     case updated(summary: URL)
     /// Every summary CLI failed. `transcript.md` was already written again, with the answers.
-    case summaryToolFailed(message: String)
+    case summaryToolFailed(failures: [SummaryFailure])
     /// Anything else failed, for example a read or a write in the meeting folder. `summary.md` did
     /// not change, and `transcript.md` may or may not have.
     case failed(message: String)
@@ -72,7 +72,7 @@ struct MeetingProcessor {
                 try meeting.write(SummaryDocument.markdown(title: meeting.title, body: notes), to: .summary)
             case .failed(let failures):
                 if Task.isCancelled { return .cancelled }
-                return .summaryToolFailed(message: failures.map(\.description).joined(separator: "\n"))
+                return .summaryToolFailed(failures: failures)
             }
         } catch {
             if Task.isCancelled { return .cancelled }
@@ -245,7 +245,7 @@ struct MeetingProcessor {
         do {
             try meeting.discardAudio(trash: trash)
         } catch {
-            NSLog("Ku-Ka: could not move meeting audio to the Trash: \(error)")
+            Log.meeting.error("Could not move meeting audio to the Trash (code \((error as NSError).code)): \(error.localizedDescription)")
         }
         let summary = try await correctAndSummarize(meeting)
         switch summary.result {
@@ -270,8 +270,9 @@ struct MeetingProcessor {
         let content = Transcript.contentForSummary(corrected.body)
         let result = await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content))
         if case .written(_, _, let cli, let earlier) = result, !earlier.isEmpty {
-            NSLog("Ku-Ka: %@ wrote the notes of %@. Tried first: %@", cli.rawValue, meeting.name,
-                  earlier.map(\.description).joined(separator: "; "))
+            for failure in earlier {
+                Log.meeting.notice("\(cli.rawValue, privacy: .public) wrote the notes of \(meeting.name, privacy: .public). Earlier failure: \(failure.logMessage)")
+            }
         }
         return (result, content, list)
     }

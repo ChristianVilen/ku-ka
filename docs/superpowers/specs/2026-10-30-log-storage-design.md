@@ -1,14 +1,16 @@
 # Log storage and filtering
 
 The approved log-viewer handover calls for daily files and an in-app viewer.
-This first stage builds the independent file and filtering code. App integration
-waits until PR #49 (Settings) and PR #51 (Teams logging) merge.
+The first stage built the independent file and filtering code. PR #51 (Teams
+logging) has since merged. The next approved stage connects the logger to
+optional file output and migrates all 37 NSLog calls. Startup and the window
+still wait for PR #49 (Settings).
 
 ## Agreed decisions
 
 - Use #49's `OrdinaryWindowActivation` and production-only `AppLaunchMode` wiring.
 - Reuse #51's `Log`, categories, and `LogMessage` privacy interpolation. Do not
-  create competing definitions here. Private values become `<private>` before
+  create competing definitions. Private values become `<private>` before
   either output sees text. Error descriptions need a source review before they
   can be public; prefer a fixed message and an error code.
 - Create the log directory with 0700 permissions and files with 0600.
@@ -55,9 +57,23 @@ but cannot prove launch membership or an error level. Filter before retaining
 the newest 5,000 rows. Return rows oldest first, using parsed absolute time and
 stable input order for ties; unknown-format rows keep their place in input.
 
+## Output connection
+
+`LogOutput.shared` supplies the outputs for all category instances. It takes a
+short lock to read or replace the optional file writer and releases it before
+calling either output. `LogLine` normalizes the already-redacted message once
+for both outputs. The unified-log adapter uses the same level and category.
+Tests use a separate LogOutput and temporary files, never the production singleton.
+
+`LogMessage` can contain another LogMessage without losing its privacy choices.
+`SummaryFailure.logMessage` keeps the tool name, failure kind, exit status, and
+searched paths public. Launch error details and stderr remain private. Its raw
+description remains available for error.md. Update Notes carries typed failures
+through to the controller, which logs them with the same rules.
+
 ## Deferred work
 
-After both PRs merge: connect both logging outputs, add a cached background
-`LogReading` adapter, the two-second refresh, window controls and follow behavior,
-menu action, production startup, and migration of the 37 NSLog calls. Test
-privacy at the two-output boundary then. Document shipped UI only when it exists.
+After the Settings PR merges: add a cached background `LogReading` adapter,
+the two-second refresh, window controls and follow behavior, menu action, and
+production startup. File-output failures must go directly to the unified log,
+never back through the file logger. Document shipped UI only when it exists.
