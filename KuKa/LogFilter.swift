@@ -12,11 +12,23 @@ struct LogRow: Sendable {
     }
 }
 
-enum LogRange: CaseIterable {
+enum LogRange: CaseIterable, Sendable {
     case thisLaunch, today, lastSevenDays, everything
+
+    func interval(now: Date, launchDate: Date, calendar: Calendar = .current) -> DateInterval? {
+        let today = calendar.startOfDay(for: now)
+        let start: Date
+        switch self {
+        case .thisLaunch: start = min(calendar.startOfDay(for: launchDate), today)
+        case .today: start = today
+        case .lastSevenDays: start = calendar.date(byAdding: .day, value: -6, to: today)!
+        case .everything: return nil
+        }
+        return DateInterval(start: start, end: calendar.date(byAdding: .day, value: 1, to: today)!)
+    }
 }
 
-struct LogFilter {
+struct LogFilter: Sendable {
     var range: LogRange = .thisLaunch
     var category: String?
     var errorsOnly = false

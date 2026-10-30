@@ -30,6 +30,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     let menu = NSMenu()
     var onShowSettings: (() -> Void)?
     var onShowPermissions: (() -> Void)?
+    var onShowLog: (() -> Void)?
     var onOpenKeyboardSettings: (() -> Void)?
     /// Fired every time the menu opens, before it is shown.
     var onMenuWillOpen: (() -> Void)?
@@ -215,6 +216,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         permissionsItem.target = self
         menu.addItem(permissionsItem)
 
+        let logItem = NSMenuItem(title: "Show Log…", action: #selector(showLog), keyEquivalent: "")
+        logItem.target = self
+        menu.addItem(logItem)
+
         let reportBug = NSMenuItem(title: "Report a Bug…", action: #selector(openReportBug), keyEquivalent: "")
         reportBug.target = self
         menu.addItem(reportBug)
@@ -232,6 +237,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func showSettings() { onShowSettings?() }
+    @objc private func showLog() { onShowLog?() }
 
     @objc private func showPermissions() {
         onShowPermissions?()

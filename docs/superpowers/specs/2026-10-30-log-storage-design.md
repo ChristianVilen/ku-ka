@@ -2,9 +2,9 @@
 
 The approved log-viewer handover calls for daily files and an in-app viewer.
 The first stage built the independent file and filtering code. PR #51 (Teams
-logging) has since merged. The next approved stage connects the logger to
-optional file output and migrates all 37 NSLog calls. Startup and the window
-still wait for PR #49 (Settings).
+logging) and PR #49 (Settings) have since merged. The output connection and
+37-call migration are complete. The final stage adds production startup and
+the native log window using the shared window activation and launch hosts.
 
 ## Agreed decisions
 
@@ -71,9 +71,24 @@ searched paths public. Launch error details and stderr remain private. Its raw
 description remains available for error.md. Update Notes carries typed failures
 through to the controller, which logs them with the same rules.
 
-## Deferred work
+## Viewer and launch
 
-After the Settings PR merges: add a cached background `LogReading` adapter,
-the two-second refresh, window controls and follow behavior, menu action, and
-production startup. File-output failures must go directly to the unified log,
-never back through the file logger. Document shipped UI only when it exists.
+Production AppDelegate enables file output at launch and owns one log window.
+XCTest and the Settings preview do not construct production services. Quit stops
+the producers and drains queued log writes for up to two seconds. File-output
+failures and a drain timeout go directly to the unified log.
+
+Show Log… follows Permissions… in the status menu. It opens the retained
+Ku-Ka Log window with range, category, and error filters, a selectable monospaced
+text view, Copy All, Save…, and confirmed Delete All Logs. Cmd-F uses the native
+find bar. Shared OrdinaryWindowActivation accounts for other open app windows.
+
+The reader caches files by size, modification time, and identity. Reads and
+filtering run off the main actor every two seconds while the window is open.
+Close, filter changes, and deletion invalidate old results. Updates preserve
+selection and visible retained text when rows leave the 5,000-row window. At
+the bottom, the view follows new text. Copy and Save export the displayed text.
+
+The [window plan](../plans/2026-10-30-log-window.md) records validation results
+and any remaining manual checks. Implementation does not imply that those
+manual checks have passed.

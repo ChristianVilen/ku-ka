@@ -12,6 +12,10 @@ struct Log: Sendable {
     static let meeting = Log(category: "meeting")
     static let teams = Log(category: "teams")
 
+    static var categories: [String] {
+        [app, capture, tiling, hotkeys, permissions, keepAwake, clipboard, meeting, teams].map(\.category)
+    }
+
     let category: String
     private let output: LogOutput
 

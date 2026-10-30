@@ -42,6 +42,12 @@ final class LogFiles: @unchecked Sendable {
         }
     }
 
+    func flush(timeout: TimeInterval) -> Bool {
+        let finished = DispatchSemaphore(value: 0)
+        queue.async { finished.signal() }
+        return finished.wait(timeout: .now() + timeout) == .success
+    }
+
     func deleteAll() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {

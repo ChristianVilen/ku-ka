@@ -154,6 +154,32 @@ final class LogFilesTests: XCTestCase {
         XCTAssertEqual(try contents("Ku-Ka-2026-10-30.log"), "keep")
     }
 
+    func testBoundedShutdownDrainFinishesAcceptedWrites() throws {
+        let files = makeFiles()
+        files.append(line("before quit"))
+        XCTAssertTrue(files.flush(timeout: 2))
+        XCTAssertEqual(try contents("Ku-Ka-2026-10-30.log"),
+                       "2026-10-30 13:00:00.000 +0200 [42] info app: before quit\n")
+    }
+
+    func testShutdownDrainCanTimeOutWithoutWaitingForeverForTheWriter() throws {
+        try seed("target", text: "keep")
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("Ku-Ka-2026-10-30.log"),
+                                                  withDestinationURL: folder.appendingPathComponent("target"))
+        let entered = DispatchSemaphore(value: 0)
+        let resume = DispatchSemaphore(value: 0)
+        let files = LogFiles(folder: folder, clock: { logDate("2026-10-30T11:00:00Z") }, onFailure: { _ in
+            entered.signal()
+            resume.wait()
+        })
+        files.append(line("fails"))
+        XCTAssertEqual(entered.wait(timeout: .now() + 2), .success)
+        let finished = files.flush(timeout: 0.02)
+        resume.signal()
+        XCTAssertFalse(finished)
+        XCTAssertTrue(files.flush(timeout: 2))
+    }
+
     private func makeFiles() -> LogFiles {
         LogFiles(folder: folder, clock: { logDate("2026-10-30T11:00:00Z") },
                  calendar: calendar, onFailure: { XCTFail("Unexpected file error: \($0)") })

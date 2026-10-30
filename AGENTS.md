@@ -40,8 +40,10 @@ KuKa/
 ├── OrdinaryWindowActivation.swift # Shared activation policy and bring-to-front for Settings, onboarding, and word review
 ├── LogLine.swift        # LogLevel and LogLine: single-line text, timestamp offsets, formatting and parsing
 ├── LogOutput.swift      # Shared or injected outputs: one redacted LogLine to unified logging and optional daily files
-├── LogFiles.swift       # Queued daily file writes, owner-only permissions, retention, and deletion; not wired at launch yet
+├── LogFiles.swift       # Queued daily file writes, owner-only permissions, retention, deletion, and bounded shutdown drain
 ├── LogFilter.swift      # LogRow, LogRange, and LogFilter: parsed rows, range/category/error filters, newest 5,000
+├── LogFileReader.swift  # LogReading and actor-owned file cache; cancellable reads and filtering off the main actor
+├── LogWindowController.swift # Retained log window, native controls, polling lifetime, copy/save/delete, find, and scroll/selection preservation
 ├── AppDelegate.swift    # NSStatusItem menu bar, wires hotkey → overlay → capture → thumbnail → editor pipeline
 ├── HotkeyManager.swift  # Desired shortcuts, feature toggles, retry timer, wake handling and reported issues
 ├── HotkeyShortcut.swift # Seven shortcut definitions, actions, labels, keycaps and registration failures
@@ -207,15 +209,19 @@ To keep a file out of the build, put it outside these two folders.
 - `Log` now uses `LogOutput.shared` for every category. `LogOutput.enableFiles`
   attaches a file writer under a short lock, including for existing category
   instances. Both outputs receive one normalized, already-redacted `LogLine`.
-  File output starts off. Do not add app startup or `Show Log…` until the Settings
-  integration from PR #49 is ready.
+  File output starts off. Production AppDelegate enables it before other startup
+  work, using `~/Library/Logs/Ku-Ka/`. XCTest and Settings preview have separate
+  launch hosts and never enable it. AppDelegate owns the window, reader, and writer.
 - `LogLine` takes already-redacted text. It escapes message line breaks and
   keeps 2,000 characters plus an ellipsis when cut. Parsing uses the timestamp's
   UTC offset. Category names are strings supplied by the logger.
 - `LogFiles` requires an explicit folder and error handler. Its serial queue
   owns file access and cleanup state. The clock and error handler are Sendable.
   The error handler must not write through the file logger. `flush()` waits for
-  queued work, and `deleteAll()` reports failures to its caller.
+  queued work, and `deleteAll()` reports failures to its caller. After stopping
+  producers at quit, AppDelegate calls `flush(timeout: 2)` to drain queued writes
+  without waiting forever. Write failures and drain timeouts go directly to
+  unified logging through `LogOutput.reportFileFailure`, never back into files.
 - The folder mode is 0700 and the file mode is 0600. A write opens, appends one
   complete UTF-8 line, and closes the file. Startup and the first append of a new
   local day remove files older than 14 calendar days, then oldest files above
@@ -228,13 +234,33 @@ To keep a file out of the build, put it outside these two folders.
 - `LogLineTests`, `LogFilesTests`, and `LogFilterTests` cover formatting, offsets,
   Unicode, retention, permissions, concurrent writers, deletion and recreation,
   file ownership, filters, ordering, and the row cap. File tests use temporary
-  folders only. The design and remaining work are in
+  folders only. The design is in
   `docs/superpowers/specs/2026-10-30-log-storage-design.md`.
 - `LogOutputTests` use an injected unified-log adapter and real temporary files
   to check both outputs, privacy composition, levels, metadata, enabling files,
   concurrent categories, normalization, and file failures. `LogTests` check the
   interpolation rules. Summary tests check redacted log details separately from
   the full error.md description and the structured Update Notes failure outcome.
+- `LogFileReader` is an actor. It caches regular owned files by size, nanosecond
+  modification time, and inode, and reads at most the size observed when opening
+  a file. It rejects symlinks and checks cancellation before reading. Missing
+  folders are empty. `LogReading.filteredRows` keeps both reading and filtering
+  off the main actor; only the newest 5,000 matching rows reach the window.
+- `LogWindowController` owns one normal window and uses OrdinaryWindowActivation
+  with Settings, onboarding, and word review. Show Log… follows Permissions….
+  A common-mode timer requests reads every two seconds while open. New filter
+  requests, deletion, and close invalidate old requests. Copy and Save use only
+  displayed text. Delete requires a native confirmation, and an error stays
+  visible until another action. Cmd-F opens the NSTextView find bar.
+- The text view follows updates only at the bottom. When the cap removes a prefix,
+  it adjusts the selection and scroll position against retained lines. Identical
+  results do not replace text or leave a forced-follow request pending. Launch
+  time is rounded down to the millisecond precision stored in log timestamps.
+- Reader/window tests cover cache invalidation, cancellation, filters, copy/save,
+  deletion, errors, polling, find, shared activation, and scroll/selection at the
+  row cap. `KUKA_LOG_SNAPSHOTS` enables view captures; pass it through xcodebuild
+  as `TEST_RUNNER_KUKA_LOG_SNAPSHOTS`. Captures and controller tests do not replace
+  a live keyboard, native-sheet, or VoiceOver check.
 
 ### Flow
 
