@@ -21,7 +21,7 @@ xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
   -only-testing:KuKaTests/StatusMenuTests
 ```
 
-The full command was run once:
+The full command is:
 
 ```sh
 xcodebuild -project KuKa.xcodeproj -scheme KuKa -destination 'platform=macOS' \
@@ -41,18 +41,19 @@ Results are in `build/task-verification/Logs/Test/`.
 | 14-18-11 | Focused | Two geometry assertions failed. The native disclosure bezel forced a narrow button and changed layout. |
 | 14-18-56 | Focused | 48 passed after switching to full-width native disclosure buttons. |
 | 14-19-46 | Final focused | 48 passed after explicit disclosure glyph and accessible expanded-state updates. |
+| 14-25-08 | Final full | 825 executed, 820 passed, five skipped, zero failures at implementation commit `9c226db`. |
 
-The full run used an uncommitted intermediate implementation based on `aeea754b039452f37c2e1c8fbda073e2f498885f`. The final implementation adds solid root and navigation fallbacks, compact spacing, trailing alignment, crop instructions, and the full-width disclosure controls after that full run. Final focused checks and native rendering cover these changes. The full suite was not repeated.
+The first full run used an uncommitted intermediate implementation based on `aeea754b039452f37c2e1c8fbda073e2f498885f`. The final implementation adds solid root and navigation fallbacks, compact spacing, trailing alignment, crop instructions, and the full-width disclosure controls after that run. During independent review, the controller confirmed 48 passing tests in the final focused result. Xcode had pruned the earlier full bundle, so the controller ran the full suite again at `9c226db`. The final full command exited 0. `xcresulttool get test-results summary` confirmed 820 passed, five skipped, zero failures in `Test-KuKa-2026.10.30_14-25-08-+0200.xcresult`. Older bundles in the shared DerivedData directory can be pruned by Xcode.
 
 Only two existing test methods changed. The long-path test now finds the visible scroll view inside the page container, expects a 760-point starting width, compares the path width to the page viewport, and checks scrolling at 640 by 420 points. The native rendering test includes both navigation buttons in the key cycle, finds the visible page scroll view, and uses the new 760 by 700 size and bitmap ratio. No test methods or test cases were added.
 
 The five skipped checks are the optional meeting-panel picture, two real live-transcript checks, real Whisper audio, and real SpeakerKit audio. No real fixtures or model downloads were enabled. Xcode reported its existing CoreDevice and CoreSimulator mismatch, duplicate destination, Info.plist resource, actor-conversion, and word-review thread-priority warnings. Native background service messages also appeared. This was a successful run with warnings.
 
-## Native evidence and reproduction
+## Native evidence and method
 
-The temporary renderer links the actual built `KuKa.debug.dylib` through `@testable import KuKa`. It constructs only Settings with an inert login service, cancelled picker callbacks, an inert presenter, and isolated defaults. It never orders a window onscreen or constructs `AppDelegate`. The synthetic paths do not need to exist. It removes its preference domain on exit. Its action assertions remain only in the ignored task workspace, outside the committed source and test suites. The committed evidence consists of images and this record.
+The temporary renderer linked the actual built `KuKa.debug.dylib` through `@testable import KuKa`. It constructed only Settings with an inert login service, cancelled picker callbacks, an inert presenter, and isolated defaults. It never ordered a window onscreen or constructed `AppDelegate`. The synthetic paths did not need to exist. It removed its preference domain on exit. Its action assertions stayed in the ignored task workspace, outside the committed source and test suites. The temporary source was removed after independent review. The committed evidence consists of images and this record.
 
-From the repository root, after the focused build:
+The task used this command from the repository root after the focused build. Its temporary source is not a retained reproduction tool.
 
 ```sh
 xcrun swiftc -parse-as-library \
@@ -79,4 +80,8 @@ Comparison with B / `.bold` confirms the floating rounded sidebar, native select
 
 `cacheDisplay` produces opaque offscreen material in these images. It does not prove live desktop glass, blur, reflections, focus rings, or active control color. Switches show inactive gray tracks because the window is never key onscreen. The selected navigation image is not visible in the native glass capture, while the same image is visible with the solid native button style. The image and image position remain configured in source. This is a material-specific offscreen observation; live selected-icon rendering is unverified.
 
-No production or preview app was launched. No meetings were read, models downloaded, or OS preferences changed. Reduce Transparency and Increase Contrast used `applyDisplayOptions` on the views, with solid-background and border assertions. A live VoiceOver session, physical keyboard focus rings, signed login registration, native file-sheet focus return, and real desktop material composition remain unverified. Independent review is the parent's next step.
+No production or preview app was launched. No meetings were read, models downloaded, or OS preferences changed. Reduce Transparency and Increase Contrast used `applyDisplayOptions` on the views, with solid-background and border assertions. A live VoiceOver session, physical keyboard focus rings, signed login registration, native file-sheet focus return, and real desktop material composition remain unverified.
+
+## Independent review
+
+The scoped review approved spec compliance and code quality after checking the committed diff, the temporary native probe, and all 12 images against B. A separate comment review found no comments or suppressions to remove. The whole-branch review independently confirmed the final focused and full test summaries and inspected all 12 images. Both code reviews found no Critical or Important issues. One Minor remains for live selected-icon visibility. The reviews support the bounded layout and action claims, with the desktop limits above. No publication or merge occurred.
