@@ -271,7 +271,7 @@ enum Transcript {
         let legend: Legend = hasNames ? (hasRooms ? .teamsRooms : .teamsMicrophone) : (hasRooms ? .rooms : .microphone)
         header.append(legend.rawValue)
         var text = """
-        # \(title)
+        # \(MeetingTitle.heading(title))
 
         Duration: \(clock(duration))
 

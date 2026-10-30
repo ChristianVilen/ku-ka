@@ -58,13 +58,8 @@ final class MeetingRecorder {
     private enum State {
         /// `notice` is what the panel says about the meeting that just ended, until it closes.
         case idle(notice: EndNotice?)
-        case starting(id: UUID)
+        case starting(Session)
         case active(ActiveMeeting)
-
-        var startingID: UUID? {
-            guard case .starting(let id) = self else { return nil }
-            return id
-        }
 
         var phase: RecorderPhase {
             switch self {
@@ -81,6 +76,11 @@ final class MeetingRecorder {
         case interrupted(reason: String)
     }
 
+    private struct Session {
+        let id: UUID
+        let title: String?
+    }
+
     /// Dropped at Stop, interruption, or quit to release the folder lock and all live state.
     private struct ActiveMeeting {
         struct State: Equatable {
@@ -91,6 +91,7 @@ final class MeetingRecorder {
             var isTranscriptOpen = false
         }
 
+        let session: Session
         let folder: MeetingFolder
         let lock: FileLock
         let handle: ActiveRecording
@@ -135,6 +136,26 @@ final class MeetingRecorder {
     var onControlsRequest: (@MainActor (MeetingControlsRequest) -> Void)?
 
     var phase: RecorderPhase { state.phase }
+    var activeSessionID: UUID? {
+        switch state {
+        case .idle: return nil
+        case .starting(let session): return session.id
+        case .active(let meeting): return meeting.session.id
+        }
+    }
+
+    var displayTitle: String? {
+        switch state {
+        case .idle: return nil
+        case .starting(let session): return session.title
+        case .active(let meeting): return meeting.session.title
+        }
+    }
+
+    func stopRecording(ifSession session: UUID) {
+        guard activeSessionID == session else { return }
+        stopRecording()
+    }
 
     /// Nil outside a meeting. It stands still while paused.
     var recordedTime: TimeInterval? {
@@ -203,43 +224,45 @@ final class MeetingRecorder {
 
     func toggleRecording() async {
         switch state {
-        case .idle: await start()
+        case .idle: _ = await startRecording()
         case .active: stopRecording()
         case .starting: break
         }
     }
 
-    private func start() async {
-        let id = UUID()
+    func startRecording(title: String? = nil) async -> UUID? {
+        guard case .idle = state else { return nil }
+        let session = Session(id: UUID(), title: title.flatMap(MeetingTitle.normalized))
         let namesEnabled = teamsSpeakerNamesEnabled()
-        state = .starting(id: id)
+        state = .starting(session)
         notifier.requestPermission()
-        let missing = await missingGrant()
-        guard state.startingID == id else { return }
+        let reason = await missingGrant()
+        guard activeSessionID == session.id else { return nil }
         guard !Task.isCancelled else {
             state = .idle(notice: nil)
-            return
+            return nil
         }
-        if let reason = missing {
+        if let reason {
             state = .idle(notice: nil)
             if alertStartFailure(reason, true) { onShowPermissions?() }
-            return
+            return nil
         }
         do {
             let meeting = try MeetingFolder.create(in: root(), startingAt: now())
             do {
                 let lock = try meeting.lock()
+                if let title = session.title { try meeting.saveDisplayTitle(title) }
                 // Read the origin just before starting capture to align both tracks and click times.
                 let clock = RecordingClock(origin: hostNow())
                 let handle = try await capture.start(into: meeting, clock: clock) { [weak self] reason in
                     self?.handleInterruption(of: meeting, reason: reason)
                 }
-                guard state.startingID == id, !Task.isCancelled else {
+                guard activeSessionID == session.id, !Task.isCancelled else {
                     handle.stop()
-                    if state.startingID == id {
+                    if activeSessionID == session.id {
                         state = .idle(notice: nil)
                     }
-                    return
+                    return nil
                 }
                 if let reason = handle.endReason {
                     endRecording(meeting, interruptedBecause: reason)
@@ -252,19 +275,22 @@ final class MeetingRecorder {
                     let liveTask = Task { [weak self] in
                         for await update in updates { self?.applyLive(update, to: meeting) }
                     }
-                    state = .active(ActiveMeeting(folder: meeting, lock: lock, handle: handle, liveTask: liveTask, speakers: speakers,
+                    state = .active(ActiveMeeting(session: session, folder: meeting, lock: lock, handle: handle,
+                                                  liveTask: liveTask, speakers: speakers,
                                                   state: ActiveMeeting.State(clock: clock)))
+                    return session.id
                 }
             } catch {
-                try? FileManager.default.removeItem(at: meeting.url)
+                if meeting.stage() == nil { try? FileManager.default.removeItem(at: meeting.url) }
                 throw error
             }
         } catch {
-            guard state.startingID == id else { return }
+            guard activeSessionID == session.id else { return nil }
             state = .idle(notice: nil)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             _ = alertStartFailure(error.localizedDescription, false)
         }
+        return nil
     }
 
     private func missingGrant() async -> String? {
