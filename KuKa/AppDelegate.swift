@@ -17,7 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var editorWindow: EditorWindow?
     private lazy var keepAwake = KeepAwakeController(keepDisplayAwake: settings.keepDisplayAwake)
     private let windowTiling = WindowTilingController()
-    private lazy var clipboardHistory = ClipboardHistoryController()
+    private let clipboardHistory = ClipboardHistoryController()
     private lazy var clipboardPanel = ClipboardPanel(controller: clipboardHistory)
     private lazy var knownWords = KnownWordsFile(url: { [settings] in settings.knownWordsFile })
     private lazy var meetingRecorder = MeetingRecorder(
@@ -52,7 +52,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var settingsWindow = SettingsWindowController(settings: settings)
     private let permissions = PermissionsManager()
     private var onboardingController: OnboardingWindowController?
-    // Hotkey setup can report changes before permission monitoring starts.
+    // False until setupPermissions() reads the grants. Hotkey setup calls updateStatus() before that,
+    // and grants that were not read yet must not show warnings or open screenshot setup.
     private var permissionHandlingEnabled = false
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

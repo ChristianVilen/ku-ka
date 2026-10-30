@@ -61,7 +61,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
          root: @escaping () -> URL,
          processor: MeetingProcessor,
          wordsToCheck: @escaping (MeetingFolder?) -> Int,
-         summaryTool: @escaping () -> SummaryTool = { .automatic },
+         summaryTool: @escaping () -> SummaryTool,
          notifier: Notifying = SystemNotifier.shared,
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) }) {
         self.recorder = recorder

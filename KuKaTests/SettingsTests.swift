@@ -2,18 +2,6 @@ import XCTest
 @testable import KuKa
 
 final class SettingsTests: XCTestCase {
-    func testSummaryToolDefaultsAndUnknownValuesDoNotWriteAndChoicesPersist() {
-        XCTAssertEqual(sut.summaryTool, .automatic)
-        XCTAssertNil(defaults.object(forKey: "summaryTool"))
-        defaults.set("future", forKey: "summaryTool")
-        XCTAssertEqual(sut.summaryTool, .automatic)
-        XCTAssertEqual(defaults.string(forKey: "summaryTool"), "future")
-        for tool in SummaryTool.allCases {
-            sut.summaryTool = tool
-            XCTAssertEqual(defaults.string(forKey: "summaryTool"), tool.rawValue)
-            XCTAssertEqual(Settings(defaults: defaults, loginItem: loginItem).summaryTool, tool)
-        }
-    }
     private var defaults: UserDefaults!
     private var loginItem: FakeLoginItem!
     private var sut: Settings!
@@ -29,6 +17,19 @@ final class SettingsTests: XCTestCase {
     override func tearDown() {
         defaults.removePersistentDomain(forName: "SettingsTests")
         super.tearDown()
+    }
+
+    func testSummaryToolDefaultsAndUnknownValuesDoNotWriteAndChoicesPersist() {
+        XCTAssertEqual(sut.summaryTool, .automatic)
+        XCTAssertNil(defaults.object(forKey: "summaryTool"))
+        defaults.set("future", forKey: "summaryTool")
+        XCTAssertEqual(sut.summaryTool, .automatic)
+        XCTAssertEqual(defaults.string(forKey: "summaryTool"), "future")
+        for tool in SummaryTool.allCases {
+            sut.summaryTool = tool
+            XCTAssertEqual(defaults.string(forKey: "summaryTool"), tool.rawValue)
+            XCTAssertEqual(Settings(defaults: defaults, loginItem: loginItem).summaryTool, tool)
+        }
     }
 
     func testTeamsSpeakerNamesAreOptInAndPersistWithTheDocumentedKey() {

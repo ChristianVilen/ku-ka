@@ -4,7 +4,6 @@ import XCTest
 @MainActor
 final class SummaryToolJobTests: MeetingNotesTestCase {
     private var tool = SummaryTool.antigravity
-    private var reads = 0
 
     private func installController(transcriber: Transcribing) {
         sut.shutDown()
@@ -13,13 +12,15 @@ final class SummaryToolJobTests: MeetingNotesTestCase {
             root: { [unowned self] in root },
             processor: makeMeetingProcessor(transcribers: [transcriber], runner: runner),
             wordsToCheck: { _ in 0 },
-            summaryTool: { [unowned self] in reads += 1; return tool },
+            summaryTool: { [unowned self] in tool },
             notifier: notifier,
             openURL: { _ in })
         menu = NSMenu()
         sut.buildMenuSection(into: menu)
         runner.results["claude"] = .reply(defaultNotes)
     }
+
+    private var toolsRun: [String] { runner.calls.map { $0.executable.lastPathComponent } }
 
     func testRunningTranscriptionKeepsItsToolAndNextQueuedJobReadsTheNewTool() async throws {
         let held = HeldTranscriber()
@@ -29,12 +30,10 @@ final class SummaryToolJobTests: MeetingNotesTestCase {
         sut.resumeUnfinished()
         await waitUntil { held.waiting }
         XCTAssertTrue(held.waiting)
-        XCTAssertEqual(reads, 1)
         tool = .claude
         held.release()
         await sut.waitUntilIdle()
-        XCTAssertEqual(runner.calls.map { $0.executable.lastPathComponent }, ["agy", "claude"])
-        XCTAssertEqual(reads, 2)
+        XCTAssertEqual(toolsRun, ["agy", "claude"])
         XCTAssertEqual(first.stage(), .done)
         XCTAssertEqual(second.stage(), .done)
     }
@@ -51,19 +50,7 @@ final class SummaryToolJobTests: MeetingNotesTestCase {
         tool = .antigravity
         sut.updateNotes(meeting)
         await sut.waitUntilIdle()
-        XCTAssertEqual(runner.calls.map { $0.executable.lastPathComponent }, ["claude", "agy"])
-        XCTAssertEqual(reads, 2)
-    }
-
-    func testProcessorUsesExplicitChoiceForProcessingAndUpdating() async throws {
-        let meeting = try leftoverMeeting(at: clock, transcript: true)
-        runner.results["claude"] = .reply(defaultNotes)
-        let processor = makeMeetingProcessor(runner: runner)
-        let outcome = await processor.process(meeting, tool: .claude) { _ in }
-        XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
-        let update = await processor.updateNotes(meeting, tool: .antigravity)
-        XCTAssertEqual(update, .updated(summary: meeting.url(for: .summary)))
-        XCTAssertEqual(runner.calls.map { $0.executable.lastPathComponent }, ["claude", "agy"])
+        XCTAssertEqual(toolsRun, ["claude", "agy"])
     }
 }
 

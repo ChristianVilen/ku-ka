@@ -19,9 +19,10 @@ final class StatusMenuTests: XCTestCase {
             root: { [unowned self] in meetingsRoot },
             processor: makeMeetingProcessor(),
             wordsToCheck: { [unowned self] in WordReview.openQuestionCount(of: $0, in: meetingsRoot, knownWords: .empty) },
+            summaryTool: { .automatic },
             notifier: FakeNotifier())
         let keepAwake = KeepAwakeController(wakeManager: WakeManager(preventer: FakeSleepPreventer()),
-                                             notifier: FakeNotifier())
+                                             keepDisplayAwake: true, notifier: FakeNotifier())
         sut = StatusMenu(sections: [keepAwake, meetingNotes])
     }
 
@@ -79,16 +80,13 @@ final class StatusMenuTests: XCTestCase {
 
     func testMenuContainsSettingsAndOperationalItemsOnly() throws {
         let preferenceTitles = ["Settings…", "Settings", "Launch at Login", "Window Tiling", "Clipboard History",
-                                "Thumbnail Duration", "3 Seconds", "5 Seconds", "15 Seconds", "Forever"]
+                                "Thumbnail Duration", "3 Seconds", "5 Seconds", "15 Seconds", "Forever",
+                                "Choose Meetings Folder…"]
         XCTAssertEqual(menuItems.filter { preferenceTitles.contains($0.title) }.map(\.title), ["Settings…"])
-        for title in ["Settings…", "Start Recording Meeting", "Open Meetings Folder", "Permissions…", "Quit Ku-Ka"] {
+        for title in ["Start Recording Meeting", "Open Meetings Folder", "Permissions…", "Quit Ku-Ka"] {
             XCTAssertNotNil(item(titled: title))
         }
-        for title in ["Settings", "Launch at Login", "Window Tiling", "Clipboard History", "Thumbnail Duration", "3 Seconds", "5 Seconds", "15 Seconds", "Forever", "Choose Meetings Folder…"] {
-            XCTAssertNil(item(titled: title))
-        }
         let settingsItem = try XCTUnwrap(item(titled: "Settings…"))
-        XCTAssertEqual(menuItems.filter { $0.title == "Settings…" }.count, 1)
         XCTAssertEqual(settingsItem.keyEquivalent, ",")
         XCTAssertEqual(settingsItem.keyEquivalentModifierMask, .command)
         var shown = 0

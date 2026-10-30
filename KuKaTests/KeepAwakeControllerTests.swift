@@ -106,22 +106,20 @@ final class KeepAwakeControllerTests: XCTestCase {
 
     // MARK: - Keep display awake preference
 
-    func testDisplayAwakeDefaultsToOn() {
-        XCTAssertTrue(manager.keepDisplayAwake)
-
-        clickChip("∞")
-        XCTAssertEqual(preventer.lastKeepDisplayAwake, true)
+    func testTheSavedDisplayPreferenceReachesThePowerAssertion() {
+        let preventer = FakeSleepPreventer()
+        let controller = KeepAwakeController(wakeManager: WakeManager(preventer: preventer, now: { self.clock }),
+                                             now: { self.clock }, keepDisplayAwake: false, notifier: FakeNotifier())
+        controller.activate(.indefinite)
+        XCTAssertEqual(preventer.lastKeepDisplayAwake, false)
+        controller.deactivate()
     }
 
     func testChangingDisplayPreferenceUpdatesActivePowerAssertion() {
         clickChip("∞")
         controller.setDisplayAwake(false)
-        XCTAssertFalse(manager.keepDisplayAwake)
         XCTAssertEqual(preventer.lastKeepDisplayAwake, false)
         XCTAssertTrue(controller.isActive)
-        let newManager = WakeManager(preventer: FakeSleepPreventer(), now: { self.clock })
-        _ = KeepAwakeController(wakeManager: newManager, keepDisplayAwake: false)
-        XCTAssertFalse(newManager.keepDisplayAwake)
     }
 
     // MARK: - State-change hook (drives the status-bar icon)

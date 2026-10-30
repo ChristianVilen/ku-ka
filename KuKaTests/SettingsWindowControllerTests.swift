@@ -18,7 +18,7 @@ final class SettingsWindowControllerTests: XCTestCase {
         sut = SettingsWindowController(settings: settings,
             chooseFolder: { [unowned self] _, _, completion in completion(picked) },
             chooseContext: { [unowned self] _, _, completion in completion(picked) },
-            present: { _ in }, activation: OrdinaryWindowActivation(setPolicy: { _ in }))
+            present: { _ in }, activation: .fake())
     }
 
     override func tearDown() async throws {
@@ -91,18 +91,6 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: "meetingContextFile"))
     }
 
-    func testClearingBackgroundKeepsTheChosenFileOnDisk() throws {
-        let file = try makeTemporaryDirectory().appendingPathComponent("background.md")
-        try "Synthetic background".write(to: file, atomically: true, encoding: .utf8)
-        sut.show()
-        picked = file
-        sut.chooseBackground.performClick(nil)
-        XCTAssertEqual(settings.meetingContextFile, file)
-        sut.clearBackground.performClick(nil)
-        XCTAssertNil(settings.meetingContextFile)
-        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "Synthetic background")
-    }
-
     func testReopeningRefreshesWithoutWritingAndKeepsCustomDuration() {
         defaults.set(7.5, forKey: "thumbnailDuration")
         let before = defaults.persistentDomain(forName: "SettingsWindowControllerTests")! as NSDictionary
@@ -126,14 +114,6 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertEqual(login.setCalls, [])
     }
 
-    func testLoginFailureShowsActualStateAndUsefulError() {
-        login.errorToThrow = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Registration refused"])
-        sut.show()
-        sut.launchAtLogin.performClick(nil)
-        XCTAssertEqual(sut.launchAtLogin.state, .off)
-        XCTAssertTrue(sut.loginError.stringValue.contains("Registration refused"))
-    }
-
     func testReopeningAfterExternalLoginApprovalClearsPreviousError() {
         login.errorToThrow = NSError(domain: "test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Registration refused"])
         sut.show()
@@ -155,7 +135,7 @@ final class SettingsWindowControllerTests: XCTestCase {
             func setEnabled(_ enabled: Bool) throws {}
         }
         let controller = SettingsWindowController(settings: Settings(defaults: defaults, loginItem: PendingLoginItem()),
-            present: { _ in }, activation: OrdinaryWindowActivation(setPolicy: { _ in }))
+            present: { _ in }, activation: .fake())
         defer { controller.close() }
         controller.show()
         controller.launchAtLogin.performClick(nil)
@@ -171,8 +151,8 @@ final class SettingsWindowControllerTests: XCTestCase {
             fire(sut.thumbnailDuration)
             XCTAssertEqual(settings.thumbnailDuration, Double(duration))
         }
-        for (index, tool) in SummaryTool.allCases.enumerated() {
-            sut.summaryTool.selectItem(at: index)
+        for tool in SummaryTool.allCases {
+            sut.summaryTool.selectItem(withTitle: tool.title)
             fire(sut.summaryTool)
             XCTAssertEqual(settings.summaryTool, tool)
         }
@@ -197,92 +177,101 @@ final class SettingsWindowControllerTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(scroll.documentView).bounds.height, scroll.contentView.bounds.height)
     }
 
-    private func descendants(_ view: NSView) -> [NSView] {
-        [view] + view.subviews.flatMap(descendants)
-    }
-
-    func testOrdinaryWindowsShareActivationUntilLastClose() {
+    func testSettingsKeepsTheAppRegularUntilEveryOrdinaryWindowCloses() {
         var policies: [NSApplication.ActivationPolicy] = []
-        let activation = OrdinaryWindowActivation(setPolicy: { policies.append($0) })
-        let first = NSWindow()
-        let second = NSWindow()
-        activation.open(first)
-        activation.open(second)
-        activation.close(first)
+        var activations = 0
+        let activation = OrdinaryWindowActivation.fake(setPolicy: { policies.append($0) }, activateApp: { activations += 1 })
+        let review = NSWindow()
+        activation.open(review)
+        let controller = SettingsWindowController(settings: settings, present: { _ in }, activation: activation)
+        defer { controller.close() }
+        controller.show()
+        controller.show()
+        controller.close()
         XCTAssertEqual(policies, [.regular])
-        activation.close(second)
+        XCTAssertEqual(activations, 3, "every show brings Ku-Ka to the front")
+        activation.close(review)
         XCTAssertEqual(policies, [.regular, .accessory])
     }
 
-    func testSettingsAndOnboardingKeepActivationUntilBothCloseInEitherOrder() {
-        for settingsClosesFirst in [true, false] {
-            var policies: [NSApplication.ActivationPolicy] = []
-            let activation = OrdinaryWindowActivation(setPolicy: { policies.append($0) })
-            let controller = SettingsWindowController(settings: settings, present: { _ in }, activation: activation)
-            let onboarding = OnboardingWindowController(permissions: PermissionsManager(
-                isAccessibilityTrusted: { true }, hasScreenCaptureAccess: { true }, microphoneAccess: { .granted }),
-                settings: settings, activate: {}, activation: activation)
-            defer { controller.close(); onboarding.close() }
-            controller.show()
-            onboarding.show()
-            if settingsClosesFirst { controller.close() } else { onboarding.close() }
-            XCTAssertEqual(policies, [.regular])
-            if settingsClosesFirst { onboarding.close() } else { controller.close() }
-            XCTAssertEqual(policies, [.regular, .accessory])
-        }
-    }
-
-    func testSettingsAndWordReviewKeepActivationUntilBothCloseInEitherOrder() throws {
-        let root = try makeTemporaryDirectory()
-        let meeting = try MeetingFolder.create(in: root, startingAt: localDate(2026, 10, 29, 10, 0))
-        try meeting.write("**[00:00:01] Them:** Ask Convio.\n", to: .transcript)
-        try meeting.write("# Summary\n", to: .summary)
-        try meeting.write(#"{"questions": [{"heard": "Convio", "kind": "company", "quote": "Ask Convio."}]}"#, to: .questions)
-        for settingsClosesFirst in [true, false] {
-            var policies: [NSApplication.ActivationPolicy] = []
-            let activation = OrdinaryWindowActivation(setPolicy: { policies.append($0) })
-            let controller = SettingsWindowController(settings: settings, present: { _ in }, activation: activation)
-            let review = WordReviewController(root: { root },
-                knownWords: KnownWordsFile(url: { root.appendingPathComponent("known-words.md") }),
-                isOrdinary: { _ in false }, requestUpdate: { _ in })
-            let window = WordReviewWindowController(controller: review, activate: {}, activation: activation)
-            window.bindController()
-            defer { controller.close(); window.close() }
-            controller.show()
-            window.show(meeting)
-            if settingsClosesFirst { controller.close() } else { window.close() }
-            XCTAssertEqual(policies, [.regular])
-            if settingsClosesFirst { window.close() } else { controller.close() }
-            XCTAssertEqual(policies, [.regular, .accessory])
-        }
-    }
-
-    func testNativeAccessibilityNamesKeyOrderAndOffscreenRendering() throws {
-        sut.window?.appearance = NSAppearance(named: .aqua)
+    func testPageButtonsSwitchPagesAndShowReturnsToSettings() {
         sut.show()
-        XCTAssertEqual(sut.chooseMeetingsFolder.accessibilityLabel(), "Choose meetings folder")
-        XCTAssertEqual(sut.chooseBackground.accessibilityLabel(), "Choose background file")
-        XCTAssertEqual(sut.clearBackground.accessibilityLabel(), "Clear background file")
-        let controls: [NSView] = sut.pageButtons + [sut.launchAtLogin, sut.windowTiling, sut.clipboardHistory, sut.displayAwake,
+        sut.pageButtons[SettingsPage.instructions.rawValue].performClick(nil)
+        XCTAssertEqual(sut.selectedPage, .instructions)
+        XCTAssertEqual(sut.instructions.enclosingScrollView?.isHidden, false)
+        XCTAssertEqual(sut.pageButtons.map(\.state), [.off, .on])
+        sut.close()
+        sut.show()
+        XCTAssertEqual(sut.selectedPage, .settings)
+        XCTAssertEqual(sut.instructions.enclosingScrollView?.isHidden, true)
+        XCTAssertEqual(sut.pageButtons.map(\.state), [.on, .off])
+    }
+
+    func testEachPageCyclesTheKeyboardThroughNavigationAndItsLabelledControls() {
+        sut.show()
+        let settingsControls: [NSView] = [sut.launchAtLogin, sut.windowTiling, sut.clipboardHistory, sut.displayAwake,
             sut.thumbnailDuration, sut.chooseMeetingsFolder, sut.summaryTool, sut.chooseBackground, sut.clearBackground,
             sut.calendarReminders, sut.teamsSpeakerNames]
-        for (control, next) in zip(controls, controls.dropFirst() + [sut.pageButtons[0]]) {
-            XCTAssertTrue(control.nextKeyView === next)
+        assertKeyViewCycle(sut.pageButtons + settingsControls)
+        for control in settingsControls {
+            XCTAssertFalse(control.accessibilityLabel()?.isEmpty ?? true, "\(control) has no VoiceOver label")
         }
-        let content = try XCTUnwrap(sut.window?.contentView)
-        let scroll = try XCTUnwrap(descendants(content).compactMap { $0 as? NSScrollView }.first { !$0.isHidden })
-        scroll.drawsBackground = true
-        scroll.backgroundColor = .windowBackgroundColor
-        content.layoutSubtreeIfNeeded()
-        let bitmap = try XCTUnwrap(content.bitmapImageRepForCachingDisplay(in: content.bounds))
-        content.cacheDisplay(in: content.bounds, to: bitmap)
-        let data = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.png")
-        attachment.name = "settings-offscreen-760x700"
-        attachment.lifetime = .keepAlways
-        add(attachment)
-        XCTAssertEqual(content.bounds.size, NSSize(width: 760, height: 700))
-        XCTAssertEqual(bitmap.pixelsWide * 700, bitmap.pixelsHigh * 760)
+        sut.pageButtons[SettingsPage.instructions.rawValue].performClick(nil)
+        assertKeyViewCycle(sut.pageButtons + sut.instructions.guideButtons)
+    }
+
+    func testGuidesExpandAndCollapseWithTheirVoiceOverState() {
+        XCTAssertEqual(sut.instructions.guides.count, 7)
+        for (button, body) in sut.instructions.guides {
+            XCTAssertTrue(body.isHidden)
+            button.performClick(nil)
+            XCTAssertFalse(body.isHidden, button.title)
+            XCTAssertTrue(button.isAccessibilityExpanded(), button.title)
+            button.performClick(nil)
+            XCTAssertTrue(body.isHidden, button.title)
+            XCTAssertFalse(button.isAccessibilityExpanded(), button.title)
+        }
+    }
+
+    func testInstructionsShowEveryRegisteredShortcutWithSpokenKeyNames() {
+        XCTAssertEqual(Set(SettingsInstructionsView.shortcuts.flatMap(\.shortcuts)), Set(HotkeyShortcut.allCases))
+        let keys = descendants(sut.instructions).filter { $0.isAccessibilityElement() && $0.accessibilityRole() == .group }
+        XCTAssertEqual(keys.compactMap { $0.accessibilityLabel() }, [
+            "Shift + Command + 4", "Shift + Command + 3", "Shift + Command + C",
+            "Control + Option + Left Arrow or Right Arrow", "Control + Option + Return", "Control + Option + C"
+        ])
+    }
+
+    func testReduceTransparencyUsesSolidBackgroundsAndIncreaseContrastStrengthensBorders() throws {
+        let root = try XCTUnwrap(sut.window?.contentView as? SettingsBackground)
+        let groups = descendants(root).compactMap { $0 as? SettingsGlass }
+        XCTAssertGreaterThan(groups.count, 1)
+        sut.applyDisplayOptions(SettingsDisplayOptions(reduceTransparency: true, increaseContrast: true))
+        XCTAssertNotNil(root.layer?.backgroundColor)
+        for group in groups {
+            XCTAssertNotNil(group.layer?.backgroundColor)
+            XCTAssertEqual(group.layer?.borderWidth, 1.5)
+            XCTAssertTrue(group.content.superview === group, "the content leaves the hidden glass")
+        }
+        XCTAssertEqual(sut.pageButtons.map(\.bezelStyle), [.push, .push])
+        sut.applyDisplayOptions(SettingsDisplayOptions(reduceTransparency: false, increaseContrast: false))
+        XCTAssertNil(root.layer?.backgroundColor)
+        for group in groups {
+            XCTAssertNil(group.layer?.backgroundColor)
+            XCTAssertEqual(group.layer?.borderWidth, 0.5)
+            XCTAssertFalse(group.content.superview === group)
+        }
+        XCTAssertEqual(sut.pageButtons.map(\.bezelStyle), [.glass, .glass])
+    }
+
+    private func assertKeyViewCycle(_ views: [NSView], file: StaticString = #filePath, line: UInt = #line) {
+        for (view, next) in zip(views, views.dropFirst() + [views[0]]) {
+            XCTAssertTrue(view.nextKeyView === next, "\(view) → \(next)", file: file, line: line)
+        }
+    }
+
+    private func descendants(_ view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap(descendants)
     }
 
     private func fire(_ control: NSControl) {

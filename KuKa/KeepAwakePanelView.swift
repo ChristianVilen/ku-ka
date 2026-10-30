@@ -49,5 +49,4 @@ final class KeepAwakePanelView: NSView {
         onSelectDuration?(durations[sender.selectedSegment])
         enclosingMenuItem?.menu?.cancelTracking()
     }
-
 }

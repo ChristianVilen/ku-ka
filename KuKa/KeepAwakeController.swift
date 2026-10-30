@@ -26,7 +26,7 @@ final class KeepAwakeController: NSObject {
 
     init(wakeManager: WakeManager = WakeManager(),
          now: @escaping () -> Date = { Date() },
-         keepDisplayAwake: Bool = true,
+         keepDisplayAwake: Bool,
          notifier: Notifying = SystemNotifier.shared) {
         self.wakeManager = wakeManager
         self.now = now

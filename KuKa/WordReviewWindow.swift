@@ -44,7 +44,6 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
 
     private let controller: WordReviewController
     private let activation: OrdinaryWindowActivation
-    private let activate: () -> Void
 
     private let meetingLabel = NSTextField(labelWithString: "")
     private let positionLabel = NSTextField(labelWithString: "")
@@ -73,12 +72,9 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
     /// While the window closes, the nil screen that `controller.close()` reports must not close it again.
     private var isClosing = false
 
-    init(controller: WordReviewController,
-         activate: @escaping () -> Void = { NSApp.activate() },
-         activation: OrdinaryWindowActivation = .shared) {
+    init(controller: WordReviewController, activation: OrdinaryWindowActivation = .shared) {
         self.controller = controller
         self.activation = activation
-        self.activate = activate
 
         let window = ReviewWindow(contentRect: NSRect(x: 0, y: 0, width: Self.contentWidth, height: 300),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: true)
@@ -228,11 +224,8 @@ final class WordReviewWindowController: NSWindowController, NSWindowDelegate, NS
 
     private func present() {
         guard let window else { return }
-        if !window.isVisible {
-            activation.open(window)
-            window.center()
-        }
-        activate()
+        if !window.isVisible { window.center() }
+        activation.open(window)
         showWindow(nil)
         window.makeKeyAndOrderFront(nil)
     }

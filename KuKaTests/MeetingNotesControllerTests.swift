@@ -24,32 +24,27 @@ final class MeetingNotesControllerTests: MeetingNotesTestCase {
         XCTAssertEqual(status.accessibilityLabel(), "● Recording · 0:00 · \(title)")
     }
 
-    func testTheMenuLeavesFolderPreferencesToSettings() {
-        XCTAssertNil(item(titled: "Choose Meetings Folder…"))
-    }
-
-    private func changeFolder() {
-        guard let pickedFolder else { return }
-        root = pickedFolder
+    private func changeFolder(to folder: URL) {
+        root = folder
         sut.meetingsFolderChanged()
     }
 
-    func testChoosingAFolderImmediatelyChangesOpenAndTheNextRecording() async throws {
+    func testChangingTheFolderImmediatelyChangesOpenAndTheNextRecording() async throws {
         let previous = try XCTUnwrap(root)
-        pickedFolder = previous.deletingLastPathComponent().appendingPathComponent("New notes", isDirectory: true)
+        let newFolder = previous.deletingLastPathComponent().appendingPathComponent("New notes", isDirectory: true)
         try leftoverMeeting(at: clock, failure: "Failed")
         sut.menuWillOpen()
         let retry = try XCTUnwrap(item(titled: "Retry Failed Meeting"))
 
-        changeFolder()
+        changeFolder(to: newFolder)
 
-        XCTAssertFalse(FileManager.default.fileExists(atPath: pickedFolder!.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: newFolder.path))
         XCTAssertTrue(retry.isHidden)
         let open = try XCTUnwrap(item(titled: "Open Meetings Folder"))
         _ = (open.target as? NSObject)?.perform(open.action, with: open)
-        XCTAssertEqual(opened, [pickedFolder!])
+        XCTAssertEqual(opened, [newFolder])
         await recorder.toggleRecording()
-        XCTAssertEqual(MeetingFolder.all(in: pickedFolder!).count, 1)
+        XCTAssertEqual(MeetingFolder.all(in: newFolder).count, 1)
         XCTAssertEqual(MeetingFolder.all(in: previous).count, 1)
     }
 
@@ -60,27 +55,26 @@ final class MeetingNotesControllerTests: MeetingNotesTestCase {
         await recorder.toggleRecording()
         let active = try XCTUnwrap(MeetingFolder.all(in: previous).last?.0)
         sut.resumeUnfinished()
-        pickedFolder = previous.deletingLastPathComponent().appendingPathComponent("Other notes")
+        let newFolder = previous.deletingLastPathComponent().appendingPathComponent("Other notes")
 
-        changeFolder()
+        changeFolder(to: newFolder)
         recorder.stopRecording()
         await sut.waitUntilIdle()
 
         XCTAssertEqual(queued.stage(), .done)
         XCTAssertEqual(nextQueued.stage(), .done)
         XCTAssertEqual(active.stage(), .done)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: pickedFolder!.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: newFolder.path))
         XCTAssertEqual(notifier.posted.compactMap(\.url).map { $0.deletingLastPathComponent() },
                        [queued.url, nextQueued.url, active.url])
     }
 
-    func testSelectingASymlinkKeepsMeetingFolderIdentity() async throws {
+    func testAFolderThatIsASymlinkKeepsMeetingFolderIdentity() async throws {
         let actual = try XCTUnwrap(root)
         try FileManager.default.createDirectory(at: actual, withIntermediateDirectories: true)
         let link = actual.deletingLastPathComponent().appendingPathComponent("linked-notes")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: actual)
-        pickedFolder = link
-        changeFolder()
+        changeFolder(to: link)
         await recorder.toggleRecording()
         XCTAssertEqual(MeetingFolder.all(in: link).map(\.0), MeetingFolder.all(in: actual).map(\.0))
         XCTAssertEqual(MeetingFolder.all(in: actual).count, 1)

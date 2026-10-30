@@ -22,7 +22,7 @@ enum SummaryTool: String, CaseIterable, Sendable {
     }
 }
 
-enum SummaryCLI: String, CaseIterable {
+enum SummaryCLI: String {
     case antigravity = "agy"
     case claude = "claude"
 
@@ -110,7 +110,7 @@ struct Summarizer {
     }
 
     @concurrent
-    func summarize(transcript: String, knownWords: RelevantKnownWords, tool: SummaryTool = .automatic) async -> SummaryResult {
+    func summarize(transcript: String, knownWords: RelevantKnownWords, tool: SummaryTool) async -> SummaryResult {
         let prompt = SummaryPrompt.make(transcript: transcript, knownWords: knownWords, context: context?.read())
         let searchPath = SummaryCLI.userToolDirectories(home: home) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
         var failures: [SummaryFailure] = []

@@ -55,7 +55,7 @@ The whole feature can be turned on and off with the **Record clipboard history**
 
 ## Meeting Notes
 
-Calendar recording reminders are off by default. Eligible events offer **Start Recording**, then **Stop Recording** or **Continue Recording** at the end. Ku-Ka never starts or stops automatically. A calendar recording keeps the event title in its menu status and note headings. This branch supplies the integration for the Settings window in #43 but adds no switch yet. See the [integration contract and limits](docs/calendar-recording-reminders.md).
+Calendar recording reminders are off by default. Eligible events offer **Start Recording**, then **Stop Recording** or **Continue Recording** at the end. Ku-Ka never starts or stops automatically. A calendar recording keeps the event title in its menu status and note headings. Turn them on with **Calendar reminders** in Settings. The first time, macOS asks for Calendar and notification access, and Settings says what to allow when access is missing. See the [integration contract and limits](docs/calendar-recording-reminders.md).
 
 When a call starts, open the Ku-Ka menu and choose **Start Recording Meeting**. Ku-Ka records your microphone and the sound your Mac plays, so any call app works. If Start cannot record, for example because a permission is missing, an alert says why.
 
@@ -119,7 +119,7 @@ Recording needs the Screen Recording permission (for the sound your Mac plays) a
 
 This feature is off by default. Its rules come from public source code and tests with fake Accessibility trees. **It has not been verified during a real Teams call.** Teams can change its UI, hide its speaking indicator, or keep the last speaker highlighted. Names can be missing or wrong.
 
-To opt in, run this command and restart Ku-Ka before your next recording:
+To opt in, turn on **Teams speaker names** in Settings. It applies from the next recording. You can also run this command and restart Ku-Ka before your next recording:
 
 ```bash
 defaults write com.kuka.screenshot teamsSpeakerNamesEnabled -bool true
@@ -155,7 +155,7 @@ To see the lines of the last two hours, run this command:
 
 Use the full path `/usr/bin/log`, because zsh has its own `log` command. These log lines hold only reason codes, counts, and scan times. They never hold a name or other text from Teams.
 
-To turn the feature off for future recordings, run this command and restart Ku-Ka:
+To turn the feature off for future recordings, turn off **Teams speaker names** in Settings, or run this command and restart Ku-Ka:
 
 ```bash
 defaults write com.kuka.screenshot teamsSpeakerNamesEnabled -bool false
@@ -307,7 +307,7 @@ The folder is created automatically if it doesn't exist.
 
 ## Settings
 
-Open **Settings…** in the menu to change persistent preferences. The window has one scrollable page with General, Screenshots, and Meeting Notes groups.
+Open **Settings…** in the menu to change persistent preferences. A sidebar switches between two pages. **Settings** has General, Screenshots, and Meeting Notes groups. **Instructions** lists the keyboard shortcuts and explains each feature.
 
 | Preference | Default and choices |
 |---|---|
@@ -319,10 +319,10 @@ Open **Settings…** in the menu to change persistent preferences. The window ha
 | Meetings folder | `~/Meetings`. Choosing another folder does not move existing meetings. |
 | Summary tool | Automatic tries Antigravity, then Claude Code. Antigravity (agy) and Claude Code (claude) each use only that tool. |
 | Background file | None. Choose an optional file, or Clear the preference without deleting the file. The complete accepted file goes to the selected provider with the transcript. |
+| Calendar recording reminders | Off. Turning it on asks for Calendar and notification access. A line under the switch says what to allow when access is missing. |
+| Teams speaker names | Off. Experimental. Applies from the next recording. |
 
 The summary tool is read when each queued job starts. A running job keeps its choice. Opening Settings does not write preferences.
-
-Calendar #28 and Teams #41 can add controls to the Meeting Notes group when their state and action APIs are ready. These integrations are not implemented here.
 
 ## File Structure
 

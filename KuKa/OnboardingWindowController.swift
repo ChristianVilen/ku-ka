@@ -106,7 +106,6 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private let permissions: PermissionsManager
     private let settings: Settings
     private let activation: OrdinaryWindowActivation
-    private let activate: () -> Void
     private let accessibilityRow: PermissionRowView
     private let screenRecordingRow: PermissionRowView
     private let microphoneRow: PermissionRowView
@@ -117,13 +116,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     init(
         permissions: PermissionsManager,
         settings: Settings = Settings(),
-        activate: @escaping () -> Void = { NSApp.activate(ignoringOtherApps: true) },
         activation: OrdinaryWindowActivation = .shared
     ) {
         self.permissions = permissions
         self.settings = settings
         self.activation = activation
-        self.activate = activate
 
         accessibilityRow = PermissionRowView(
             title: "Accessibility (window tiling and paste)",
@@ -317,7 +314,6 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     func show(_ page: Page = .checklist) {
         install(page)
         if let window { activation.open(window) }
-        activate()
         if window?.isVisible != true {
             window?.center()
         }

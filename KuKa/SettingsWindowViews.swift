@@ -58,15 +58,8 @@ final class SettingsGlass: NSView {
         layer?.cornerRadius = radius
         glass.style = .regular
         glass.cornerRadius = radius
-        glass.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(glass)
-        NSLayoutConstraint.activate([
-            glass.leadingAnchor.constraint(equalTo: leadingAnchor),
-            glass.trailingAnchor.constraint(equalTo: trailingAnchor),
-            glass.topAnchor.constraint(equalTo: topAnchor),
-            glass.bottomAnchor.constraint(equalTo: bottomAnchor)
-        ])
-        apply(.current)
+        SettingsLayout.fill(glass, in: self)
+        apply(options)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }

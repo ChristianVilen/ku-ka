@@ -38,7 +38,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         return button
     }
     private var pages: [SettingsPage: NSScrollView] = [:]
-    private let instructions = SettingsInstructionsView()
+    let instructions = SettingsInstructionsView()
     private var displayObserver: NSObjectProtocol?
     var onTilingChanged: ((Bool) -> Void)?
     var onClipboardChanged: ((Bool) -> Void)?
@@ -71,7 +71,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    deinit {
+    isolated deinit {
         if let displayObserver { NSWorkspace.shared.notificationCenter.removeObserver(displayObserver) }
     }
 
@@ -79,7 +79,6 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     static func presentWindow(_ window: NSWindow) {
         if !window.isVisible { window.center() }
-        NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -117,7 +116,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             thumbnailDuration.lastItem?.representedObject = duration
             thumbnailDuration.select(thumbnailDuration.lastItem)
         }
-        summaryTool.selectItem(at: SummaryTool.allCases.firstIndex(of: settings.summaryTool)!)
+        summaryTool.select(summaryTool.itemArray.first { $0.representedObject as? SummaryTool == settings.summaryTool })
         folderPath.stringValue = settings.meetingsFolder.path
         backgroundPath.stringValue = settings.meetingContextFile?.path ?? "None"
         folderPath.toolTip = folderPath.stringValue
@@ -152,9 +151,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         clearBackground.setAccessibilityLabel("Clear background file")
         folderPath.setAccessibilityLabel("Meetings folder")
         backgroundPath.setAccessibilityLabel("Background file")
-        for (index, tool) in SummaryTool.allCases.enumerated() {
+        for tool in SummaryTool.allCases {
             summaryTool.addItem(withTitle: tool.title)
-            summaryTool.lastItem?.tag = index
+            summaryTool.lastItem?.representedObject = tool
         }
         let content = SettingsLayout.page(title: "Settings", subtitle: "Make Ku-Ka work your way.")
         func add(_ view: NSView) { SettingsLayout.add(view, to: content) }
@@ -328,7 +327,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func toolChanged() {
-        settings.summaryTool = SummaryTool.allCases[summaryTool.indexOfSelectedItem]
+        guard let tool = summaryTool.selectedItem?.representedObject as? SummaryTool else { return }
+        settings.summaryTool = tool
     }
 
     @objc private func folderClicked() {

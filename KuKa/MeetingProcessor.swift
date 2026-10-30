@@ -55,7 +55,7 @@ struct MeetingProcessor {
     }
 
     /// Asks no new questions and leaves both review files alone.
-    func updateNotes(_ meeting: MeetingFolder, tool: SummaryTool = .automatic) async -> NotesUpdateOutcome {
+    func updateNotes(_ meeting: MeetingFolder, tool: SummaryTool) async -> NotesUpdateOutcome {
         let lock: FileLock
         do {
             lock = try meeting.lock()
@@ -81,7 +81,7 @@ struct MeetingProcessor {
         return .updated(summary: meeting.url(for: .summary))
     }
 
-    func process(_ meeting: MeetingFolder, speakers: TeamsSpeakerEvidence = .empty, tool: SummaryTool = .automatic,
+    func process(_ meeting: MeetingFolder, speakers: TeamsSpeakerEvidence = .empty, tool: SummaryTool,
                  progress: (MeetingProgress) -> Void) async -> MeetingOutcome {
         let lock: FileLock
         do {

@@ -85,3 +85,9 @@ No production or preview app was launched. No meetings were read, models downloa
 ## Independent review
 
 The scoped review approved spec compliance and code quality after checking the committed diff, the temporary native probe, and all 12 images against B. A separate comment review found no comments or suppressions to remove. The whole-branch review independently confirmed the final focused and full test summaries and inspected all 12 images. Both code reviews found no Critical or Important issues. One Minor remains for live selected-icon visibility. The reviews support the bounded layout and action claims, with the desktop limits above. No publication or merge occurred.
+
+## Later changes
+
+The temporary renderer above no longer exists, so its command cannot run. Its checks are now committed tests in `SettingsWindowControllerTests`: page switching, both key-view cycles, the seven guides and their expanded state, the shortcut keycaps, and Reduce Transparency and Increase Contrast. The offscreen render test was removed, because its assertions held for any image.
+
+After the rebase onto the calendar and Teams work, the Meeting Notes group ends with the Calendar reminders and Teams speaker names switches, and a standard application menu replaced the Settings window's own Command-W handling. The 12 images predate these changes and do not show the two switches.
