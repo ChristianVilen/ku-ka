@@ -127,6 +127,10 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
             ("minimum-dark", .darkAqua, NSSize(width: 460, height: 330), .idle, .summarizing(snapshot: "Earlier notes"), false),
             ("save-error-minimum-light", .aqua, NSSize(width: 460, height: 330), .idle, .waitingForSave, true),
         ] {
+            if case .updated = state {
+                try session.meeting.write("# Transcript", to: .transcript)
+                try session.meeting.write("# Summary", to: .summary)
+            }
             if saveError {
                 try session.meeting.write("Changed in another editor", to: .notes)
                 session.edit("My unsaved draft. Mira owns the checklist.")
@@ -141,16 +145,19 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
             window.appearance?.performAsCurrentDrawingAppearance {
                 view.cacheDisplay(in: view.bounds, to: bitmap)
             }
-            let image = NSImage(size: view.bounds.size, flipped: false) { bounds in
-                window.appearance?.performAsCurrentDrawingAppearance {
-                    NSColor.windowBackgroundColor.setFill()
-                    bounds.fill()
-                    bitmap.draw(in: bounds)
-                }
-                return true
+            let context = try XCTUnwrap(CGContext(data: nil, width: bitmap.pixelsWide, height: bitmap.pixelsHigh,
+                                                  bitsPerComponent: 8, bytesPerRow: 0,
+                                                  space: CGColorSpaceCreateDeviceRGB(),
+                                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+            let pixels = CGRect(x: 0, y: 0, width: bitmap.pixelsWide, height: bitmap.pixelsHigh)
+            window.appearance?.performAsCurrentDrawingAppearance {
+                context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+                context.fill(pixels)
             }
-            let tiff = try XCTUnwrap(image.tiffRepresentation)
-            try XCTUnwrap(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+            context.setBlendMode(.normal)
+            context.draw(try XCTUnwrap(bitmap.cgImage), in: pixels)
+            let image = NSBitmapImageRep(cgImage: try XCTUnwrap(context.makeImage()))
+            try XCTUnwrap(image.representation(using: .png, properties: [:]))
                 .write(to: directory.appendingPathComponent(name + ".png"))
         }
     }
