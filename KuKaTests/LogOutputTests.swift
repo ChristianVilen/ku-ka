@@ -121,6 +121,20 @@ final class LogOutputTests: XCTestCase {
         XCTAssertEqual(lines.filter { $0.category == "meeting" }.count, 50)
     }
 
+    func testFileFailureReportingBypassesFilesAndKeepsErrorDetailsPrivate() async throws {
+        let received = OSAllocatedUnfairLock(initialState: [LogLine]())
+        let output = makeOutput(received)
+        let files = makeFiles()
+        output.enableFiles(files)
+        output.reportFileFailure(NSError(domain: "test", code: 513,
+                                         userInfo: [NSLocalizedDescriptionKey: "private error detail"]))
+        await files.flush()
+        XCTAssertEqual(received.withLock { $0.map(\.message) }, ["Could not write log file (code 513): <private>"])
+        XCTAssertEqual(received.withLock { $0.map(\.category) }, ["app"])
+        XCTAssertEqual(received.withLock { $0.map(\.level) }, [.error])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), [])
+    }
+
     private func makeOutput(_ received: OSAllocatedUnfairLock<[LogLine]>) -> LogOutput {
         LogOutput(clock: { logDate("2026-10-30T11:00:00Z") }, processID: 123, timeZone: { .gmt },
                   unified: { line in received.withLock { $0.append(line) } })

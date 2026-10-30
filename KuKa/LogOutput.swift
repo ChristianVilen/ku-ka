@@ -33,6 +33,12 @@ final class LogOutput: Sendable {
         fileOutput?.append(line)
     }
 
+    func reportFileFailure(_ error: Error) {
+        let message: LogMessage = "Could not write log file (code \((error as NSError).code)): \(error.localizedDescription)"
+        unified(LogLine(date: clock(), processID: processID, level: .error,
+                        category: "app", message: message.text, timeZone: timeZone()))
+    }
+
     private static func writeUnified(_ line: LogLine) {
         let logger = Logger(subsystem: Log.subsystem, category: line.category)
         switch line.level {
