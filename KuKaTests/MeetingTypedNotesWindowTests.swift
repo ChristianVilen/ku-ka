@@ -80,11 +80,11 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         XCTAssertTrue(update.isEnabled)
         update.performClick(nil)
         XCTAssertEqual(requests, 1)
-        session.setContext(recordingPhase: .idle, summaryState: .summarizing(snapshot: ""))
+        session.context = { (.idle, .summarizing(snapshot: "")) }
         XCTAssertFalse(update.isEnabled)
         session.edit("Later action")
         XCTAssertFalse(update.isEnabled)
-        session.setContext(recordingPhase: .idle, summaryState: .updated(snapshot: ""))
+        session.context = { (.idle, .updated(snapshot: "")) }
         XCTAssertTrue(update.isEnabled)
         XCTAssertTrue(session.summaryMessage.contains("changed"))
     }
@@ -137,7 +137,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
             }
             window.appearance = NSAppearance(named: appearance)
             window.setContentSize(size)
-            session.setContext(recordingPhase: phase, summaryState: state)
+            session.context = { (phase, state) }
             view.layoutSubtreeIfNeeded()
             view.needsDisplay = true
             view.displayIfNeeded()
@@ -165,7 +165,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
     func testMinimumWidthKeepsLongStatusAndEditorInsideTheWindow() throws {
         let session = try MeetingTypedNotesSession(meeting: meeting())
         session.edit("A saved note")
-        session.setContext(recordingPhase: .idle, summaryState: .summarizing(snapshot: "Earlier note"))
+        session.context = { (.idle, .summarizing(snapshot: "Earlier note")) }
         let editor = MeetingTypedNotesWindowController(session: session, requestUpdate: {},
                                                        activation: .fake(), present: { _ in })
         editor.show()

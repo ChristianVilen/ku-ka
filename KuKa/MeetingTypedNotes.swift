@@ -49,6 +49,18 @@ enum TypedNotesSummaryState: Equatable {
     }
 }
 
+enum TypedNotesSummaryResult {
+    case updated(snapshot: String)
+    case failed(String)
+
+    var state: TypedNotesSummaryState {
+        switch self {
+        case .updated(let snapshot): return .updated(snapshot: snapshot)
+        case .failed(let message): return .failed(message)
+        }
+    }
+}
+
 @MainActor
 final class MeetingTypedNotesSession {
     let meeting: MeetingFolder
@@ -56,8 +68,9 @@ final class MeetingTypedNotesSession {
     private(set) var text: String
     private(set) var savedText: String
     private(set) var saveError: String?
-    private(set) var recordingPhase: RecorderPhase = .idle
-    private(set) var summaryState: TypedNotesSummaryState = .idle
+    var context: () -> (recordingPhase: RecorderPhase, summaryState: TypedNotesSummaryState) = { (.idle, .idle) } {
+        didSet { onChange?() }
+    }
     var onChange: (() -> Void)?
     var onSaved: (() -> Void)?
 
@@ -74,8 +87,14 @@ final class MeetingTypedNotesSession {
 
     var hasUnsavedChanges: Bool { text != savedText || saveError != nil }
     var canUpdateSummary: Bool {
-        !recordingPhase.isCapturing && !summaryState.isBusy && !hasUnsavedChanges && saveError == nil
-            && meeting.stage() == .done
+        let context = context()
+        return Self.canUpdateSummary(meeting, recordingPhase: context.recordingPhase,
+                                     summaryState: context.summaryState, hasUnsavedChanges: hasUnsavedChanges)
+    }
+
+    static func canUpdateSummary(_ meeting: MeetingFolder, recordingPhase: RecorderPhase,
+                                 summaryState: TypedNotesSummaryState, hasUnsavedChanges: Bool) -> Bool {
+        !recordingPhase.isCapturing && !summaryState.isBusy && !hasUnsavedChanges && meeting.stage() == .done
     }
 
     func edit(_ text: String) {
@@ -121,14 +140,8 @@ final class MeetingTypedNotesSession {
         return true
     }
 
-    func setContext(recordingPhase: RecorderPhase, summaryState: TypedNotesSummaryState) {
-        guard self.recordingPhase != recordingPhase || self.summaryState != summaryState else { return }
-        self.recordingPhase = recordingPhase
-        self.summaryState = summaryState
-        onChange?()
-    }
-
     var summaryMessage: String {
+        let (recordingPhase, summaryState) = context()
         if recordingPhase.isCapturing {
             return recordingPhase == .paused
                 ? "Recording paused. You can keep writing."

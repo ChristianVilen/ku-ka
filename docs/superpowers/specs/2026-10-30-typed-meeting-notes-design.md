@@ -6,7 +6,7 @@ Issue #26 adds a separate, resizable notes window to the recording controls. The
 
 `MeetingRecorder.activeMeeting` exposes the folder only after capture starts. A `MeetingTypedNotesSession` holds that folder for its entire life. Pause, Stop, a new recording, and a changed meetings root cannot redirect its writes.
 
-`MeetingNotesController.typedNotes(for:)` returns the one editor session for a folder. The session owns the draft, saved text, save error, recording phase, summary state, and a separate `.notes.lock`. Accepted edits write `notes.md` atomically and synchronously. A 64 KiB UTF-8 limit bounds each save and summary input. Invalid text and failed writes leave the draft available. The general meeting lock stays with the recorder or processor.
+`MeetingNotesController.typedNotes(for:)` returns the one editor session for a folder. The session owns the draft, saved text, save error, and a separate `.notes.lock`. It reads recording and summary status from the controller through its context closure. The queue and current job own pending and running status; only completed summary results are stored per meeting. The editor and controller share one summary-update eligibility rule. Accepted edits write `notes.md` atomically and synchronously. A 64 KiB UTF-8 limit bounds each save and summary input. Invalid text and failed writes leave the draft available. The general meeting lock stays with the recorder or processor.
 
 `MeetingNotesController` retains the existing recorder callbacks. Stop with unsaved notes stops audio and holds the `RecordedMeeting`, including Teams evidence, until a successful save. The app asks before quitting with an unsaved draft. Closing an unsaved editor hides and retains it. Closing a saved editor releases its session and notes lock. Reopening reads the saved file. An external change causes a save error instead of overwriting it. **Reload saved notes** requires confirmation before discarding a draft.
 
@@ -19,6 +19,8 @@ Each summary reads one saved notes snapshot and reports that snapshot to the que
 Typed notes are separate meeting evidence. They may supply explicit decisions and action owners. The prompt must state conflicts with the transcript instead of inventing a resolution. Typed text is data, never tool instructions. Word-review questions and quote matching use only the transcript. Missing or blank notes preserve the existing prompt. A silent recording with nonempty typed notes still calls the summary tool.
 
 `notes.md` is input and never changes `MeetingStage`.
+
+Transcription writes the heard copy and transcript without reading notes. The summary step reads saved notes once and handles notes errors. Before moving audio to the Trash, it checks whether the transcript records silence and the notes are blank. That case writes the no-speech summary and keeps the audio, including after a restart.
 
 ## Design alternatives
 

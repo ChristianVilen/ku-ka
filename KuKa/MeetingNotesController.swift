@@ -35,12 +35,12 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private let openURL: (URL) -> Void
 
     private var queue: [Job] = []
-    private var current: (job: Job, activity: String)?
+    private var current: (job: Job, activity: String, snapshot: String?)?
     private var processingTask: Task<Void, Never>?
     private var menuIsOpen = false
     private var meterTimer: Timer?
     private var notesSessions: [MeetingFolder: MeetingTypedNotesSession] = [:]
-    private var summaryStates: [MeetingFolder: TypedNotesSummaryState] = [:]
+    private var summaryResults: [MeetingFolder: TypedNotesSummaryResult] = [:]
     private var awaitingNotes: [RecordedMeeting] = []
     private(set) var recentNotesMeetings: [MeetingFolder] = []
 
@@ -205,9 +205,10 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
 
     @discardableResult
     func updateSummary(_ meeting: MeetingFolder) -> Bool {
-        guard meeting.stage() == .done, recorder.activeMeeting != meeting,
-              notesSessions[meeting]?.hasUnsavedChanges != true,
-              !queue.contains(where: { $0.meeting == meeting }), current?.job.meeting != meeting else { return false }
+        let context = notesContext(for: meeting)
+        guard MeetingTypedNotesSession.canUpdateSummary(meeting, recordingPhase: context.recordingPhase,
+            summaryState: context.summaryState, hasUnsavedChanges: notesSessions[meeting]?.hasUnsavedChanges == true)
+        else { return false }
         enqueue(.updateSummary(meeting))
         return true
     }
@@ -216,6 +217,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         if let session = notesSessions[meeting] { return session }
         let session = try MeetingTypedNotesSession(meeting: meeting)
         notesSessions[meeting] = session
+        session.context = { [weak self] in self?.notesContext(for: meeting) ?? (.idle, .idle) }
         session.onSaved = { [weak self] in self?.notesSaved(for: meeting) }
         remember(meeting)
         refreshNotesSessions()
@@ -229,7 +231,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     func closeTypedNotes(for meeting: MeetingFolder) -> Bool {
         guard let session = notesSessions[meeting], session.close() else { return false }
         notesSessions.removeValue(forKey: meeting)
-        pruneSummaryStates()
+        pruneSummaryResults()
         return true
     }
 
@@ -247,7 +249,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private func recordingEnded(_ recording: RecordedMeeting) {
         if notesSessions[recording.folder]?.hasUnsavedChanges == true {
             awaitingNotes.append(recording)
-            setSummaryState(.waitingForSave, for: recording.folder)
+            refreshNotesSessions()
         } else {
             enqueue(.process(recording))
         }
@@ -259,24 +261,30 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         for recording in ready { enqueue(.process(recording)) }
     }
 
-    private func setSummaryState(_ state: TypedNotesSummaryState, for meeting: MeetingFolder) {
-        summaryStates[meeting] = state
+    private func setSummaryResult(_ result: TypedNotesSummaryResult?, for meeting: MeetingFolder) {
+        summaryResults[meeting] = result
         refreshNotesSessions()
     }
 
-    private func refreshNotesSessions() {
-        for (meeting, session) in notesSessions {
-            let waiting = current?.job.meeting != meeting && queue.contains { $0.meeting == meeting }
-            session.setContext(recordingPhase: recorder.activeMeeting == meeting ? recorder.phase : .idle,
-                               summaryState: waiting ? .queued : summaryStates[meeting] ?? .idle)
+    private func notesContext(for meeting: MeetingFolder) -> (recordingPhase: RecorderPhase, summaryState: TypedNotesSummaryState) {
+        let phase = recorder.activeMeeting == meeting ? recorder.phase : .idle
+        if let current, current.job.meeting == meeting {
+            return (phase, current.snapshot.map { .summarizing(snapshot: $0) } ?? .processing)
         }
+        if queue.contains(where: { $0.meeting == meeting }) { return (phase, .queued) }
+        if awaitingNotes.contains(where: { $0.folder == meeting }) { return (phase, .waitingForSave) }
+        return (phase, summaryResults[meeting]?.state ?? .idle)
+    }
+
+    private func refreshNotesSessions() {
+        for session in notesSessions.values { session.onChange?() }
     }
 
     private func remember(_ meeting: MeetingFolder) {
         recentNotesMeetings.removeAll { $0 == meeting }
         recentNotesMeetings.insert(meeting, at: 0)
         recentNotesMeetings = Array(recentNotesMeetings.prefix(5))
-        pruneSummaryStates()
+        pruneSummaryResults()
         rebuildRecentNotesMenu()
     }
 
@@ -300,10 +308,10 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         recentNotesItem.isHidden = submenu.items.isEmpty
     }
 
-    private func pruneSummaryStates() {
+    private func pruneSummaryResults() {
         let retained = Set(recentNotesMeetings + Array(notesSessions.keys) + queue.map(\.meeting)
             + awaitingNotes.map(\.folder) + [current?.job.meeting].compactMap { $0 })
-        summaryStates = summaryStates.filter { retained.contains($0.key) }
+        summaryResults = summaryResults.filter { retained.contains($0.key) }
     }
 
     @objc private func checkWordsClicked() {
@@ -323,7 +331,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     private func enqueue(_ job: Job) {
         guard !queue.contains(job), current?.job != job else { return }
         queue.append(job)
-        setSummaryState(.queued, for: job.meeting)
+        refreshNotesSessions()
         updateMenu()
         guard processingTask == nil else { return }
         processingTask = Task { [weak self] in await self?.processQueue() }
@@ -333,59 +341,61 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         while !queue.isEmpty, !Task.isCancelled {
             let job = queue.removeFirst()
             let tool = summaryTool()
-            current = (job, "Processing")
-            setSummaryState(.processing, for: job.meeting)
-            var snapshot: String?
+            current = (job, "Processing", nil)
+            refreshNotesSessions()
             let summaryInput: (String) -> Void = { [weak self] notes in
-                snapshot = notes
-                self?.setSummaryState(.summarizing(snapshot: notes), for: job.meeting)
+                self?.current?.snapshot = notes
+                self?.refreshNotesSessions()
             }
             switch job {
             case .process(let recording):
                 let meeting = recording.folder
                 let outcome = await processor.process(meeting, speakers: recording.speakers, tool: tool,
                                                        summaryInput: summaryInput) { [weak self] progress in
-                    self?.current = (job, progress.title)
+                    self?.current?.activity = progress.title
                     self?.updateMenu()
                 }
+                let snapshot = current?.snapshot
                 current = nil
                 switch outcome {
-                case .done: setSummaryState(snapshot.map { .updated(snapshot: $0) } ?? .idle, for: meeting)
-                case .noSpeech: setSummaryState(.updated(snapshot: ""), for: meeting)
-                case .failed: setSummaryState(.failed("Processing failed. Use Retry Failed Meeting in the Ku-Ka menu."), for: meeting)
-                case .busy, .gone: setSummaryState(.failed("The meeting folder is unavailable or in use."), for: meeting)
-                case .cancelled: setSummaryState(.idle, for: meeting)
+                case .done: setSummaryResult(snapshot.map { .updated(snapshot: $0) }, for: meeting)
+                case .noSpeech: setSummaryResult(.updated(snapshot: ""), for: meeting)
+                case .failed: setSummaryResult(.failed("Processing failed. Use Retry Failed Meeting in the Ku-Ka menu."), for: meeting)
+                case .busy, .gone: setSummaryResult(.failed("The meeting folder is unavailable or in use."), for: meeting)
+                case .cancelled: setSummaryResult(nil, for: meeting)
                 }
                 report(outcome, for: meeting)
             case .updateNotes(let meeting):
-                current = (job, "Updating notes")
+                current?.activity = "Updating notes"
                 updateMenu()
                 let outcome = await processor.updateNotes(meeting, tool: tool, summaryInput: summaryInput)
+                let snapshot = current?.snapshot
                 current = nil
                 finishSummaryUpdate(outcome, for: meeting, snapshot: snapshot)
                 report(outcome, for: meeting)
             case .updateSummary(let meeting):
-                current = (job, "Updating summary")
+                current?.activity = "Updating summary"
                 updateMenu()
                 let outcome = await processor.updateSummary(meeting, tool: tool, summaryInput: summaryInput)
+                let snapshot = current?.snapshot
                 current = nil
                 finishSummaryUpdate(outcome, for: meeting, snapshot: snapshot)
             }
         }
         processingTask = nil
-        pruneSummaryStates()
+        pruneSummaryResults()
         updateMenu()
         reloadFromDisk()
     }
 
     private func finishSummaryUpdate(_ outcome: NotesUpdateOutcome, for meeting: MeetingFolder, snapshot: String?) {
         switch outcome {
-        case .updated: setSummaryState(snapshot.map { .updated(snapshot: $0) } ?? .idle, for: meeting)
-        case .cancelled: setSummaryState(.idle, for: meeting)
-        case .busy: setSummaryState(.failed("The meeting folder is in use. Try Update summary again."), for: meeting)
-        case .notReady: setSummaryState(.failed("The meeting is not ready, or its folder was moved or deleted."), for: meeting)
+        case .updated: setSummaryResult(snapshot.map { .updated(snapshot: $0) }, for: meeting)
+        case .cancelled: setSummaryResult(nil, for: meeting)
+        case .busy: setSummaryResult(.failed("The meeting folder is in use. Try Update summary again."), for: meeting)
+        case .notReady: setSummaryResult(.failed("The meeting is not ready, or its folder was moved or deleted."), for: meeting)
         case .failed, .summaryToolFailed:
-            setSummaryState(.failed("The summary could not be updated. The previous summary is unchanged. Try again."), for: meeting)
+            setSummaryResult(.failed("The summary could not be updated. The previous summary is unchanged. Try again."), for: meeting)
         }
     }
 
