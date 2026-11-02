@@ -101,19 +101,20 @@ final class LogWindowControllerTests: XCTestCase {
     }
 
     func testNewTextPreservesScrollAndSelectionUntilTheUserReturnsToTheBottom() async throws {
-        let reader = WindowLogReader((0..<150).map { row("line \($0)") })
+        let rows = (0..<152).map { row("line \($0)") }
+        let reader = WindowLogReader(Array(rows.prefix(150)))
         sut = makeWindow(reader)
         sut.show()
         await sut.refresh()?.value
         sut.textView.setSelectedRange(NSRange(location: 4, length: 10))
         sut.scrollView.contentView.scroll(to: .zero)
         sut.scrollView.reflectScrolledClipView(sut.scrollView.contentView)
-        await reader.setRows((0..<151).map { row("line \($0)") })
+        await reader.setRows(Array(rows.prefix(151)))
         await sut.refresh()?.value
         XCTAssertEqual(sut.scrollView.contentView.bounds.origin.y, 0, accuracy: 1)
         XCTAssertEqual(sut.textView.selectedRange(), NSRange(location: 4, length: 10))
         sut.textView.scrollToEndOfDocument(nil)
-        await reader.setRows((0..<152).map { row("line \($0)") })
+        await reader.setRows(rows)
         await sut.refresh()?.value
         XCTAssertGreaterThanOrEqual(sut.scrollView.documentVisibleRect.maxY, sut.textView.bounds.maxY - 2)
     }
@@ -251,6 +252,46 @@ final class LogWindowControllerTests: XCTestCase {
         let character = layout.characterIndexForGlyph(at: glyph)
         let text = sut.textView.string as NSString
         return text.substring(with: text.lineRange(for: NSRange(location: character, length: 0)))
+    }
+
+    func testRepeatedTextKeepsTheSelectedOccurrenceAfterEarlierRowsLeave() async {
+        let repeated = (0..<3).map { _ in row("same") }
+        let reader = WindowLogReader(repeated)
+        sut = makeWindow(reader)
+        sut.show()
+        await sut.refresh()?.value
+        let length = (repeated[0].text as NSString).length + 1
+        sut.textView.setSelectedRange(NSRange(location: 2 * length + 4, length: 3))
+        await reader.setRows([repeated[2], row("same"), row("new")])
+        await sut.refresh()?.value
+        XCTAssertEqual(sut.textView.selectedRange(), NSRange(location: 4, length: 3))
+    }
+
+    func testReplacementWithIdenticalTextClearsTheOldSelection() async {
+        let reader = WindowLogReader([row("same")])
+        sut = makeWindow(reader)
+        sut.show()
+        await sut.refresh()?.value
+        sut.textView.setSelectedRange(NSRange(location: 4, length: 3))
+        await reader.setRows([row("same")])
+        await sut.refresh()?.value
+        XCTAssertEqual(sut.textView.selectedRange(), NSRange(location: 0, length: 0))
+    }
+
+    func testInsertedEarlierRowKeepsSelectionOnTheSameOccurrence() async {
+        let retained = row("retained")
+        let reader = WindowLogReader([retained])
+        sut = makeWindow(reader)
+        sut.show()
+        await sut.refresh()?.value
+        let selected = (sut.textView.string as NSString).range(of: "retained")
+        sut.textView.setSelectedRange(selected)
+        let earlier = row("earlier", date: "2026-10-30T10:30:00Z")
+        await reader.setRows([retained, earlier])
+        await sut.refresh()?.value
+        XCTAssertEqual(sut.textView.selectedRange(),
+                       NSRange(location: selected.location + (earlier.text as NSString).length + 1,
+                               length: selected.length))
     }
 
     func testRendersLogWindowStates() async throws {

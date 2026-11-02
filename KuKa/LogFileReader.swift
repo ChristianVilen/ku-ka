@@ -31,23 +31,14 @@ actor LogFileReader: LogReading {
 
     func rows(in interval: DateInterval?) throws -> [LogRow] {
         try Task.checkCancellation()
-        let urls: [URL]
-        do { urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) }
-        catch CocoaError.fileReadNoSuchFile { cache.removeAll(); return [] }
+        let files = try LogFileEntry.list(in: folder, timeZone: timeZone)
         var current: [URL: CachedFile] = [:]
         var result: [LogRow] = []
-        for url in urls.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+        for file in files.sorted(by: { $0.url.lastPathComponent < $1.url.lastPathComponent }) {
             try Task.checkCancellation()
-            guard let day = LogFiles.day(of: url.lastPathComponent, timeZone: timeZone),
-                  interval.map({ day >= $0.start && day < $0.end }) ?? true else { continue }
-            var info = stat()
-            guard lstat(url.path, &info) == 0 else {
-                if errno == ENOENT { continue }
-                throw Self.systemError()
-            }
-            guard info.st_mode & S_IFMT == S_IFREG else { continue }
-            let stamp = Stamp(size: info.st_size, seconds: info.st_mtimespec.tv_sec,
-                              nanoseconds: info.st_mtimespec.tv_nsec, inode: info.st_ino)
+            guard interval.map({ file.day >= $0.start && file.day < $0.end }) ?? true else { continue }
+            let url = file.url
+            let stamp = file.stamp
             let entry: CachedFile
             if let cached = cache[url], cached.stamp == stamp {
                 entry = cached
@@ -58,7 +49,9 @@ actor LogFileReader: LogReading {
                 let text = String(decoding: data, as: UTF8.self)
                 var lines = text.isEmpty ? [] : text.components(separatedBy: "\n")
                 if lines.last == "" { lines.removeLast() }
-                entry = CachedFile(stamp: stamp, rows: lines.map { LogRow(text: $0, day: day) })
+                entry = CachedFile(stamp: stamp, rows: lines.enumerated().map {
+                    LogRow(text: $0.element, day: file.day, id: .file(stamp.identity, line: $0.offset))
+                })
             }
             current[url] = entry
             result.append(contentsOf: entry.rows)
@@ -67,15 +60,8 @@ actor LogFileReader: LogReading {
         return result
     }
 
-    private struct Stamp: Equatable {
-        let size: Int64
-        let seconds: Int
-        let nanoseconds: Int
-        let inode: UInt64
-    }
-
     private struct CachedFile {
-        let stamp: Stamp
+        let stamp: LogFileEntry.Stamp
         let rows: [LogRow]
     }
 

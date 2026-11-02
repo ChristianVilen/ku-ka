@@ -1,6 +1,14 @@
 import Foundation
 import Darwin
 
+struct LogFileIdentity: Hashable, Sendable {
+    let url: URL
+    let device: Int32
+    let inode: UInt64
+    let createdSeconds: Int
+    let createdNanoseconds: Int
+}
+
 // The queue owns cleanedDay and all file access; callbacks must be safe to send to it.
 final class LogFiles: @unchecked Sendable {
     private let folder: URL
@@ -52,7 +60,9 @@ final class LogFiles: @unchecked Sendable {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
                 do {
-                    for file in try self.ownedFiles() { try self.remove(file.url) }
+                    for file in try LogFileEntry.list(in: self.folder, timeZone: self.calendar.timeZone) {
+                        try self.remove(file.url)
+                    }
                     continuation.resume()
                 } catch { continuation.resume(throwing: error) }
             }
@@ -114,8 +124,8 @@ final class LogFiles: @unchecked Sendable {
         let today = calendar.startOfDay(for: clock())
         guard cleanedDay != today else { return }
         let oldestDay = calendar.date(byAdding: .day, value: -14, to: today)!
-        var kept: [File] = []
-        for file in try ownedFiles() {
+        var kept: [LogFileEntry] = []
+        for file in try LogFileEntry.list(in: folder, timeZone: calendar.timeZone) {
             if file.day < oldestDay { try remove(file.url) }
             else { kept.append(file) }
         }
@@ -127,30 +137,45 @@ final class LogFiles: @unchecked Sendable {
         cleanedDay = today
     }
 
-    private struct File {
-        let url: URL
-        let day: Date
+    private func remove(_ url: URL) throws {
+        if unlink(url.path) != 0 && errno != ENOENT { throw POSIXError.current }
+    }
+}
+
+struct LogFileEntry: Sendable {
+    struct Stamp: Equatable, Sendable {
+        let identity: LogFileIdentity
         let size: Int64
+        let modifiedSeconds: Int
+        let modifiedNanoseconds: Int
     }
 
-    private func ownedFiles() throws -> [File] {
+    let url: URL
+    let day: Date
+    let stamp: Stamp
+    var size: Int64 { stamp.size }
+
+    static func list(in folder: URL, timeZone: TimeZone) throws -> [LogFileEntry] {
         let urls: [URL]
         do { urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) }
         catch CocoaError.fileReadNoSuchFile { return [] }
         return try urls.compactMap { url in
-            guard let day = Self.day(of: url.lastPathComponent, timeZone: calendar.timeZone) else { return nil }
+            try Task.checkCancellation()
+            guard let day = LogFiles.day(of: url.lastPathComponent, timeZone: timeZone) else { return nil }
             var info = stat()
             guard lstat(url.path, &info) == 0 else {
                 if errno == ENOENT { return nil }
                 throw POSIXError.current
             }
             guard info.st_mode & S_IFMT == S_IFREG else { return nil }
-            return File(url: url, day: day, size: info.st_size)
+            let identity = LogFileIdentity(url: url, device: info.st_dev, inode: info.st_ino,
+                                           createdSeconds: info.st_birthtimespec.tv_sec,
+                                           createdNanoseconds: info.st_birthtimespec.tv_nsec)
+            return LogFileEntry(url: url, day: day,
+                                stamp: Stamp(identity: identity, size: info.st_size,
+                                             modifiedSeconds: info.st_mtimespec.tv_sec,
+                                             modifiedNanoseconds: info.st_mtimespec.tv_nsec))
         }
-    }
-
-    private func remove(_ url: URL) throws {
-        if unlink(url.path) != 0 && errno != ENOENT { throw POSIXError.current }
     }
 }
 

@@ -19,7 +19,7 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
     private var isOpen = false
     private var isDeleting = false
     private var followNextRefresh = true
-    private var displayedLines: [String] = []
+    private var displayed = LogText([])
     private var actionError: String?
     private let reader: any LogReading
     private let launchDate: Date
@@ -144,50 +144,36 @@ final class LogWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func display(_ rows: [LogRow]) {
-        let lines = rows.map(\.text)
-        let text = lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+        let next = LogText(rows)
+        let text = next.text
         copyAll.isEnabled = !text.isEmpty
         save.isEnabled = !text.isEmpty
-        guard text != textView.string else { followNextRefresh = false; return }
+        guard text != displayed.text || next.ids != displayed.ids else { followNextRefresh = false; return }
         let follow = followNextRefresh || scrollView.documentVisibleRect.maxY >= textView.bounds.maxY - 2
         let origin = scrollView.contentView.bounds.origin
         let selection = textView.selectedRange()
-        let removed = Self.removedPrefixLength(from: displayedLines, keeping: lines)
-        var removedHeight: CGFloat = 0
-        if removed > 0, removed < (textView.string as NSString).length, let layout = textView.layoutManager {
-            let glyph = layout.glyphIndexForCharacter(at: removed)
-            removedHeight = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY
-        }
-        displayedLines = lines
+        let layout = textView.layoutManager!
+        let point = NSPoint(x: 0, y: max(0, origin.y - textView.textContainerInset.height))
+        let glyph = layout.glyphIndex(for: point, in: textView.textContainer!)
+        let character = layout.characterIndexForGlyph(at: glyph)
+        let oldY = lineY(at: character)
+        let anchor = next.position(character, from: displayed)
+        let start = next.position(selection.location, from: displayed) ?? 0
+        let end = next.position(NSMaxRange(selection), from: displayed) ?? start
         textView.string = text
         layoutText()
-        let length = (text as NSString).length
-        let start = min(max(0, selection.location - removed), length)
-        let end = min(max(0, NSMaxRange(selection) - removed), length)
-        textView.setSelectedRange(NSRange(location: start, length: end - start))
-        let target = NSPoint(x: origin.x, y: follow ? max(0, textView.bounds.height - scrollView.contentView.bounds.height) : max(0, origin.y - removedHeight))
+        textView.setSelectedRange(NSRange(location: start, length: max(0, end - start)))
+        let anchoredY = anchor.map { origin.y + lineY(at: $0) - oldY } ?? 0
+        let target = NSPoint(x: origin.x, y: follow ? max(0, textView.bounds.height - scrollView.contentView.bounds.height) : max(0, anchoredY))
         scrollView.contentView.scroll(to: target)
         scrollView.reflectScrolledClipView(scrollView.contentView)
         followNextRefresh = false
+        displayed = next
     }
 
-    private static func removedPrefixLength(from old: [String], keeping new: [String]) -> Int {
-        guard !old.isEmpty, !new.isEmpty else { return 0 }
-        // Match the retained suffix in linear time, including repeated identical log lines.
-        var prefixes = [Int](repeating: 0, count: new.count)
-        for index in 1..<new.count {
-            var matched = prefixes[index - 1]
-            while matched > 0 && new[index] != new[matched] { matched = prefixes[matched - 1] }
-            if new[index] == new[matched] { matched += 1 }
-            prefixes[index] = matched
-        }
-        var matched = 0
-        for line in old {
-            while matched > 0 && (matched == new.count || line != new[matched]) { matched = prefixes[matched - 1] }
-            if line == new[matched] { matched += 1 }
-        }
-        guard matched > 0 else { return 0 }
-        return old.prefix(old.count - matched).reduce(0) { $0 + ($1 as NSString).length + 1 }
+    private func lineY(at character: Int) -> CGFloat {
+        guard character < (textView.string as NSString).length, let layout = textView.layoutManager else { return 0 }
+        return layout.lineFragmentRect(forGlyphAt: layout.glyphIndexForCharacter(at: character), effectiveRange: nil).minY
     }
 
     private func layoutText() {

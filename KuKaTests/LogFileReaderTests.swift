@@ -61,6 +61,22 @@ final class LogFileReaderTests: XCTestCase {
         XCTAssertTrue(deleted.isEmpty)
     }
 
+    func testRowIdentitySurvivesAppendButNotFileReplacement() async throws {
+        let url = try put("Ku-Ka-2026-10-30.log", "repeat\nrepeat\n")
+        let reader = LogFileReader(folder: root, timeZone: .gmt)
+        let first = try await reader.rows(in: nil)
+        XCTAssertNotEqual(first[0].id, first[1].id)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("next\n".utf8))
+        try handle.close()
+        let appended = try await reader.rows(in: nil)
+        XCTAssertEqual(Array(appended.prefix(2)).map(\.id), first.map(\.id))
+        try Data("repeat\nrepeat\nnext\n".utf8).write(to: url, options: .atomic)
+        let replaced = try await reader.rows(in: nil)
+        XCTAssertNotEqual(replaced[0].id, first[0].id)
+    }
+
     func testRangeDoesNotLoadOtherDaysAndAnEmptyFileHasNoRows() async throws {
         try put("Ku-Ka-2026-10-29.log", "old\n")
         try put("Ku-Ka-2026-10-30.log", "")

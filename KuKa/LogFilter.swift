@@ -1,11 +1,18 @@
 import Foundation
 
 struct LogRow: Sendable {
+    enum ID: Hashable, Sendable {
+        case file(LogFileIdentity, line: Int)
+        case memory(UUID)
+    }
+
+    let id: ID
     let text: String
     let day: Date
     let line: LogLine?
 
-    init(text: String, day: Date) {
+    init(text: String, day: Date, id: ID = .memory(UUID())) {
+        self.id = id
         self.text = text
         self.day = day
         line = LogLine(parsing: text)

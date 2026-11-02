@@ -44,6 +44,7 @@ KuKa/
 ├── LogOutput.swift      # Shared or injected outputs: one redacted LogLine to unified logging and optional daily files
 ├── LogFiles.swift       # Queued daily file writes, owner-only permissions, retention, deletion, and bounded shutdown drain
 ├── LogFilter.swift      # LogRow, LogRange, and LogFilter: parsed rows, range/category/error filters, newest 5,000
+├── LogText.swift        # Displayed text and row positions; maps selection and scroll anchors by row identity
 ├── LogFileReader.swift  # LogReading and actor-owned file cache; cancellable reads and filtering off the main actor
 ├── LogWindowController.swift # Retained log window, native controls, polling lifetime, copy/save/delete, find, and scroll/selection preservation
 ├── AppDelegate.swift    # NSStatusItem menu bar, wires hotkey → overlay → capture → thumbnail → editor pipeline
@@ -230,7 +231,10 @@ To keep a file out of the build, put it outside these two folders.
   local day remove files older than 14 calendar days, then oldest files above
   20,000,000 total bytes. Today's file is exempt from size eviction. Only regular
   files named exactly `Ku-Ka-YYYY-MM-DD.log` with a valid date belong to the store.
-- `LogRow` parses once. `LogFilter` combines range, category, and error filters
+- `LogRow` parses once and retains its source file identity and line position.
+  `LogFileEntry.list` supplies the shared owned-file inventory for retention,
+  deletion, and reading. File-opening checks remain in the reader and writer.
+  `LogFilter` combines range, category, and error filters
   before retaining the newest 5,000 rows. Last 7 days includes today and six prior
   calendar days. Unknown rows use the source-file day for date ranges, remain
   unchanged under All, and cannot match This launch, a category, or Errors only.
@@ -255,10 +259,12 @@ To keep a file out of the build, put it outside these two folders.
   requests, deletion, and close invalidate old requests. Copy and Save use only
   displayed text. Delete requires a native confirmation, and an error stays
   visible until another action. Cmd-F opens the NSTextView find bar.
-- The text view follows updates only at the bottom. When the cap removes a prefix,
-  it adjusts the selection and scroll position against retained lines. Identical
-  results do not replace text or leave a forced-follow request pending. Launch
-  time is rounded down to the millisecond precision stored in log timestamps.
+- The text view follows updates only at the bottom. `LogText` maps selection and
+  scroll positions by retained row IDs, including repeated text and reordered
+  rows. Replaced files have new IDs, so their text cannot inherit a selection.
+  Identical text and IDs do not replace text or leave a forced-follow request
+  pending. Launch time is rounded down to the millisecond precision stored in
+  log timestamps.
 - Reader/window tests cover cache invalidation, cancellation, filters, copy/save,
   deletion, errors, polling, find, shared activation, and scroll/selection at the
   row cap. `KUKA_LOG_SNAPSHOTS` enables view captures; pass it through xcodebuild
