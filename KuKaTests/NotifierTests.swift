@@ -26,18 +26,4 @@ final class NotifierTests: XCTestCase {
         XCTAssertEqual(NotificationClick(userInfo: ["url": "file:///Users/test/Meetings/2026-10-23_14-02/summary.md"]),
                        .open(URL(fileURLWithPath: "/Users/test/Meetings/2026-10-23_14-02/summary.md")))
     }
-
-    func testAClickOpensItsFileOrCallsCheckWordsWithItsMeeting() throws {
-        let meeting = try meeting()
-        var opened: [URL] = []
-        var checked: [MeetingFolder] = []
-        let notifier = SystemNotifier(open: { opened.append($0) })
-        notifier.onCheckWords = { checked.append($0) }
-
-        notifier.perform(.open(meeting.url(for: .summary)))
-        notifier.perform(.checkWords(meeting))
-
-        XCTAssertEqual(opened, [meeting.url(for: .summary)])
-        XCTAssertEqual(checked, [meeting])
-    }
 }

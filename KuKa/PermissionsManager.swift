@@ -75,6 +75,7 @@ final class PermissionsManager {
     private let openURL: (URL) -> Bool
     private let showAccessibilityPrompt: () -> Void
     private let defaults: UserDefaults
+    private let pollInterval: TimeInterval
     private var timer: Timer?
 
     /// Leaves out Microphone on purpose: launch opens the Permissions page when this is false,
@@ -94,7 +95,8 @@ final class PermissionsManager {
                 [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             )
         },
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        pollInterval: TimeInterval = 0.5
     ) {
         self.isAccessibilityTrusted = isAccessibilityTrusted
         self.hasScreenCaptureAccess = hasScreenCaptureAccess
@@ -103,6 +105,7 @@ final class PermissionsManager {
         self.openURL = openURL
         self.showAccessibilityPrompt = showAccessibilityPrompt
         self.defaults = defaults
+        self.pollInterval = pollInterval
     }
 
     /// Re-read every status without prompting the user.
@@ -176,11 +179,11 @@ final class PermissionsManager {
         }
     }
 
-    /// Poll every 0.5s so a grant made in System Settings shows up live.
-    /// Only meant to run while the Permissions page is visible.
+    /// Poll every `pollInterval` (0.5s) so a grant made in System Settings
+    /// shows up live. Only meant to run while the Permissions page is visible.
     func startPolling() {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
             // Timers scheduled from the main thread fire on the main run loop.
             MainActor.assumeIsolated { self?.refresh() }
         }

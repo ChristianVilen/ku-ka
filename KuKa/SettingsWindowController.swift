@@ -23,7 +23,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let settings: Settings
     private let chooseFolder: Picker
     private let chooseContext: Picker
-    private let present: (NSWindow) -> Void
+    private let present: @MainActor (NSWindow) -> Void
     private let activation: OrdinaryWindowActivation
     private let isWindowVisible: (NSWindow) -> Bool
     private var permissionsVisible = false
@@ -55,7 +55,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
          openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
          chooseFolder: @escaping Picker = SettingsWindowController.folderPicker,
          chooseContext: @escaping Picker = SettingsWindowController.contextPicker,
-         present: @escaping (NSWindow) -> Void = SettingsWindowController.presentWindow,
+         present: @escaping @MainActor (NSWindow) -> Void = SettingsWindowController.presentWindow,
          activation: OrdinaryWindowActivation = .shared,
          isWindowVisible: @escaping (NSWindow) -> Bool = { $0.isVisible && !$0.isMiniaturized && !NSApp.isHidden }) {
         self.settings = settings
