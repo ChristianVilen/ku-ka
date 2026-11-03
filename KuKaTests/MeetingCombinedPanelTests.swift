@@ -4,6 +4,61 @@ import XCTest
 
 @MainActor
 final class MeetingCombinedPanelTests: XCTestCase {
+    func testNativeTypingSplitAndTypingUndoAndRedoAsSeparateActions() throws {
+        let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
+        let session = try MeetingTypedNotesSession(meeting: meeting)
+        let view = MeetingTypedNotesView(session: session, requestUpdate: {})
+        let host = MeetingTypedNotesHost(view: view)
+        defer { host.detach() }
+        host.show()
+        session.undoManager.groupsByEvent = false
+        func event(_ action: () -> Void) {
+            session.undoManager.beginUndoGrouping()
+            action()
+            session.undoManager.endUndoGrouping()
+        }
+        let first = try XCTUnwrap(descendants(view).compactMap { $0 as? NoteRowTextView }.first)
+        event { first.insertText("First", replacementRange: first.selectedRange()) }
+        let enter = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: host.window!.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+            isARepeat: false, keyCode: 36))
+        event { first.keyDown(with: enter) }
+        let second = try XCTUnwrap(descendants(view).compactMap { $0 as? NoteRowTextView }.last)
+        event { second.insertText("Second", replacementRange: second.selectedRange()) }
+
+        session.undoManager.undo()
+        XCTAssertEqual(session.entries.map(\.text), ["First", ""])
+        session.undoManager.undo()
+        XCTAssertEqual(session.entries.map(\.text), ["First"])
+        session.undoManager.undo()
+        XCTAssertEqual(try MeetingTypedNotesFile.read(in: meeting), "")
+        session.undoManager.redo()
+        session.undoManager.redo()
+        session.undoManager.redo()
+        XCTAssertEqual(session.entries.map(\.text), ["First", "Second"])
+        XCTAssertEqual(MeetingNoteDocument.parse(try meeting.read(.notes)).map(\.text), ["First", "Second"])
+        XCTAssertTrue(descendants(view).contains { $0 === second })
+    }
+
+    func testAppendingRowKeepsExistingScreenshotViewAndEditor() throws {
+        let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
+        let session = try MeetingTypedNotesSession(meeting: meeting)
+        let view = MeetingTypedNotesView(session: session, requestUpdate: {})
+        let host = MeetingTypedNotesHost(view: view)
+        defer { host.detach() }
+        host.show()
+        let editor = try XCTUnwrap(descendants(view).compactMap { $0 as? NSTextView }.first)
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 10, pixelsHigh: 10,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        let image = try MeetingScreenshot.decode(XCTUnwrap(bitmap.representation(using: .png, properties: [:])))
+        try session.addScreenshot(image, to: XCTUnwrap(session.entries.first?.id))
+        let preview = try XCTUnwrap(descendants(view).compactMap { $0 as? NSImageView }.first)
+        session.insertEntry()
+        XCTAssertTrue(descendants(view).contains { $0 === preview })
+        XCTAssertTrue(descendants(view).contains { $0 === editor })
+    }
+
     func testNotesRemainAfterStopAndNoticeExpires() async throws {
         let root = try makeTemporaryDirectory()
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
@@ -32,7 +87,7 @@ final class MeetingCombinedPanelTests: XCTestCase {
         live.send(.started)
         live.send(.result(LiveResult(track: .system, start: 0, end: 2,
                                     text: "We can start the work tomorrow.", isFinal: true, finalizedThrough: 2)))
-        await waitUntil { recorder.controls?.preview?.rows.isEmpty == false }
+        await waitUntil { recorder.livePreview?.rows.isEmpty == false }
         let editorBefore = try XCTUnwrap(descendants(view).compactMap { $0 as? NoteRowTextView }.first)
         editorBefore.insertText("Decisions and action items", replacementRange: editorBefore.selectedRange())
         editorBefore.setSelectedRange(NSRange(location: 3, length: 2))
@@ -189,12 +244,12 @@ final class MeetingCombinedPanelTests: XCTestCase {
         board.setData(png, forType: .png)
         XCTAssertTrue(editor.pasteImage(from: board))
         let name = try XCTUnwrap(session.entries.first?.attachments.first)
-        XCTAssertNotNil(session.screenshot(named: name))
+        XCTAssertNotNil(MeetingScreenshotStore(meeting: meeting).read(named: name))
         XCTAssertTrue(try meeting.read(.notes).contains("attachments/" + name))
         XCTAssertFalse(descendants(view).compactMap { $0 as? NSImageView }.isEmpty)
         editor.undoManager?.undo()
         XCTAssertEqual(session.entries.first?.attachments, [])
-        XCTAssertNotNil(session.screenshot(named: name))
+        XCTAssertNotNil(MeetingScreenshotStore(meeting: meeting).read(named: name))
         board.releaseGlobally()
         host.detach()
     }
@@ -213,7 +268,7 @@ final class MeetingCombinedPanelTests: XCTestCase {
         board.writeObjects([source as NSURL])
         XCTAssertTrue(view.dropImage(from: board))
         let name = try XCTUnwrap(session.entries.first?.attachments.first)
-        XCTAssertNotNil(session.screenshot(named: name))
+        XCTAssertNotNil(MeetingScreenshotStore(meeting: meeting).read(named: name))
         XCTAssertTrue(try meeting.read(.notes).contains("attachments/" + name))
         board.releaseGlobally()
     }

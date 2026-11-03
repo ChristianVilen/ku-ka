@@ -1,7 +1,5 @@
 import Foundation
 import Darwin
-import ImageIO
-import UniformTypeIdentifiers
 
 enum MeetingTypedNotesFile {
     static let maximumBytes = 65_536
@@ -65,18 +63,14 @@ enum TypedNotesSummaryResult {
 
 @MainActor
 final class MeetingTypedNotesSession {
-    private enum FirstContentTime {
-        case pending
-        case stamped(MeetingNoteTime)
-    }
-
     let meeting: MeetingFolder
     private var lock: FileLock?
     private(set) var text: String
     private(set) var savedText: String
     private(set) var saveError: String?
     private(set) var entries: [MeetingNoteEntry]
-    private var firstContentTimes: [UUID: FirstContentTime] = [:]
+    private var pendingEntries: Set<UUID> = []
+    let undoManager = UndoManager()
     var noteTime: () -> MeetingNoteTime = { .afterRecording }
     var context: () -> (recordingPhase: RecorderPhase, summaryState: TypedNotesSummaryState) = { (.idle, .idle) } {
         didSet { onChange?() }
@@ -111,14 +105,15 @@ final class MeetingTypedNotesSession {
     func edit(_ text: String) {
         self.text = text
         entries = MeetingNoteDocument.parse(text)
-        firstContentTimes.removeAll()
+        pendingEntries.removeAll()
+        undoManager.removeAllActions()
         save()
     }
 
     @discardableResult
     func insertEntry(after previous: UUID? = nil) -> UUID {
         let entry = MeetingNoteEntry(time: noteTime())
-        firstContentTimes[entry.id] = .pending
+        pendingEntries.insert(entry.id)
         if let previous, let index = entries.firstIndex(where: { $0.id == previous }) {
             entries.insert(entry, at: index + 1)
         } else {
@@ -136,79 +131,67 @@ final class MeetingTypedNotesSession {
         save()
     }
 
-    func replaceEntries(_ entries: [MeetingNoteEntry]) {
-        self.entries = entries
-        for index in self.entries.indices {
-            stampFirstContent(at: index)
+    func splitEntry(id: UUID, selection: NSRange) -> UUID? {
+        guard let entry = entries.first(where: { $0.id == id }), let range = Range(selection, in: entry.text) else { return nil }
+        let next = MeetingNoteEntry(time: noteTime(), text: String(entry.text[range.upperBound...]))
+        pendingEntries.insert(next.id)
+        applySplit(id: id, first: String(entry.text[..<range.lowerBound]), next: next)
+        return next.id
+    }
+
+    private func applySplit(id: UUID, first: String, next: MeetingNoteEntry) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        let original = entries[index].text
+        entries[index].text = first
+        entries.insert(next, at: index + 1)
+        stampFirstContent(at: index)
+        stampFirstContent(at: index + 1)
+        saveEntries()
+        undoManager.registerUndo(withTarget: self) { session in
+            session.joinSplit(id: id, original: original, nextID: next.id)
         }
-        text = MeetingNoteDocument.render(self.entries)
-        save()
+    }
+
+    private func joinSplit(id: UUID, original: String, nextID: UUID) {
+        guard let index = entries.firstIndex(where: { $0.id == id }),
+              let next = entries.first(where: { $0.id == nextID }) else { return }
+        let first = entries[index].text
+        entries[index].text = original
+        entries.removeAll { $0.id == nextID }
+        saveEntries()
+        undoManager.registerUndo(withTarget: self) { session in
+            session.applySplit(id: id, first: first, next: next)
+        }
+    }
+
+    func addScreenshot(_ screenshot: MeetingScreenshot, to id: UUID) throws {
+        guard entries.contains(where: { $0.id == id }) else { throw MeetingStepError("Reopen the note before adding a screenshot.") }
+        let name = try MeetingScreenshotStore(meeting: meeting).write(screenshot)
+        setAttachment(name, on: id, present: true)
+    }
+
+    private func setAttachment(_ name: String, on id: UUID, present: Bool) {
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        if present { entries[index].attachments.append(name) }
+        else { entries[index].attachments.removeAll { $0 == name } }
+        stampFirstContent(at: index)
+        saveEntries()
+        undoManager.registerUndo(withTarget: self) { session in
+            session.setAttachment(name, on: id, present: !present)
+        }
     }
 
     private func stampFirstContent(at index: Int) {
         let entry = entries[index]
-        switch firstContentTimes[entry.id] {
-        case .pending where !entry.text.isEmpty || !entry.attachments.isEmpty:
-            let time = noteTime()
-            entries[index].time = time
-            firstContentTimes[entry.id] = .stamped(time)
-        case .stamped(let time):
-            entries[index].time = time
-        case .pending, nil:
-            break
+        if pendingEntries.contains(entry.id), !entry.text.isEmpty || !entry.attachments.isEmpty {
+            entries[index].time = noteTime()
+            pendingEntries.remove(entry.id)
         }
     }
 
-    func addScreenshot(_ data: Data, to id: UUID) throws {
-        guard let index = entries.firstIndex(where: { $0.id == id }), data.count <= 20_000_000,
-              let source = CGImageSourceCreateWithData(data as CFData, nil),
-              CGImageSourceGetType(source) == UTType.png.identifier as CFString,
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0, width <= 16_000, height <= 16_000,
-              width * height <= 40_000_000, CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else {
-            throw MeetingStepError("The screenshot must be a valid PNG within the size limit.")
-        }
-        let root = meeting.url.path
-        let rootFD = open(root, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-        guard rootFD >= 0 else { throw MeetingStepError("Could not open the meeting folder.") }
-        defer { Darwin.close(rootFD) }
-        if mkdirat(rootFD, "attachments", 0o700) != 0 && errno != EEXIST {
-            throw MeetingStepError("Could not create the attachments folder.")
-        }
-        let directory = openat(rootFD, "attachments", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-        guard directory >= 0 else { throw MeetingStepError("Could not open the attachments folder.") }
-        defer { Darwin.close(directory) }
-        let name = UUID().uuidString + ".png"
-        let descriptor = openat(directory, name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0o600)
-        guard descriptor >= 0 else { throw MeetingStepError("Could not save the screenshot.") }
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        do { try handle.write(contentsOf: data); try handle.close() }
-        catch { unlinkat(directory, name, 0); throw error }
-        entries[index].attachments.append(name)
-        stampFirstContent(at: index)
+    private func saveEntries() {
         text = MeetingNoteDocument.render(entries)
         save()
-    }
-
-    func screenshot(named name: String) -> Data? {
-        guard name.hasSuffix(".png"), UUID(uuidString: String(name.dropLast(4))) != nil else { return nil }
-        let root = open(meeting.url.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-        guard root >= 0 else { return nil }
-        defer { Darwin.close(root) }
-        let directory = openat(root, "attachments", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-        guard directory >= 0 else { return nil }
-        defer { Darwin.close(directory) }
-        let descriptor = openat(directory, name, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
-        guard descriptor >= 0 else { return nil }
-        defer { Darwin.close(descriptor) }
-        var info = stat()
-        guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-              info.st_size >= 0, info.st_size <= 20_000_000 else { return nil }
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
-        guard let data = try? handle.read(upToCount: 20_000_001), data.count <= 20_000_000 else { return nil }
-        return data
     }
 
     func save() {
@@ -234,7 +217,8 @@ final class MeetingTypedNotesSession {
             text = saved
             savedText = saved
             entries = MeetingNoteDocument.parse(saved)
-            firstContentTimes.removeAll()
+            pendingEntries.removeAll()
+            undoManager.removeAllActions()
             saveError = nil
             onSaved?()
         } catch {

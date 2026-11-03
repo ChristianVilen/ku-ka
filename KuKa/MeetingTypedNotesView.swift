@@ -1,7 +1,4 @@
 import AppKit
-import ImageIO
-import UniformTypeIdentifiers
-import Darwin
 
 @MainActor
 final class MeetingTypedNotesView: NSView {
@@ -15,11 +12,8 @@ final class MeetingTypedNotesView: NSView {
     private lazy var retry = NSButton(title: "Retry save", target: self, action: #selector(retrySave))
     private lazy var reload = NSButton(title: "Reload saved notes", target: self, action: #selector(reloadSaved))
     private lazy var update = NSButton(title: "Update summary", target: self, action: #selector(updateSummary))
-    private var editors: [UUID: NoteRowTextView] = [:]
-    private var timeLabels: [UUID: NSTextField] = [:]
-    private var renderedIDs: [UUID] = []
-    private var renderedAttachments: [[String]] = []
-    private let editingUndo = UndoManager()
+    private var rows: [UUID: MeetingNoteRowView] = [:]
+    private let thumbnails: MeetingScreenshotThumbnails
     private var focusedEntry: UUID?
 
     init(session: MeetingTypedNotesSession, requestUpdate: @escaping () -> Void,
@@ -27,6 +21,7 @@ final class MeetingTypedNotesView: NSView {
         self.session = session
         self.requestUpdate = requestUpdate
         self.confirmReload = confirmReload
+        thumbnails = MeetingScreenshotThumbnails(store: MeetingScreenshotStore(meeting: session.meeting))
         super.init(frame: NSRect(x: 0, y: 0, width: 460, height: 330))
         registerForDraggedTypes([.png, .tiff, .fileURL])
         wantsLayer = true
@@ -95,7 +90,7 @@ final class MeetingTypedNotesView: NSView {
     @discardableResult
     func dropImage(from board: NSPasteboard) -> Bool {
         let focused = window?.firstResponder as? NoteRowTextView
-        let last = session.entries.last.flatMap { editors[$0.id] }
+        let last = session.entries.last.flatMap { rows[$0.id]?.editor }
         return (focused ?? last)?.dropImage(from: board) ?? false
     }
 
@@ -105,14 +100,14 @@ final class MeetingTypedNotesView: NSView {
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
-        if let editor = window?.firstResponder as? NoteRowTextView, editors[editor.entryID] === editor {
+        if let editor = window?.firstResponder as? NoteRowTextView, rows[editor.entryID]?.editor === editor {
             focusedEntry = editor.entryID
         }
         super.viewWillMove(toWindow: newWindow)
     }
 
     func focus() {
-        let editor = focusedEntry.flatMap { editors[$0] } ?? session.entries.first.flatMap { editors[$0.id] }
+        let editor = focusedEntry.flatMap { rows[$0]?.editor } ?? session.entries.first.flatMap { rows[$0.id]?.editor }
         if let editor { window?.makeFirstResponder(editor) }
     }
 
@@ -121,41 +116,24 @@ final class MeetingTypedNotesView: NSView {
             session.insertEntry()
             return
         }
-        let ids = session.entries.map(\.id)
-        let attachments = session.entries.map(\.attachments)
-        if ids != renderedIDs || attachments != renderedAttachments {
-            for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
-            for entry in session.entries {
-                let label = NSTextField.makeLabel(size: 11, color: .secondaryLabelColor)
-                timeLabels[entry.id] = label
-                let editor = editors[entry.id] ?? makeEditor(entry)
-                editors[entry.id] = editor
-                stack.addArrangedSubview(label)
-                stack.addArrangedSubview(editor)
-                editor.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-                editor.heightAnchor.constraint(greaterThanOrEqualToConstant: 24).isActive = true
-                for name in entry.attachments {
-                    guard let data = session.screenshot(named: name), let image = NSImage(data: data) else { continue }
-                    let imageView = NSImageView(image: image)
-                    imageView.imageScaling = .scaleProportionallyDown
-                    imageView.setAccessibilityLabel("Screenshot")
-                    stack.addArrangedSubview(imageView)
-                    imageView.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor).isActive = true
-                    imageView.heightAnchor.constraint(equalToConstant: 140).isActive = true
-                }
-            }
-            renderedIDs = ids
-            renderedAttachments = attachments
+        let ids = Set(session.entries.map(\.id))
+        for view in stack.arrangedSubviews {
+            guard let row = view as? MeetingNoteRowView, !ids.contains(row.editor.entryID) else { continue }
+            stack.removeArrangedSubview(row)
+            row.removeFromSuperview()
         }
-        for entry in session.entries {
-            switch entry.time {
-            case .recording(let time): timeLabels[entry.id]?.stringValue = RecordedTime.format(time)
-            case .afterRecording: timeLabels[entry.id]?.stringValue = "After recording"
-            case .undated: timeLabels[entry.id]?.stringValue = "Undated"
+        for (index, entry) in session.entries.enumerated() {
+            let row: MeetingNoteRowView
+            if let existing = rows[entry.id] { row = existing }
+            else {
+                row = MeetingNoteRowView(editor: makeEditor(entry), thumbnails: thumbnails)
+                rows[entry.id] = row
             }
-            if let editor = editors[entry.id], editor.string != entry.text {
-                editor.replaceFromSession(entry.text)
+            if index >= stack.arrangedSubviews.count || stack.arrangedSubviews[index] !== row {
+                stack.insertArrangedSubview(row, at: index)
+                row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             }
+            row.show(entry)
         }
         saveLabel.stringValue = session.saveError.map { "Not saved. " + $0 } ?? "Saved to notes.md"
         summaryLabel.stringValue = session.summaryMessage
@@ -166,7 +144,7 @@ final class MeetingTypedNotesView: NSView {
 
     private func makeEditor(_ entry: MeetingNoteEntry) -> NoteRowTextView {
         let editor = NoteRowTextView(entryID: entry.id)
-        editor.editingUndo = editingUndo
+        editor.editingUndo = session.undoManager
         editor.string = entry.text
         editor.onEdit = { [weak self, weak editor] in
             guard let self, let editor else { return }
@@ -181,39 +159,25 @@ final class MeetingTypedNotesView: NSView {
         editor.textContainer?.widthTracksTextView = true
         editor.onNewRow = { [weak self, weak editor] in
             guard let self, let editor else { return }
-            let previous = self.session.entries
-            let text = editor.string as NSString
-            let selection = editor.selectedRange()
-            let first = text.substring(to: selection.location)
-            let rest = text.substring(from: NSMaxRange(selection))
-            self.session.updateEntry(id: entry.id, text: first)
-            let next = self.session.insertEntry(after: entry.id)
-            self.session.updateEntry(id: next, text: rest)
-            self.registerUndo(previous)
-            self.window?.makeFirstResponder(self.editors[next])
+            editor.breakUndoCoalescing()
+            guard let next = self.session.splitEntry(id: entry.id, selection: editor.selectedRange()) else { return }
+            self.window?.makeFirstResponder(self.rows[next]?.editor)
         }
         editor.onImage = { [weak self] data in
             guard let self else { return }
-            let previous = self.session.entries
             try self.session.addScreenshot(data, to: entry.id)
-            self.registerUndo(previous)
         }
         return editor
-    }
-
-    private func registerUndo(_ previous: [MeetingNoteEntry]) {
-        editingUndo.registerUndo(withTarget: self) { view in
-            let current = view.session.entries
-            view.session.replaceEntries(previous)
-            view.registerUndo(current)
-        }
     }
 
     @objc private func retrySave() { session.save() }
     @objc private func reloadSaved() {
         guard let window, confirmReload(window) else { return }
         session.reloadSavedNotes()
-        if session.saveError == nil { editingUndo.removeAllActions() }
+        if session.saveError == nil {
+            let ids = Set(session.entries.map(\.id))
+            rows = rows.filter { ids.contains($0.key) }
+        }
     }
     private static func confirmReload(_ window: NSWindow) -> Bool {
         let alert = NSAlert()
@@ -224,6 +188,57 @@ final class MeetingTypedNotesView: NSView {
         return alert.runModal() == .alertSecondButtonReturn
     }
     @objc private func updateSummary() { if session.canUpdateSummary { requestUpdate() } }
+}
+
+private final class MeetingNoteRowView: NSStackView {
+    let editor: NoteRowTextView
+    private let time = NSTextField.makeLabel(size: 11, color: .secondaryLabelColor)
+    private let images = NSStackView()
+    private let thumbnails: MeetingScreenshotThumbnails
+    private var attachmentNames: [String] = []
+
+    init(editor: NoteRowTextView, thumbnails: MeetingScreenshotThumbnails) {
+        self.editor = editor
+        self.thumbnails = thumbnails
+        super.init(frame: .zero)
+        orientation = .vertical
+        alignment = .leading
+        spacing = 8
+        images.orientation = .vertical
+        images.alignment = .leading
+        images.spacing = 6
+        images.isHidden = true
+        for view in [time, editor, images] as [NSView] { addArrangedSubview(view) }
+        NSLayoutConstraint.activate([
+            editor.widthAnchor.constraint(equalTo: widthAnchor),
+            editor.heightAnchor.constraint(greaterThanOrEqualToConstant: 24),
+            images.widthAnchor.constraint(equalTo: widthAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func show(_ entry: MeetingNoteEntry) {
+        switch entry.time {
+        case .recording(let position): time.stringValue = RecordedTime.format(position)
+        case .afterRecording: time.stringValue = "After recording"
+        case .undated: time.stringValue = "Undated"
+        }
+        if editor.string != entry.text { editor.replaceFromSession(entry.text) }
+        guard attachmentNames != entry.attachments else { return }
+        attachmentNames = entry.attachments
+        for image in images.arrangedSubviews { images.removeArrangedSubview(image); image.removeFromSuperview() }
+        for name in attachmentNames {
+            guard let thumbnail = thumbnails.thumbnail(named: name) else { continue }
+            let image = NSImageView(image: thumbnail)
+            image.imageScaling = .scaleProportionallyDown
+            image.setAccessibilityLabel("Screenshot")
+            images.addArrangedSubview(image)
+            image.widthAnchor.constraint(lessThanOrEqualTo: images.widthAnchor).isActive = true
+            image.heightAnchor.constraint(equalToConstant: 140).isActive = true
+        }
+        images.isHidden = images.arrangedSubviews.isEmpty
+    }
 }
 
 private final class NotesDocumentView: NSView {
@@ -246,7 +261,7 @@ private final class NotesDocumentView: NSView {
 final class NoteRowTextView: NSTextView, NSTextStorageDelegate {
     let entryID: UUID
     var onNewRow: (() -> Void)?
-    var onImage: ((Data) throws -> Void)?
+    var onImage: ((MeetingScreenshot) throws -> Void)?
     var onEdit: (() -> Void)?
     private var isReplacing = false
     var editingUndo: UndoManager?
@@ -295,7 +310,7 @@ final class NoteRowTextView: NSTextView, NSTextStorageDelegate {
     @discardableResult
     func pasteImage(from pasteboard: NSPasteboard) -> Bool {
         guard let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) else { return false }
-        do { try onImage?(Self.png(data)); return true } catch { NSSound.beep(); return true }
+        do { try onImage?(MeetingScreenshot.decode(data)); return true } catch { NSSound.beep(); return true }
     }
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         Self.acceptsImage(from: sender.draggingPasteboard) ? .copy : []
@@ -311,32 +326,6 @@ final class NoteRowTextView: NSTextView, NSTextStorageDelegate {
     func dropImage(from board: NSPasteboard) -> Bool {
         if pasteImage(from: board) { return true }
         guard let url = NSURL(from: board) as URL?, url.isFileURL else { return false }
-        let fd = open(url.path, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
-        guard fd >= 0 else { return false }
-        defer { Darwin.close(fd) }
-        var info = stat()
-        guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size >= 0, info.st_size <= 20_000_000 else { return false }
-        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: false)
-        guard let data = try? handle.read(upToCount: 20_000_001), data.count <= 20_000_000 else { return false }
-        do { try onImage?(Self.png(data)); return true } catch { NSSound.beep(); return false }
-    }
-    private static func png(_ data: Data) throws -> Data {
-        guard data.count <= 20_000_000, let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width > 0, height > 0, width <= 16_000, height <= 16_000, width * height <= 40_000_000,
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            throw MeetingStepError("The screenshot is invalid or too large.")
-        }
-        let result = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(result, UTType.png.identifier as CFString, 1, nil) else {
-            throw MeetingStepError("Could not convert the screenshot.")
-        }
-        CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination), result.length <= 20_000_000 else {
-            throw MeetingStepError("The screenshot is too large.")
-        }
-        return result as Data
+        do { try onImage?(MeetingScreenshot.read(from: url)); return true } catch { NSSound.beep(); return false }
     }
 }

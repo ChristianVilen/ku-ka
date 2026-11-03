@@ -40,10 +40,6 @@ struct MeetingControls: Equatable {
     let status: Status
     /// Recorded seconds. Nil outside a meeting.
     let recordedTime: TimeInterval?
-    /// Nil while starting, after the meeting, and while the transcript is closed.
-    let preview: LivePreview?
-
-    var isTranscriptOpen: Bool { preview != nil }
 }
 
 /// One-shot requests from the recorder to the panel, for things that are not state.
@@ -88,7 +84,6 @@ final class MeetingRecorder {
             var clock: RecordingClock
             var live = LiveTranscript()
             var isHidden = false
-            var isTranscriptOpen = false
         }
 
         let session: Session
@@ -167,6 +162,12 @@ final class MeetingRecorder {
         return meeting.state.clock.recordedTime(at: hostNow())
     }
 
+    /// Built only when a caller needs it. Available even when the controls are hidden.
+    var livePreview: LivePreview? {
+        guard case .active(let meeting) = state else { return nil }
+        return meeting.state.live.preview(on: meeting.state.clock)
+    }
+
     func noteTime(for folder: MeetingFolder) -> MeetingNoteTime {
         guard case .active(let meeting) = state, meeting.folder == folder else { return .afterRecording }
         return .recording(meeting.state.clock.notePosition(at: hostNow()))
@@ -188,10 +189,9 @@ final class MeetingRecorder {
             let current = meeting.state
             guard !current.isHidden else { return nil }
             return MeetingControls(status: current.clock.isPaused ? .paused : .recording,
-                                   recordedTime: current.clock.recordedTime(at: hostNow()),
-                                   preview: current.isTranscriptOpen ? current.live.preview(on: current.clock) : nil)
+                                   recordedTime: current.clock.recordedTime(at: hostNow()))
         }
-        return MeetingControls(status: status, recordedTime: nil, preview: nil)
+        return MeetingControls(status: status, recordedTime: nil)
     }
 
     init(permissions: PermissionsManager,
@@ -362,14 +362,6 @@ final class MeetingRecorder {
 
     func togglePause() {
         phase == .paused ? resume() : pause()
-    }
-
-    func setTranscriptOpen(_ isOpen: Bool) {
-        updateActive { $0.isTranscriptOpen = isOpen }
-    }
-
-    func toggleTranscript() {
-        updateActive { $0.isTranscriptOpen.toggle() }
     }
 
     /// The panel's Hide while recording, or its Close on a notice.

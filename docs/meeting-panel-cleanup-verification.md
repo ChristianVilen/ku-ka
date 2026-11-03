@@ -1,6 +1,15 @@
 # Meeting panel cleanup verification
 
-Verified on 2026-11-03 for issue #55. The full macOS XCTest run passed 1,098 tests, with five optional skips and no failures.
+Verified on 2026-11-03 for issue #55. After the code-review fixes, the full macOS XCTest run passed 1,108 tests, with five optional skips and no failures.
+
+## Code-review fixes
+
+- B1. The panel owns its content mode. The recorder supplies status, time, and an independent live preview on demand. Stopped notes have their own presentation.
+- B2. A session row split saves and publishes one complete document. Its inverse restores only the affected rows. Native text and structural edits share one undo manager. Model tests count saved snapshots, and a native test types, splits, types in the new row, undoes all three actions, then redoes them and checks disk text and editor identity.
+- B3. `MeetingScreenshot` validates input once. `MeetingScreenshotStore` owns bounded, safe file reads and immutable writes. Tests cover PNG, TIFF conversion, size limits, unsafe names, symlinks, and file permissions.
+- S1. Existing row and screenshot views survive insertion. Retained thumbnails use small ImageIO decodes. A cache test removes the source file after the first decode and confirms the same thumbnail is reused.
+
+Independent review found no blockers in the refactor. Native light and dark views were inspected again. These changes preserve the reviewed interface.
 
 ## Native and storage checks
 

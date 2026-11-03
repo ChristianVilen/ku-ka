@@ -26,13 +26,11 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
         let id = session.insertEntry()
-        let blank = session.entries
         session.noteTime = { .recording(45) }
         session.updateEntry(id: id, text: "First text")
         XCTAssertEqual(session.entries.first?.time, .recording(45))
         session.noteTime = { .afterRecording }
         session.updateEntry(id: id, text: "")
-        session.replaceEntries(blank)
         session.updateEntry(id: id, text: "Retyped")
         XCTAssertEqual(session.entries.first?.time, .recording(45))
     }
@@ -53,11 +51,13 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let persisted = MeetingNoteEntry(time: .recording(5), text: "Saved")
         try meeting.write(MeetingNoteDocument.render([persisted]), to: .notes)
         let session = try MeetingTypedNotesSession(meeting: meeting)
+        session.undoManager.groupsByEvent = false
         session.noteTime = { .recording(15) }
-        let id = session.insertEntry(after: persisted.id)
-        let withPlaceholder = session.entries
-        session.replaceEntries([persisted])
-        session.replaceEntries(withPlaceholder)
+        session.undoManager.beginUndoGrouping()
+        let id = try XCTUnwrap(session.splitEntry(id: persisted.id, selection: NSRange(location: 5, length: 0)))
+        session.undoManager.endUndoGrouping()
+        session.undoManager.undo()
+        session.undoManager.redo()
         session.noteTime = { .afterRecording }
         session.updateEntry(id: id, text: "After Stop")
         session.updateEntry(id: persisted.id, text: "")
@@ -76,7 +76,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         try Data().write(to: meeting.url.appendingPathComponent("attachments"))
         session.noteTime = { .recording(30) }
-        XCTAssertThrowsError(try session.addScreenshot(png, to: id))
+        XCTAssertThrowsError(try session.addScreenshot(MeetingScreenshot.decode(png), to: id))
         session.noteTime = { .afterRecording }
         session.updateEntry(id: id, text: "First content")
         XCTAssertEqual(session.entries.first?.time, .afterRecording)
@@ -89,12 +89,12 @@ final class MeetingNoteEntriesTests: XCTestCase {
         session.noteTime = { .recording(15) }
         let id = session.insertEntry()
         session.noteTime = { .recording(30) }
-        XCTAssertThrowsError(try session.addScreenshot(Data("invalid".utf8), to: id))
+        XCTAssertThrowsError(try MeetingScreenshot.decode(Data("invalid".utf8)))
         session.noteTime = { .afterRecording }
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        try session.addScreenshot(XCTUnwrap(bitmap.representation(using: .png, properties: [:])), to: id)
+        try session.addScreenshot(MeetingScreenshot.decode(XCTUnwrap(bitmap.representation(using: .png, properties: [:]))), to: id)
         XCTAssertEqual(session.entries.first?.time, .afterRecording)
     }
 
@@ -146,7 +146,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
-        try session.addScreenshot(png, to: id)
+        try session.addScreenshot(MeetingScreenshot.decode(png), to: id)
         let name = try XCTUnwrap(session.entries.first?.attachments.first)
         XCTAssertTrue(FileManager.default.fileExists(atPath: meeting.url.appendingPathComponent("attachments/" + name).path))
         XCTAssertTrue(try meeting.read(.notes).contains("attachments/" + name))
@@ -155,7 +155,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         XCTAssertNotNil(session.saveError)
         XCTAssertEqual(try meeting.read(.notes), "Changed outside")
         XCTAssertEqual(session.entries.first?.attachments, [name])
-        XCTAssertThrowsError(try session.addScreenshot(Data("not an image".utf8), to: id))
+        XCTAssertThrowsError(try MeetingScreenshot.decode(Data("not an image".utf8)))
     }
 
     func testNotePositionFreezesThroughPausesAndIncludesAllResumeGaps() {

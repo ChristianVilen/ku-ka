@@ -99,7 +99,7 @@ final class MeetingNotesControllerTests: MeetingNotesTestCase {
         let show = try XCTUnwrap(item(titled: "Show Meeting Controls"))
         _ = (show.target as? NSObject)?.perform(show.action, with: show)
 
-        XCTAssertEqual(recorder.controls, MeetingControls(status: .recording, recordedTime: 0, preview: nil))
+        XCTAssertEqual(recorder.controls, MeetingControls(status: .recording, recordedTime: 0))
         XCTAssertEqual(controlsRequests, [.focus])
     }
 

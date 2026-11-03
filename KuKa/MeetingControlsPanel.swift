@@ -8,7 +8,7 @@ import Cocoa
 /// It never calls `NSApp.activate` and never makes itself key when it appears, so the meeting
 /// app keeps the keyboard. Unlike `ClipboardPanel`, it does not close on `resignKey`.
 final class MeetingControlsPanel: FloatingPanel {
-    private enum Presentation { case compact, transcript, readAndWrite }
+    private enum Presentation: Equatable { case compact, transcript, readAndWrite }
     private var presentation = Presentation.compact
     private struct Placement {
         let frame: CGRect
@@ -18,11 +18,41 @@ final class MeetingControlsPanel: FloatingPanel {
         let drawerAbove: Bool
     }
 
-    private struct Shape: Equatable {
-        let status: MeetingControls.Status
-        let isTranscriptOpen: Bool
-        let liveStatus: LiveTranscript.Status?
-        let showsNotes: Bool
+    private enum Shape: Equatable {
+        case starting
+        case recording(paused: Bool, content: Presentation, liveStatus: LiveTranscript.Status?)
+        case saved
+        case interrupted(String)
+        case notes(expanded: Bool)
+
+        var status: MeetingControls.Status {
+            switch self {
+            case .starting: return .starting
+            case .recording(let paused, _, _): return paused ? .paused : .recording
+            case .saved, .notes: return .saved
+            case .interrupted(let reason): return .interrupted(reason: reason)
+            }
+        }
+
+        var isTranscriptOpen: Bool {
+            switch self {
+            case .recording(_, let content, _): return content != .compact
+            case .notes(let expanded): return expanded
+            case .starting, .saved, .interrupted: return false
+            }
+        }
+
+        var showsNotes: Bool {
+            switch self {
+            case .recording(_, .readAndWrite, _), .notes(true): return true
+            default: return false
+            }
+        }
+
+        var liveStatus: LiveTranscript.Status? {
+            guard case .recording(_, _, let status) = self else { return nil }
+            return status
+        }
     }
 
     private let recorder: MeetingRecorder
@@ -34,6 +64,7 @@ final class MeetingControlsPanel: FloatingPanel {
 
     /// Used only to announce changes; button actions read the recorder.
     private var announcedStatus: MeetingControls.Status?
+    private var sessionID: UUID?
     /// Reused during drag, resize, and screen changes to avoid rebuilding transcript rows.
     private var drawnShape: Shape?
     private var placement: Placement?
@@ -73,7 +104,6 @@ final class MeetingControlsPanel: FloatingPanel {
         }
         closeNotes = onClose
         presentation = .readAndWrite
-        recorder.setTranscriptOpen(true)
         drawnShape = nil
         reload()
         makeKeyAndOrderFront(nil)
@@ -154,7 +184,6 @@ final class MeetingControlsPanel: FloatingPanel {
 
     override func cancelOperation(_ sender: Any?) {
         presentation = .compact
-        recorder.setTranscriptOpen(false)
         reload()
     }
 
@@ -177,6 +206,10 @@ final class MeetingControlsPanel: FloatingPanel {
 
     /// Only a new `Shape` needs layout; ticks and new text update their views directly.
     func reload() {
+        if let activeSession = recorder.activeSessionID, activeSession != sessionID {
+            sessionID = activeSession
+            presentation = .compact
+        }
         if let notesView, let active = recorder.activeMeeting, notesView.session.meeting != active {
             self.notesView = nil
             root.notes = nil
@@ -191,33 +224,39 @@ final class MeetingControlsPanel: FloatingPanel {
             announce(announcement.text, announcement.priority)
         }
         announcedStatus = controls?.status
-        guard let controls else {
-            if recorder.activeMeeting != nil { return disappear() }
+        if controls == nil, recorder.activeSessionID != nil { return disappear() }
+        let shape: Shape
+        let preview: LivePreview?
+        switch controls?.status {
+        case .starting?:
+            shape = .starting
+            preview = nil
+        case .recording?, .paused?:
+            preview = presentation == .compact ? nil : recorder.livePreview
+            shape = .recording(paused: controls?.status == .paused, content: presentation, liveStatus: preview?.status)
+        case .saved?, .interrupted?, nil:
+            preview = nil
             if notesView != nil {
-                let shape = Shape(status: .saved, isTranscriptOpen: presentation != .compact,
-                                  liveStatus: nil, showsNotes: presentation == .readAndWrite)
-                drawnShape = shape
-                render(shape)
-                relayout(shape, animated: false)
-                return
+                shape = .notes(expanded: presentation == .readAndWrite)
+            } else if case .interrupted(let reason)? = controls?.status {
+                shape = .interrupted(reason)
+            } else if controls != nil {
+                shape = .saved
+            } else {
+                return disappear()
             }
-            return disappear()
         }
-
         let wasOpen = !drawer.isHidden
         let isAppearing = !isVisible
-        renderTime(controls.recordedTime)
-        drawer.showBehind(controls.preview?.behind)
-        if presentation != .readAndWrite { presentation = controls.isTranscriptOpen ? .transcript : .compact }
-        let shape = Shape(status: controls.status, isTranscriptOpen: presentation != .compact,
-                          liveStatus: controls.preview?.status, showsNotes: presentation == .readAndWrite)
+        renderTime(controls?.recordedTime)
+        drawer.showBehind(preview?.behind)
         if isAppearing || shape != drawnShape {
             drawnShape = shape
             render(shape)
             relayout(shape, animated: !isAppearing && !displayOptions().reduceMotion)
         }
-        drawer.showRows(controls.preview?.rows ?? [])
-        if controls.isTranscriptOpen, !wasOpen { drawer.opened() }
+        drawer.showRows(preview?.rows ?? [])
+        if !drawer.isHidden, !wasOpen { drawer.opened() }
         if isAppearing { appear() }
     }
 
@@ -374,9 +413,13 @@ final class MeetingControlsPanel: FloatingPanel {
     }
 
     @objc private func transcriptClicked() {
-        let open = presentation != .transcript
-        presentation = open ? .transcript : .compact
-        recorder.setTranscriptOpen(open)
+        if presentation == .transcript { cancelOperation(nil) }
+        else { openTranscript() }
+    }
+
+    func openTranscript() {
+        guard recorder.phase.isCapturing else { return }
+        presentation = .transcript
         reload()
     }
     @objc private func notesClicked() {
