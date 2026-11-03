@@ -112,6 +112,8 @@ final class MeetingRecorder {
     private var state: State = .idle(notice: nil) {
         didSet {
             reconcileDisplayTimer()
+            // Before `onControlsChange`: `onChange` reaches `MeetingNotesHosting`, which must move
+            // the last meeting's notes out of the panel before the panel draws the new recording.
             if oldValue.phase != state.phase { onChange?() }
             onControlsChange?()
         }
@@ -343,6 +345,8 @@ final class MeetingRecorder {
         state = .idle(notice: nil)
     }
 
+    /// Changes only the clock. The stream, files, and folder lock stay, so Resume cannot fail,
+    /// and the system microphone indicator stays on while paused.
     func pause() {
         let time = hostNow()
         updateActive { state in

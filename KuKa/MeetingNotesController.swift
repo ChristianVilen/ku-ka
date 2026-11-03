@@ -507,6 +507,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshMeters() }
         }
+        // .common mode: the menu is open, and menu tracking does not fire default-mode timers.
         RunLoop.main.add(timer, forMode: .common)
         meterTimer = timer
     }

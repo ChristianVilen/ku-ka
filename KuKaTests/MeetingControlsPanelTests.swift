@@ -585,7 +585,10 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertNil(settings.meetingControlsTopRight)
     }
 
-    /// Writes one PNG per state, in light and dark, when KUKA_PANEL_SNAPSHOTS names a folder.
+    /// Writes one PNG per state, in light and dark, when KUKA_PANEL_SNAPSHOTS names a folder:
+    ///
+    ///     TEST_RUNNER_KUKA_PANEL_SNAPSHOTS="$HOME/panel-snapshots" xcodebuild -project KuKa.xcodeproj \
+    ///         -scheme KuKa test -only-testing:KuKaTests/MeetingControlsPanelTests/testWritesAPictureOfEachState
     func testWritesAPictureOfEachState() async throws {
         guard let path = ProcessInfo.processInfo.environment["KUKA_PANEL_SNAPSHOTS"] else {
             throw XCTSkip("Set KUKA_PANEL_SNAPSHOTS to a folder to write pictures of the panel.")

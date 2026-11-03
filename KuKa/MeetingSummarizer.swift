@@ -40,7 +40,8 @@ enum SummaryCLI: String {
     /// The arguments, and the text for stdin. Measured with agy: `-p` takes
     /// the prompt as its value, so agy's flags come first and the prompt stays
     /// on the command line (agy has no stdin mode for plain text). No agy flag
-    /// turns its tools off; `--sandbox` limits its terminal.
+    /// turns its tools off; `--sandbox` limits its terminal. ARG_MAX (1 MB, about
+    /// 15 hours of speech) limits that argument; a longer prompt fails to start agy.
     /// claude reads the prompt on stdin, so it does not show in `ps`.
     /// `--tools ""` turns every tool off, and `--strict-mcp-config` without
     /// `--mcp-config` loads no MCP server. Not `--bare`: it needs an API key and

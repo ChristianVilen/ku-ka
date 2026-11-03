@@ -13,6 +13,8 @@ final class MeetingTypedNotesView: NSView {
     private lazy var retry = NSButton(title: "Retry save", target: self, action: #selector(retrySave))
     private lazy var reload = NSButton(title: "Reload saved notes", target: self, action: #selector(reloadSaved))
     private lazy var update = NSButton(title: "Update summary", target: self, action: #selector(updateSummary))
+    /// Keeps a row that leaves the session: text undo actions point at its editor, so undo can
+    /// bring it back. Only a reload, which clears undo, removes rows.
     private var rows: [UUID: MeetingNoteRowView] = [:]
     private let thumbnails: MeetingScreenshotThumbnails
     private var focusedEntry: UUID?
@@ -73,6 +75,8 @@ final class MeetingTypedNotesView: NSView {
             saveLabel.widthAnchor.constraint(equalTo: outer.widthAnchor),
             summaryLabel.widthAnchor.constraint(equalTo: outer.widthAnchor)
         ])
+        // `onChange` has one subscriber, so a second view of a session would take it from this
+        // one. `MeetingNotesHosting` keeps one view per meeting and moves it.
         session.onChange = { [weak self] in self?.render() }
         render()
     }

@@ -446,46 +446,9 @@ KuKa/
 
 ## Testing
 
-### Running Tests
+Press Cmd+U in Xcode, or run `xcodebuild -project KuKa.xcodeproj -scheme KuKa test`. The tests use fakes and temporary folders. They never capture the screen, touch your meetings folder, or download a model.
 
-- **Xcode**: `Cmd+U` runs the unit test suite
-- **CLI**: `xcodebuild -project KuKa.xcodeproj -scheme KuKa test`
-
-### Unit Tests (KuKaTests)
-
-`CaptureManager` uses protocol-based dependency injection (`FileManaging`, `ClipboardManaging`, `ScreenCapturing`) so all external dependencies are mocked in tests — no real disk writes, clipboard access, or screen capture needed.
-
-Tests cover:
-- Capture success/failure paths
-- File saving and clipboard operations
-- Coordinate conversion (NSView → CGDisplay)
-- Screenshot file naming format
-- Annotated image save
-- Crop box geometry (draw, move, resize, flip, clear) and the crop's pixel mapping
-- Screenshot deletion (file removal + clipboard clear)
-- Tiling layout math and the maximize/restore toggle, including apps that snap window sizes
-- Screen-picking and windows-per-screen rules, plus the tiling controller's saved-frame handling
-- Shortcut registration, feature toggles, action delivery, conflict detection, partial failure recovery, wake renewal, stale callback rejection, and cleanup
-- Meeting notes: the stage rule and folder rules on a real temporary folder, the transcript merge and echo rule, the transcriber fallback from Whisper to Apple, the Whisper model install, language codes, and silence filter against a fake WhisperKit, room labels and the speaker model install against a fake SpeakerKit, the summary fallback from `agy` to `claude`, child processes with real executables, recovery and retry from each step, the recorder and the menu controller with a fake capture, Pause and Resume on synthetic audio, the live transcript model, the meeting controls panel, and known words: the list format, the corrector, insert-only additions to a temporary list, the questions and answers, and the review window
-
-Unit tests never download or load the Whisper or SpeakerKit model. `RealMeetingAudioTests` runs the real models on your own meeting audio, and it is skipped unless you set its environment variables. `RealLiveTranscriptTests` runs Apple's installed live model on audio you choose in the same way. `AGENTS.md` describes how to run them.
-
-### Test-Mode Guard
-
-XCTest uses no app delegate and does not construct production services. The
-`--uitesting` Settings preview uses isolated defaults and inert services. Both
-leave production file logging off. Meeting tests use a temporary folder, never
-`~/Meetings`, and registrar tests use fake Carbon calls. Detection uses
-`XCTestConfigurationFilePath`, which takes priority over the preview argument.
-
-### Log tests
-
-Log tests use temporary folders and injected outputs. They cover privacy,
-permissions, retention, concurrent writes, bounded shutdown, cached reading,
-filters, selection and scroll preservation, stale refreshes, deletion, find,
-and shared window activation. XCTest and the Settings preview do not start
-production file logging. Set `TEST_RUNNER_KUKA_LOG_SNAPSHOTS` to a folder when
-running `LogWindowControllerTests` to export light and dark AppKit view captures.
+The `Real*Tests` classes run the real models on audio that you choose, and the picture tests write PNG files of the windows. They are skipped unless you set their environment variables. The comment above each of them gives the command.
 
 ## Acknowledgements
 

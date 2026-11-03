@@ -294,6 +294,10 @@ final class LogWindowControllerTests: XCTestCase {
                                length: selected.length))
     }
 
+    /// Writes pictures of the log window when KUKA_LOG_SNAPSHOTS names a folder:
+    ///
+    ///     TEST_RUNNER_KUKA_LOG_SNAPSHOTS="$HOME/log-snapshots" xcodebuild -project KuKa.xcodeproj \
+    ///         -scheme KuKa test -only-testing:KuKaTests/LogWindowControllerTests/testRendersLogWindowStates
     func testRendersLogWindowStates() async throws {
         guard let path = ProcessInfo.processInfo.environment["KUKA_LOG_SNAPSHOTS"] else {
             throw XCTSkip("Set KUKA_LOG_SNAPSHOTS to render the log window")

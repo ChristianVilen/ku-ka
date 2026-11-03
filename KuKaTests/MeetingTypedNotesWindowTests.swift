@@ -165,6 +165,10 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         XCTAssertEqual(descendants(view).compactMap { $0 as? NSTextView }.map(\.string), ["Retained session"])
     }
 
+    /// Writes pictures of the notes window when KUKA_TYPED_NOTES_SNAPSHOTS names a folder:
+    ///
+    ///     TEST_RUNNER_KUKA_TYPED_NOTES_SNAPSHOTS="$HOME/notes-snapshots" xcodebuild -project KuKa.xcodeproj \
+    ///         -scheme KuKa test -only-testing:KuKaTests/MeetingTypedNotesWindowTests/testNativeSnapshots
     func testNativeSnapshots() throws {
         guard let path = ProcessInfo.processInfo.environment["KUKA_TYPED_NOTES_SNAPSHOTS"] else {
             throw XCTSkip("Set KUKA_TYPED_NOTES_SNAPSHOTS for native notes window images.")

@@ -77,6 +77,8 @@ final class PermissionsManager {
     private let defaults: UserDefaults
     private var timer: Timer?
 
+    /// Leaves out Microphone on purpose: launch opens the Permissions page when this is false,
+    /// and people who never record a meeting must not get that page for Microphone.
     var allGranted: Bool { accessibility && screenRecording }
 
     /// The probes, the opener and the prompt default to the real system
@@ -132,6 +134,8 @@ final class PermissionsManager {
     /// Show the system Screen Recording prompt and open that pane. The
     /// request call is also what registers the app in the Screen Recording
     /// list — without it the app may not appear there at all.
+    /// Unlike Accessibility, it prompts on every request: it is not a modal over the
+    /// Permissions page, and macOS asks for this grant again about once a month anyway.
     func requestScreenRecording() {
         CGRequestScreenCaptureAccess()
         openSettings(.screenCapture)

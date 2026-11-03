@@ -136,6 +136,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         guard !conflicts.isEmpty, !settings.didShowScreenshotShortcutSetup else { return false }
         permissionsPage.showShortcutConflicts(conflicts)
         show(.permissions)
+        // The guidance shows only once, so keep the flag unset while the app is hidden or the window is minimized.
         guard permissionsVisible else { return false }
         permissionsPage.revealShortcutSetup()
         settings.didShowScreenshotShortcutSetup = true

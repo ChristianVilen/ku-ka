@@ -14,6 +14,7 @@ final class LogFiles: @unchecked Sendable {
     private let folder: URL
     private let clock: @Sendable () -> Date
     private let calendar: Calendar
+    // Must not log through LogOutput.write: a failed write would queue another write that fails.
     private let onFailure: @Sendable (Error) -> Void
     private let queue = DispatchQueue(label: "com.kuka.screenshot.log-files", qos: .utility)
     private var cleanedDay: Date?

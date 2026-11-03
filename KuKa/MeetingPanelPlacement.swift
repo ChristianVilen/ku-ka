@@ -10,6 +10,7 @@ enum MeetingPanelPlacement {
     /// visible frame of the screen it is on. With no saved corner, or one on no screen (a
     /// display was unplugged), the top-right of the primary screen's visible frame, `inset` in.
     /// Anchored top-right, so the pill grows to the left when a state makes it wider.
+    /// AppKit keeps only titled windows on screen, so this borderless panel clamps itself.
     static func pillTopRight(saved: CGPoint?, pillSize: CGSize, screens: [ScreenGeometry]) -> CGPoint? {
         if let saved, let screen = screen(of: pillRect(topRight: saved, size: pillSize), in: screens) {
             let visible = screen.visibleFrame

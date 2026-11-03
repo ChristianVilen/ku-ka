@@ -30,6 +30,8 @@ final class MeetingControlsPanel: FloatingPanel, MeetingNotesSlot {
 
     private let recorder: MeetingRecorder
     var onWriteNotes: (() -> Void)?
+    /// Written only when a user drag or resize ends, or by Restore Default Position, so a launch
+    /// or the panel's own move never rewrites the saved place.
     private let settings: Settings
     private let screens: Screens
     private let announce: (String, NSAccessibilityPriorityLevel) -> Void

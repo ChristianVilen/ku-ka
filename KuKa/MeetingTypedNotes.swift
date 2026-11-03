@@ -157,6 +157,7 @@ final class MeetingTypedNotesSession {
         setAttachment(name, on: id, present: true)
     }
 
+    /// Undo removes only the reference and keeps the PNG, so redo can add it back.
     private func setAttachment(_ name: String, on id: UUID, present: Bool) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         if present { entries[index].attachments.append(name) }
@@ -185,6 +186,8 @@ final class MeetingTypedNotesSession {
         do {
             guard lock != nil else { throw MeetingStepError("Reopen the notes window before editing this meeting.") }
             try MeetingTypedNotesFile.validate(text)
+            // Finds an outside edit, but is no lock: an edit by a text editor between this read
+            // and the atomic rename is lost.
             guard try MeetingTypedNotesFile.read(in: meeting) == savedText else {
                 throw MeetingStepError("notes.md changed outside this window. Copy your draft, then choose Reload saved notes.")
             }
