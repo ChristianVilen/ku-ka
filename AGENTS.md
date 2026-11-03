@@ -18,6 +18,7 @@ Keep this file short. Add a rule only when an agent would break it without being
 - Test each rule once, at the type that owns it. An integration test checks only the wiring: one path that shows the parts connect, and the rules that exist only in the wiring.
 - Do not test what cannot fail. That is a value written in the code (UI words, defaults, constant ranges), Apple framework behavior, or code that only passes a call on. Do test contracts with the outside: defaults keys, file formats on disk, and CLI arguments. Pin a measured value with one short test.
 - Never wait in real time. Inject the clock, the timer, the interval, or the limit.
+- Every test runs in under 0.1 s. After a full test run, run `scripts/check-tests.sh`. It fails for a slower test that has no line with its reason in `scripts/slow-tests-allowed.txt`, and when this file is over 150 lines.
 - Give a `@MainActor` test class a sync `setUp` and `tearDown`. In this test host, an `async` one costs about 0.2 s for each test.
 - XCTest starts a passive host that never constructs `AppDelegate`, and `--uitesting` starts the isolated `SettingsPreviewAppDelegate`. `AppDelegate` has no test-mode branches.
 - Tests use fakes, temporary folders, and isolated defaults. They never use real capture, EventKit, Teams Accessibility, notification delivery, permission prompts, model downloads, the log folder, or `~/Meetings`. The calendar source `"synthetic"` is for tests only.
