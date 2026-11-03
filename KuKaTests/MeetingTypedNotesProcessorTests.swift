@@ -3,30 +3,19 @@ import XCTest
 
 @MainActor
 final class MeetingTypedNotesProcessorTests: MeetingProcessorTestCase {
-    func testInitialSummaryIncludesTypedNotesSeparatelyFromTranscript() async throws {
+    func testSummaryToolGetsTimestampedRowsWithoutTheStorageFormat() async throws {
         let meeting = try makeMeeting()
-        try Data("Decision: ship Monday. Mira owns the checklist.\n".utf8)
-            .write(to: meeting.url.appendingPathComponent("notes.md"), options: .atomic)
+        try meeting.write(MeetingNoteDocument.render([MeetingNoteEntry(time: .recording(12), text: "Mira owns it.")]), to: .notes)
 
         let outcome = await process(meeting)
 
         XCTAssertEqual(outcome, .done(summary: meeting.url(for: .summary)))
         let prompt = try XCTUnwrap(runner.calls.first?.arguments.last)
-        XCTAssertTrue(prompt.contains("Decision: ship Monday. Mira owns the checklist."))
-        XCTAssertFalse(try meeting.read(.transcript).contains("Mira"))
-        XCTAssertFalse(try meeting.read(.heardTranscript).contains("Mira"))
-    }
-
-    func testSummaryToolGetsTimestampedRowsWithoutTheStorageFormat() async throws {
-        let meeting = try makeMeeting()
-        try meeting.write(MeetingNoteDocument.render([MeetingNoteEntry(time: .recording(12), text: "Mira owns it.")]), to: .notes)
-
-        _ = await process(meeting)
-
-        let prompt = try XCTUnwrap(runner.calls.first?.arguments.last)
         XCTAssertTrue(prompt.contains("**0:12**\nMira owns it."))
         XCTAssertFalse(prompt.contains("<!-- Ku-Ka"))
         XCTAssertFalse(prompt.contains("    Mira owns it."))
+        XCTAssertFalse(try meeting.read(.transcript).contains("Mira"))
+        XCTAssertFalse(try meeting.read(.heardTranscript).contains("Mira"))
     }
 
     func testSilentRecordingWithTypedNotesStillUsesSummaryTool() async throws {

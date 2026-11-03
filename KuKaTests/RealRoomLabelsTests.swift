@@ -12,12 +12,23 @@ import XCTest
 ///     xcodebuild -project KuKa.xcodeproj -scheme KuKa test -only-testing:KuKaTests/RealRoomLabelsTests
 @MainActor
 final class RealRoomLabelsTests: XCTestCase {
-    func testSpeakerKitTellsApartTheVoicesOnARealMicrophoneTrack() async throws {
+    private var modelPath = ""
+    private var audioPath = ""
+
+    /// Skips here, not in the test: in this test host, an async test on the main actor costs
+    /// about 0.1 s even when it only skips.
+    override func setUpWithError() throws {
+        try super.setUpWithError()
         let environment = ProcessInfo.processInfo.environment
         guard let modelPath = environment["KUKA_SPEAKER_MODEL"], !modelPath.isEmpty,
               let audioPath = environment["KUKA_MEETING_AUDIO"], !audioPath.isEmpty else {
             throw XCTSkip("Set KUKA_SPEAKER_MODEL to an installed speakerkit-coreml folder and KUKA_MEETING_AUDIO to a folder with me.caf.")
         }
+        self.modelPath = modelPath
+        self.audioPath = audioPath
+    }
+
+    func testSpeakerKitTellsApartTheVoicesOnARealMicrophoneTrack() async throws {
         // The labeller loads <models folder>/<installed name>/models/argmaxinc/speakerkit-coreml,
         // so a temporary models folder links that path to the given model.
         let modelsFolder = try makeTemporaryDirectory()

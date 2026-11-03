@@ -74,7 +74,8 @@ class MeetingProcessorTestCase: XCTestCase {
     /// Read by the processor at each use, so a test can change the list between two runs.
     var knownWords = KnownWordsList.empty
 
-    override func setUp() async throws {
+    override func setUp() {
+        super.setUp()
         whisper = makeTranscriber(named: "Whisper")
         apple = makeTranscriber(named: "Apple")
         labeller = FakeRoomLabeller()
@@ -115,7 +116,10 @@ class MeetingProcessorTestCase: XCTestCase {
     }
 
     func process(_ meeting: MeetingFolder, with processor: MeetingProcessor? = nil) async -> MeetingOutcome {
-        await (processor ?? makeProcessor()).process(meeting, tool: .automatic) { [unowned self] in progress.append($0) }
+        // Measured in this test host: an async test on the main actor that never suspends takes about
+        // 0.1 s longer, and a busy, gone, or failed meeting returns before the processor suspends.
+        await Task.yield()
+        return await (processor ?? makeProcessor()).process(meeting, tool: .automatic) { [unowned self] in progress.append($0) }
     }
 
     func audioExists(_ meeting: MeetingFolder) -> Bool {
