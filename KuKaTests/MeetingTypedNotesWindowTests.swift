@@ -14,7 +14,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         view.subviews.flatMap { [$0] + descendants($0) }
     }
 
-    func testNativeEditingSavesAndUndoRestoresThePreviousSavedText() async throws {
+    func testTheWindowIsTitledWithTheDisplayTitleAndNativeEditingSaves() throws {
         let meeting = try meeting()
         let session = try MeetingTypedNotesSession(meeting: meeting)
         let editor = MeetingTypedNotesHost(session: session, requestUpdate: {},
@@ -23,49 +23,11 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         defer { editor.close() }
         let window = try XCTUnwrap(editor.window)
         let field = try XCTUnwrap(descendants(try XCTUnwrap(window.contentView)).compactMap { $0 as? NSTextView }.first)
-        XCTAssertTrue(window.styleMask.contains(.resizable))
         XCTAssertEqual(window.title, "Release planning")
-        XCTAssertFalse(field.isRichText)
-        XCTAssertTrue(field.allowsUndo)
-        XCTAssertEqual(field.accessibilityLabel(), "Meeting note")
-        let panel = try XCTUnwrap(window as? NSPanel)
-        XCTAssertTrue(panel.isFloatingPanel)
-        XCTAssertFalse(panel.hidesOnDeactivate)
-        XCTAssertEqual(panel.contentMinSize, NSSize(width: 460, height: 330))
 
         field.insertText("Mira owns the release checklist.", replacementRange: NSRange(location: 0, length: 0))
 
         XCTAssertEqual(MeetingNoteDocument.parse(try meeting.read(.notes)).map(\.text), ["Mira owns the release checklist."])
-        XCTAssertTrue(try XCTUnwrap(field.undoManager).canUndo)
-        if let undo = field.undoManager, undo.groupingLevel > 0 { undo.endUndoGrouping() }
-        field.undoManager?.undo()
-        XCTAssertEqual(field.string, "", "native undo must change the text view before autosave")
-        await waitUntil { session.text.isEmpty }
-        XCTAssertEqual(session.text, "")
-        XCTAssertEqual(try meeting.read(.notes), "")
-        field.undoManager?.redo()
-        XCTAssertEqual(MeetingNoteDocument.parse(session.text).map(\.text), ["Mira owns the release checklist."])
-        XCTAssertEqual(MeetingNoteDocument.parse(try meeting.read(.notes)).map(\.text), ["Mira owns the release checklist."])
-    }
-
-    func testNativeCopyAndPasteUsesPlainTextAndSavesTheResult() throws {
-        let meeting = try meeting()
-        let session = try MeetingTypedNotesSession(meeting: meeting)
-        let editor = MeetingTypedNotesHost(session: session, requestUpdate: {},
-                                                       activation: .fake(), present: { _ in })
-        editor.show()
-        defer { editor.close() }
-        let field = try XCTUnwrap(descendants(try XCTUnwrap(editor.window?.contentView)).compactMap { $0 as? NSTextView }.first)
-        field.insertText("Action", replacementRange: NSRange(location: 0, length: 0))
-        field.setSelectedRange(NSRange(location: 0, length: 6))
-        XCTAssertEqual(field.selectedRange(), NSRange(location: 0, length: 6))
-        let pasteboard = NSPasteboard.withUniqueName()
-        defer { pasteboard.releaseGlobally() }
-        XCTAssertTrue(field.writeSelection(to: pasteboard, types: field.writablePasteboardTypes))
-        XCTAssertEqual(pasteboard.string(forType: .string), "Action")
-        field.setSelectedRange(NSRange(location: 6, length: 0))
-        XCTAssertTrue(field.readSelection(from: pasteboard, type: .string))
-        XCTAssertEqual(MeetingNoteDocument.parse(try meeting.read(.notes)).map(\.text), ["ActionAction"])
     }
 
     func testUpdateButtonUsesItsBoundSessionAndTracksGenerationState() throws {

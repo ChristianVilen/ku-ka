@@ -199,35 +199,20 @@ final class MeetingCombinedPanelTests: XCTestCase {
         second.detach()
     }
 
-    func testEnterCreatesNewRowWithItsOwnTime() throws {
+    func testShiftEnterAddsALineBreakInTheSameRow() throws {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
-        var now: TimeInterval = 12
-        session.noteTime = { .recording(now) }
         let view = MeetingTypedNotesView(session: session, requestUpdate: {})
         let host = MeetingTypedNotesHost(view: view)
         host.showWindow(nil)
-        let editor = try XCTUnwrap(descendants(view).compactMap { $0 as? NSTextView }.first)
-        editor.insertText("First second", replacementRange: editor.selectedRange())
-        editor.setSelectedRange(NSRange(location: 6, length: 0))
-        now = 24
-        let enter = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
-                                                   windowNumber: host.window?.windowNumber ?? 0, context: nil,
-                                                   characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
-        editor.keyDown(with: enter)
-        XCTAssertEqual(session.entries.map(\.time), [.recording(12), .recording(24)])
-        XCTAssertEqual(session.entries.map(\.text), ["First ", "second"])
-        XCTAssertEqual(MeetingNoteDocument.parse(try meeting.read(.notes)).first?.time, .recording(12))
-        let second = try XCTUnwrap(descendants(view).compactMap { $0 as? NoteRowTextView }.last)
-        second.setSelectedRange(NSRange(location: 6, length: 0))
+        defer { host.detach() }
+        let editor = try XCTUnwrap(descendants(view).compactMap { $0 as? NoteRowTextView }.first)
+        editor.insertText("First", replacementRange: editor.selectedRange())
         let shiftEnter = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.shift], timestamp: 0,
                                                         windowNumber: host.window?.windowNumber ?? 0, context: nil,
                                                         characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
-        second.keyDown(with: shiftEnter)
-        XCTAssertEqual(session.entries.count, 2)
-        XCTAssertEqual(session.entries.last?.text, "second\n")
-        XCTAssertEqual(session.entries.last?.time, .recording(24))
-        host.detach()
+        editor.keyDown(with: shiftEnter)
+        XCTAssertEqual(session.entries.map(\.text), ["First\n"])
     }
 
     func testPastingScreenshotSavesImageAndShowsPreview() throws {

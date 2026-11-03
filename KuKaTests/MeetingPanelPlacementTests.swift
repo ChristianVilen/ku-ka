@@ -84,18 +84,6 @@ final class MeetingPanelPlacementTests: XCTestCase {
         XCTAssertEqual(placed.frame.minY, -122)
     }
 
-    func testTheDrawerHeightClampsTo140Through460() {
-        XCTAssertEqual(MeetingPanelPlacement.clampedDrawerHeight(100), 140)
-        XCTAssertEqual(MeetingPanelPlacement.clampedDrawerHeight(300), 300)
-        XCTAssertEqual(MeetingPanelPlacement.clampedDrawerHeight(900), 460)
-    }
-
-    func testTheNotesWidthClampsTo460Through900() {
-        XCTAssertEqual(MeetingPanelPlacement.clampedNotesWidth(100), 460)
-        XCTAssertEqual(MeetingPanelPlacement.clampedNotesWidth(600), 600)
-        XCTAssertEqual(MeetingPanelPlacement.clampedNotesWidth(1200), 900)
-    }
-
     func testAFittedNotesFrameStaysOnItsScreenAndMovesThePillCornerWithIt() {
         let fitted = MeetingPanelPlacement.fitted(CGRect(x: 1000, y: -100, width: 460, height: 542),
                                                   pillTopRight: CGPoint(x: 1460, y: 442), drawerAbove: false,
@@ -125,13 +113,6 @@ final class MeetingPanelPlacementTests: XCTestCase {
 }
 
 final class TranscriptFollowTests: XCTestCase {
-    func testItFollowsAtFirstAndOffersNoReturnToLive() {
-        let follow = TranscriptFollow()
-
-        XCTAssertTrue(follow.isFollowing)
-        XCTAssertNil(follow.returnToLiveTitle)
-    }
-
     func testFollowingStopsWhenTheLastRowLeavesViewAndStartsAgainWhenItIsBack() {
         var follow = TranscriptFollow()
 

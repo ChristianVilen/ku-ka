@@ -7,16 +7,22 @@ struct MeetingScreenshot {
     let png: Data
     private static let maximumBytes = 20_000_000
 
+    struct Limits {
+        var bytes = MeetingScreenshot.maximumBytes
+        var pixelsPerSide = 16_000
+        var pixels = 40_000_000
+    }
+
     private init(png: Data) { self.png = png }
 
-    static func decode(_ data: Data) throws -> Self {
-        guard data.count <= maximumBytes,
+    static func decode(_ data: Data, within limits: Limits = Limits()) throws -> Self {
+        guard data.count <= limits.bytes,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              (1...16_000).contains(width), (1...16_000).contains(height),
-              width * height <= 40_000_000,
+              (1...limits.pixelsPerSide).contains(width), (1...limits.pixelsPerSide).contains(height),
+              width * height <= limits.pixels,
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             throw MeetingStepError("Choose an image under 20 MB, 16,000 pixels per side, and 40 million pixels.")
         }
@@ -25,7 +31,7 @@ struct MeetingScreenshot {
             throw MeetingStepError("Could not convert the screenshot to PNG.")
         }
         CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination), png.length <= maximumBytes else {
+        guard CGImageDestinationFinalize(destination), png.length <= limits.bytes else {
             throw MeetingStepError("The converted screenshot must be under 20 MB.")
         }
         return Self(png: png as Data)

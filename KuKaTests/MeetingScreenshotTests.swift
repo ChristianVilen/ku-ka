@@ -11,9 +11,10 @@ final class MeetingScreenshotTests: XCTestCase {
         XCTAssertEqual(CGImageSourceGetType(source) as String?, UTType.png.identifier)
         XCTAssertEqual(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width, 80)
         XCTAssertThrowsError(try MeetingScreenshot.decode(Data("bad image".utf8)))
-        XCTAssertThrowsError(try MeetingScreenshot.decode(Data(repeating: 0, count: 20_000_001)))
-        XCTAssertThrowsError(try MeetingScreenshot.decode(bitmap(width: 16_001, height: 1)))
-        XCTAssertThrowsError(try MeetingScreenshot.decode(bitmap(width: 6_400, height: 6_400)))
+        let png = try bitmap(width: 80, height: 40)
+        XCTAssertThrowsError(try MeetingScreenshot.decode(png, within: .init(bytes: png.count - 1)))
+        XCTAssertThrowsError(try MeetingScreenshot.decode(bitmap(width: 101, height: 1), within: .init(pixelsPerSide: 100)))
+        XCTAssertThrowsError(try MeetingScreenshot.decode(png, within: .init(pixels: 80 * 40 - 1)))
     }
 
     func testStoreRoundTripRejectsUnsafeNamesAndSymlinks() throws {

@@ -138,6 +138,7 @@ class MeetingNotesTestCase: XCTestCase {
     var gate: CommandRunning?
     var clock = localDate(2026, 10, 23, 14, 2)
     var hostTime = HostTime(seconds: 1_000)
+    var meterInterval: TimeInterval = 0.1
     var notifier: FakeNotifier!
     var notifications: [String] { notifier.posted.map { "\($0.title): \($0.body)" } }
     /// Read by the processor and the controller at each use.
@@ -151,7 +152,7 @@ class MeetingNotesTestCase: XCTestCase {
     var sut: MeetingNotesController!
     var menu: NSMenu!
 
-    override func setUp() async throws {
+    override func setUpWithError() throws {
         root = try makeTemporaryDirectory().appendingPathComponent("Meetings", isDirectory: true)
         capture = FakeMeetingAudioCapture()
         liveTranscriber = FakeLiveTranscriber()
@@ -166,9 +167,20 @@ class MeetingNotesTestCase: XCTestCase {
         sut = makeController()
     }
 
-    override func tearDown() async throws {
+    /// Runs the main run loop until the cancelled jobs end. An async tearDown that awaits
+    /// `waitUntilIdle()` costs this test host about 0.1 s per test, also when nothing runs.
+    override func tearDown() {
         sut.shutDown()
-        await sut.waitUntilIdle()
+        var idle = false
+        Task { [sut] in
+            await sut?.waitUntilIdle()
+            idle = true
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while !idle, Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.001))
+        }
+        XCTAssertTrue(idle, "The jobs did not end within 5 s of shutDown().")
     }
 
     func makeController() -> MeetingNotesController {
@@ -203,7 +215,8 @@ class MeetingNotesTestCase: XCTestCase {
             wordsToCheck: { [unowned self] in WordReview.openQuestionCount(of: $0, in: root, knownWords: knownWords) },
             summaryTool: { .automatic },
             notifier: notifier,
-            openURL: { [unowned self] in opened.append($0) })
+            openURL: { [unowned self] in opened.append($0) },
+            meterInterval: meterInterval)
         controller.onStateChange = { [unowned self] in stateChanges += 1 }
         menu = NSMenu()
         controller.buildMenuSection(into: menu)

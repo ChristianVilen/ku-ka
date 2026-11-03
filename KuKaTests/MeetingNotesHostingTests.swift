@@ -8,8 +8,8 @@ final class MeetingNotesHostingTests: MeetingNotesTestCase {
     private var windows: [MeetingTypedNotesHost] = []
     private var hosting: MeetingNotesHosting!
 
-    override func setUp() async throws {
-        try await super.setUp()
+    override func setUpWithError() throws {
+        try super.setUpWithError()
         slot = FakeNotesSlot()
         windows = []
         hosting = MeetingNotesHosting(panel: slot, recorder: recorder, notes: sut, makeWindow: { [unowned self] view in
@@ -20,9 +20,9 @@ final class MeetingNotesHostingTests: MeetingNotesTestCase {
         sut.onStateChange = { [unowned self] in hosting.activeMeetingChanged() }
     }
 
-    override func tearDown() async throws {
+    override func tearDown() {
         for window in windows { window.detach() }
-        try await super.tearDown()
+        super.tearDown()
     }
 
     private func recordAndStop() async throws -> MeetingFolder {

@@ -108,6 +108,7 @@ final class MeetingRecorder {
     private let now: () -> Date
     private let hostNow: () -> HostTime
     private let closeSavedNoticeLater: @MainActor (@escaping @MainActor () -> Void) -> Void
+    private let displayTickInterval: TimeInterval
 
     private var state: State = .idle(notice: nil) {
         didSet {
@@ -207,7 +208,8 @@ final class MeetingRecorder {
          alertStartFailure: @escaping @MainActor (String, Bool) -> Bool = MeetingRecorder.showStartFailureAlert,
          now: @escaping () -> Date = { Date() },
          hostNow: @escaping () -> HostTime = HostTime.now,
-         closeSavedNoticeLater: @escaping @MainActor (@escaping @MainActor () -> Void) -> Void = MeetingRecorder.afterSixSeconds) {
+         closeSavedNoticeLater: @escaping @MainActor (@escaping @MainActor () -> Void) -> Void = MeetingRecorder.afterSixSeconds,
+         displayTickInterval: TimeInterval = 1) {
         self.permissions = permissions
         self.root = root
         self.locale = locale
@@ -220,6 +222,7 @@ final class MeetingRecorder {
         self.now = now
         self.hostNow = hostNow
         self.closeSavedNoticeLater = closeSavedNoticeLater
+        self.displayTickInterval = displayTickInterval
     }
 
     isolated deinit {
@@ -426,8 +429,9 @@ final class MeetingRecorder {
         guard displayTimer == nil else { return }
         // The first tick comes on the next whole recorded second, so the shown seconds change on time.
         let recorded = meeting.state.clock.recordedTime(at: hostNow())
-        let firstTick = Date().addingTimeInterval(1 - recorded.truncatingRemainder(dividingBy: 1))
-        let timer = Timer(fire: firstTick, interval: 1, repeats: true) { [weak self] _ in
+        let interval = displayTickInterval
+        let firstTick = Date().addingTimeInterval(interval - recorded.truncatingRemainder(dividingBy: interval))
+        let timer = Timer(fire: firstTick, interval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.onControlsChange?() }
         }
         RunLoop.main.add(timer, forMode: .common)

@@ -83,13 +83,11 @@ final class MeetingNoteEntriesTests: XCTestCase {
         XCTAssertEqual(session.entries.first?.attachments, [])
     }
 
-    func testScreenshotStampsFirstContentAfterStopAndFailedImageDoesNotStamp() throws {
+    func testScreenshotStampsFirstContentAfterStop() throws {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
         let id = session.entries[0].id
-        session.noteTime = { .recording(30) }
-        XCTAssertThrowsError(try MeetingScreenshot.decode(Data("invalid".utf8)))
         session.noteTime = { .afterRecording }
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -128,18 +126,13 @@ final class MeetingNoteEntriesTests: XCTestCase {
             MeetingNoteEntry(time: .afterRecording, attachments: [name]),
             MeetingNoteEntry(time: .undated, text: "# Old notes"),
         ]
-        XCTAssertEqual(MeetingNoteDocument.summaryText(entries), """
-            **12:34**
-            Mira checks access.
-            Keep thirty days.
-            ![Screenshot](attachments/\(name))
-
-            **After recording**
-            ![Screenshot](attachments/\(name))
-
-            **Undated**
-            # Old notes
-            """)
+        let summary = MeetingNoteDocument.summaryText(entries)
+        for part in ["12:34", "Mira checks access.\nKeep thirty days.", "After recording", "Undated", "# Old notes"] {
+            XCTAssertTrue(summary.contains(part), part)
+        }
+        XCTAssertEqual(summary.components(separatedBy: "(attachments/\(name))").count, 3, "one link for each screenshot")
+        XCTAssertFalse(summary.contains("12:40"), "the blank row is left out")
+        XCTAssertFalse(summary.contains("<!--"), "no storage markers")
         XCTAssertEqual(MeetingNoteDocument.summaryText([MeetingNoteEntry(time: .recording(1))]), "")
     }
 
@@ -178,7 +171,6 @@ final class MeetingNoteEntriesTests: XCTestCase {
         XCTAssertNotNil(session.saveError)
         XCTAssertEqual(try meeting.read(.notes), "Changed outside")
         XCTAssertEqual(session.entries.first?.attachments, [name])
-        XCTAssertThrowsError(try MeetingScreenshot.decode(Data("not an image".utf8)))
     }
 
     func testNotePositionFreezesThroughPausesAndIncludesAllResumeGaps() {

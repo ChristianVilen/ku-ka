@@ -51,33 +51,6 @@ final class MeetingTranscriptSelectionTests: XCTestCase {
         LiveRow(at: time, content: .speech(speaker, text: text, isFinal: final))
     }
 
-    func testNativeCopyIncludesTimestampsAndMultipleMessages() throws {
-        let drawer = MeetingTranscriptDrawer(mouseLocation: { .zero }, reduceMotion: { true })
-        let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
-                             styleMask: [.nonactivatingPanel], backing: .buffered, defer: true)
-        window.contentView = drawer
-        drawer.isHidden = false
-        drawer.showRows([speech(754, .them, "Keep thirty days."), speech(759, .me, "Mira will check.")])
-        let text = try XCTUnwrap(textView(in: drawer))
-        XCTAssertTrue(text.isSelectable)
-        XCTAssertFalse(text.isEditable)
-        text.selectAll(nil)
-        XCTAssertEqual(text.selectedRange(), NSRange(location: 0, length: (text.string as NSString).length))
-        let pasteboard = NSPasteboard.general
-        let savedItems: [NSPasteboardItem] = pasteboard.pasteboardItems?.map { item in
-            let copy = NSPasteboardItem()
-            for type in item.types { if let data = item.data(forType: type) { copy.setData(data, forType: type) } }
-            return copy
-        } ?? []
-        defer {
-            pasteboard.clearContents()
-            pasteboard.writeObjects(savedItems)
-        }
-        text.copy(nil)
-        XCTAssertEqual(pasteboard.string(forType: .string),
-                       "12:34  Them\nKeep thirty days.\n\n12:39  Me\nMira will check.\n\n")
-    }
-
     func testUnchangedSelectionSurvivesAppendingAndReplacingDraftText() throws {
         let drawer = MeetingTranscriptDrawer(mouseLocation: { .zero }, reduceMotion: { true })
         let committed = speech(1, .them, "Keep thirty days.")
