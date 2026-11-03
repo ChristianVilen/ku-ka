@@ -2,6 +2,15 @@ import XCTest
 @testable import KuKa
 
 final class MeetingSummarizerTests: XCTestCase {
+    func testTimestampedNotesAreCorrelatedWithoutInventingScreenshotContents() {
+        let notes = "**12:34**\nMira checks access.\n![Screenshot](attachments/example.png)"
+        let prompt = SummaryPrompt.make(transcript: "12:34 Them: Keep thirty days.", knownWords: .none, typedNotes: notes)
+        XCTAssertTrue(prompt.contains("Note timestamps use the same timeline as the transcript."))
+        XCTAssertTrue(prompt.contains("Use nearby transcript speech to understand a note"))
+        XCTAssertTrue(prompt.contains("Screenshot links identify saved attachments; their image contents are not included in this prompt."))
+        XCTAssertTrue(prompt.contains(notes))
+    }
+
     func testToolCandidateOrder() {
         XCTAssertEqual(SummaryTool.automatic.candidates, [.antigravity, .claude])
         XCTAssertEqual(SummaryTool.antigravity.candidates, [.antigravity])

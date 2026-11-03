@@ -98,10 +98,10 @@ final class MeetingControlsPanelTests: XCTestCase {
             .first { $0.accessibilityLabel() == label && !$0.isHiddenOrHasHiddenAncestor }
     }
 
-    private var transcript: NSTableView {
-        let table = allViews.compactMap { $0 as? NSTableView }.first { $0.accessibilityLabel() == "Live transcript draft" }
-        XCTAssertNotNil(table, "the panel has a transcript")
-        return table ?? NSTableView()
+    private var transcript: NSTextView {
+        let text = allViews.compactMap { $0 as? NSTextView }.first { $0.accessibilityLabel() == "Live transcript draft" }
+        XCTAssertNotNil(text, "the panel has a transcript")
+        return text ?? NSTextView()
     }
 
     private var transcriptIsShown: Bool { !transcript.isHiddenOrHasHiddenAncestor }
@@ -112,14 +112,11 @@ final class MeetingControlsPanelTests: XCTestCase {
     }
 
     private func rowTexts() -> [String] {
-        (0..<transcript.numberOfRows).flatMap { row in
-            views(in: transcript.view(atColumn: 0, row: row, makeIfNecessary: true)!)
-                .compactMap { ($0 as? NSTextField)?.stringValue }
-        }
+        transcript.string.components(separatedBy: "\n")
     }
 
     private var lastRowIsVisible: Bool {
-        transcript.rect(ofRow: transcript.numberOfRows - 1).intersects(transcript.visibleRect)
+        transcript.visibleRect.maxY >= transcript.bounds.maxY - 4
     }
 
     /// The pill's top-right corner while the drawer is closed.
@@ -283,7 +280,7 @@ final class MeetingControlsPanelTests: XCTestCase {
         XCTAssertTrue(allViews.contains { $0.accessibilityLabel() == "Recorded time 4:05" })
     }
 
-    func testNoTextInThePanelIsSelectable() async {
+    func testTranscriptTextIsSelectableAndOtherLabelsAreReadOnly() async {
         await startMeeting()
         recorder.setTranscriptOpen(true)
         await deliver(.system, "Let's ship on Friday.", from: 0, to: 2)
@@ -294,7 +291,8 @@ final class MeetingControlsPanelTests: XCTestCase {
         let fields = allViews.compactMap { $0 as? NSTextField }
         XCTAssertFalse(fields.isEmpty)
         XCTAssertTrue(fields.allSatisfy { !$0.isSelectable && !$0.isEditable })
-        XCTAssertEqual(transcript.selectionHighlightStyle, .none)
+        XCTAssertTrue(transcript.isSelectable)
+        XCTAssertFalse(transcript.isEditable)
     }
 
     func testTheDrawerIsClosedAtTheStartOfAMeeting() async {
