@@ -52,9 +52,10 @@ final class LogFiles: @unchecked Sendable {
     }
 
     func flush(timeout: TimeInterval) -> Bool {
-        let finished = DispatchSemaphore(value: 0)
-        queue.async { finished.signal() }
-        return finished.wait(timeout: .now() + timeout) == .success
+        // Unlike a semaphore, waiting on a work item raises the queue to the waiting thread's priority.
+        let marker = DispatchWorkItem {}
+        queue.async(execute: marker)
+        return marker.wait(timeout: .now() + timeout) == .success
     }
 
     func deleteAll() async throws {
