@@ -88,6 +88,7 @@ final class MeetingTypedNotesSession {
         text = try MeetingTypedNotesFile.read(in: meeting)
         savedText = text
         entries = MeetingNoteDocument.parse(text)
+        addPlaceholderIfEmpty()
     }
 
     var hasUnsavedChanges: Bool { text != savedText || saveError != nil }
@@ -102,33 +103,19 @@ final class MeetingTypedNotesSession {
         !recordingPhase.isCapturing && !summaryState.isBusy && !hasUnsavedChanges && meeting.stage() == .done
     }
 
-    func edit(_ text: String) {
-        self.text = text
-        entries = MeetingNoteDocument.parse(text)
-        pendingEntries.removeAll()
-        undoManager.removeAllActions()
-        save()
-    }
-
-    @discardableResult
-    func insertEntry(after previous: UUID? = nil) -> UUID {
+    /// The editor always has a row to type into. An empty row is not saved, so it changes no file.
+    private func addPlaceholderIfEmpty() {
+        guard entries.isEmpty else { return }
         let entry = MeetingNoteEntry(time: noteTime())
         pendingEntries.insert(entry.id)
-        if let previous, let index = entries.firstIndex(where: { $0.id == previous }) {
-            entries.insert(entry, at: index + 1)
-        } else {
-            entries.append(entry)
-        }
-        onChange?()
-        return entry.id
+        entries.append(entry)
     }
 
     func updateEntry(id: UUID, text: String) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[index].text = text
         stampFirstContent(at: index)
-        self.text = MeetingNoteDocument.render(entries)
-        save()
+        saveEntries()
     }
 
     func splitEntry(id: UUID, selection: NSRange) -> UUID? {
@@ -218,6 +205,7 @@ final class MeetingTypedNotesSession {
             savedText = saved
             entries = MeetingNoteDocument.parse(saved)
             pendingEntries.removeAll()
+            addPlaceholderIfEmpty()
             undoManager.removeAllActions()
             saveError = nil
             onSaved?()

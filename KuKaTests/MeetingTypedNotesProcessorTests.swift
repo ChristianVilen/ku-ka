@@ -17,6 +17,18 @@ final class MeetingTypedNotesProcessorTests: MeetingProcessorTestCase {
         XCTAssertFalse(try meeting.read(.heardTranscript).contains("Mira"))
     }
 
+    func testSummaryToolGetsTimestampedRowsWithoutTheStorageFormat() async throws {
+        let meeting = try makeMeeting()
+        try meeting.write(MeetingNoteDocument.render([MeetingNoteEntry(time: .recording(12), text: "Mira owns it.")]), to: .notes)
+
+        _ = await process(meeting)
+
+        let prompt = try XCTUnwrap(runner.calls.first?.arguments.last)
+        XCTAssertTrue(prompt.contains("**0:12**\nMira owns it."))
+        XCTAssertFalse(prompt.contains("<!-- Ku-Ka"))
+        XCTAssertFalse(prompt.contains("    Mira owns it."))
+    }
+
     func testSilentRecordingWithTypedNotesStillUsesSummaryTool() async throws {
         let meeting = try makeMeeting()
         whisper.byFileName = [:]
@@ -127,10 +139,10 @@ final class MeetingTypedNotesLifecycleTests: MeetingNotesTestCase {
         await recorder.toggleRecording()
         let first = try XCTUnwrap(recorder.activeMeeting)
         let notes = try sut.typedNotes(for: first)
-        notes.edit("First meeting notes")
-        XCTAssertEqual(try first.read(.notes), "First meeting notes")
+        notes.setFirstRow("First meeting notes")
+        XCTAssertEqual(try savedNoteTexts(in: first), ["First meeting notes"])
         recorder.togglePause()
-        notes.edit("Notes written while paused")
+        notes.setFirstRow("Notes written while paused")
         XCTAssertEqual(recorder.activeMeeting, first)
         recorder.togglePause()
         recorder.stopRecording()
@@ -139,8 +151,8 @@ final class MeetingTypedNotesLifecycleTests: MeetingNotesTestCase {
         await recorder.toggleRecording()
         let second = try XCTUnwrap(recorder.activeMeeting)
         XCTAssertNotEqual(first, second)
-        notes.edit("First meeting, after Stop")
-        XCTAssertEqual(try first.read(.notes), "First meeting, after Stop")
+        notes.setFirstRow("First meeting, after Stop")
+        XCTAssertEqual(try savedNoteTexts(in: first), ["First meeting, after Stop"])
         XCTAssertEqual(try MeetingTypedNotesFile.read(in: second), "")
         XCTAssertTrue(try sut.typedNotes(for: first) === notes)
         XCTAssertTrue(sut.recentNotesMeetings.contains(first))
@@ -151,9 +163,9 @@ final class MeetingTypedNotesLifecycleTests: MeetingNotesTestCase {
         let meeting = try XCTUnwrap(recorder.activeMeeting)
         let notes = try sut.typedNotes(for: meeting)
         try FileManager.default.createDirectory(at: meeting.url(for: .notes), withIntermediateDirectories: false)
-        notes.edit("Do not lose this decision")
+        notes.setFirstRow("Do not lose this decision")
         XCTAssertTrue(notes.hasUnsavedChanges)
-        XCTAssertEqual(notes.text, "Do not lose this decision")
+        XCTAssertEqual(notes.firstRowText, "Do not lose this decision")
         XCTAssertNotNil(notes.saveError)
 
         recorder.stopRecording()
@@ -178,10 +190,10 @@ final class MeetingTypedNotesLifecycleTests: MeetingNotesTestCase {
         await recorder.toggleRecording()
         let meeting = try XCTUnwrap(recorder.activeMeeting)
         let notes = try sut.typedNotes(for: meeting)
-        notes.edit("First snapshot")
+        notes.setFirstRow("First snapshot")
         recorder.stopRecording()
         await waitUntil { held.runs == 1 }
-        notes.edit("Newer decision")
+        notes.setFirstRow("Newer decision")
         XCTAssertFalse(notes.canUpdateSummary)
         XCTAssertFalse(sut.updateSummary(meeting))
         held.release()

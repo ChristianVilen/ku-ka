@@ -47,8 +47,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         summaryTool: { [settings] in settings.summaryTool }
     )
     private lazy var meetingControlsPanel = MeetingControlsPanel(recorder: meetingRecorder, settings: settings)
-    private var combinedNotes: [MeetingFolder: MeetingTypedNotesView] = [:]
-    private var combinedNotesHosts: [MeetingFolder: MeetingTypedNotesHost] = [:]
+    private lazy var notesHosting = MeetingNotesHosting(panel: meetingControlsPanel, recorder: meetingRecorder,
+                                                        notes: meetingNotes)
     private(set) var calendarReminders: CalendarReminderController?
     private var calendarReminderStartup: Task<Void, Never>?
     private lazy var wordReview = WordReviewController(
@@ -294,64 +294,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         meetingNotes.onStateChange = { [weak self] in
             self?.updateStatus()
             self?.calendarReminders?.recorderDidChange()
+            self?.notesHosting.activeMeetingChanged()
         }
         meetingRecorder.onShowPermissions = { [weak self] in self?.settingsWindow.show(.permissions) }
         meetingNotes.onCheckWords = { [weak self] in self?.wordReviewWindow.show($0) }
         meetingNotes.onOpenTypedNotes = { [weak self] in self?.openTypedNotes($0) }
         meetingControlsPanel.onWriteNotes = { [weak self] in self?.meetingNotes.openCurrentTypedNotes() }
-        meetingControlsPanel.onRehostNotes = { [weak self] view in self?.hostCombinedNotes(view) }
         meetingControlsPanel.bindRecorder()
         wordReviewWindow.bindController()
     }
 
     private func openTypedNotes(_ meeting: MeetingFolder) {
         do {
-            let session = try meetingNotes.typedNotes(for: meeting)
-            let view = combinedNotes[meeting] ?? MeetingTypedNotesView(session: session, requestUpdate: { [weak self] in
-                self?.meetingNotes.updateSummary(meeting)
-            })
-            combinedNotes[meeting] = view
-            if meetingRecorder.activeMeeting == meeting {
-                if let host = combinedNotesHosts.removeValue(forKey: meeting) {
-                    host.detach()
-                }
-                meetingControlsPanel.showNotes(view) { [weak self] in
-                    guard let self, self.meetingNotes.closeTypedNotes(for: meeting) else { return }
-                    self.combinedNotes.removeValue(forKey: meeting)
-                }
-            } else {
-                hostCombinedNotes(view)
-            }
+            try notesHosting.open(meeting)
         } catch {
-            showTypedNotesError(error)
+            let alert = NSAlert()
+            alert.messageText = "Could not open meeting notes"
+            alert.informativeText = error.localizedDescription
+            alert.addButton(withTitle: "OK")
+            NSApp.activate()
+            alert.runModal()
         }
-    }
-
-    private func hostCombinedNotes(_ view: MeetingTypedNotesView) {
-        let meeting = view.session.meeting
-        if let host = combinedNotesHosts[meeting] {
-            host.show()
-            return
-        }
-        meetingControlsPanel.detachNotes(view)
-        view.removeFromSuperview()
-        let host = MeetingTypedNotesHost(view: view)
-        host.onClose = { [weak self] in
-            guard let self else { return }
-            self.combinedNotesHosts.removeValue(forKey: meeting)
-            if self.meetingNotes.closeTypedNotes(for: meeting) { self.combinedNotes.removeValue(forKey: meeting) }
-        }
-        combinedNotesHosts[meeting] = host
-        host.show()
-    }
-
-    private func showTypedNotesError(_ error: Error) {
-        let alert = NSAlert()
-        alert.messageText = "Could not open meeting notes"
-        alert.informativeText = error.localizedDescription
-        alert.addButton(withTitle: "OK")
-        NSApp.activate()
-        alert.runModal()
     }
 
     private func openEditor(result: CaptureResult) {

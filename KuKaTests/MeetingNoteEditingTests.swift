@@ -8,7 +8,7 @@ final class MeetingNoteEditingTests: XCTestCase {
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.undoManager.groupsByEvent = false
         session.noteTime = { .recording(12) }
-        let first = session.insertEntry()
+        let first = session.entries[0].id
         session.updateEntry(id: first, text: "First second")
         session.noteTime = { .recording(24) }
         var snapshots: [[String]] = []
@@ -33,7 +33,7 @@ final class MeetingNoteEditingTests: XCTestCase {
     func testFailedSplitSaveKeepsBothDraftRowsWithoutChangingExternalText() throws {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
-        let first = session.insertEntry()
+        let first = session.entries[0].id
         session.updateEntry(id: first, text: "First second")
         try meeting.write("External edit", to: .notes)
         var saved = 0

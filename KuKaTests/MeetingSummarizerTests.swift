@@ -3,7 +3,9 @@ import XCTest
 
 final class MeetingSummarizerTests: XCTestCase {
     func testTimestampedNotesAreCorrelatedWithoutInventingScreenshotContents() {
-        let notes = "**12:34**\nMira checks access.\n![Screenshot](attachments/example.png)"
+        let notes = MeetingNoteDocument.summaryText([
+            MeetingNoteEntry(time: .recording(754), text: "Mira checks access.", attachments: [UUID().uuidString + ".png"]),
+        ])
         let prompt = SummaryPrompt.make(transcript: "12:34 Them: Keep thirty days.", knownWords: .none, typedNotes: notes)
         XCTAssertTrue(prompt.contains("Note timestamps use the same timeline as the transcript."))
         XCTAssertTrue(prompt.contains("Use nearby transcript speech to understand a note"))

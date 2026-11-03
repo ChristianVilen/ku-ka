@@ -301,7 +301,7 @@ struct MeetingProcessor {
                                   summaryInput: (String) -> Void) async throws -> SummaryResult {
         summaryInput(typedNotes)
         let result = await summarizer.summarize(transcript: content, knownWords: list.relevant(to: content), tool: tool,
-                                                typedNotes: typedNotes)
+                                                typedNotes: MeetingNoteDocument.summaryText(MeetingNoteDocument.parse(typedNotes)))
         try Task.checkCancellation()
         if case .written(_, _, let cli, let earlier) = result, !earlier.isEmpty {
             for failure in earlier {

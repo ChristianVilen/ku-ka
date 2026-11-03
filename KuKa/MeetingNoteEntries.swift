@@ -4,6 +4,14 @@ enum MeetingNoteTime: Equatable, Codable {
     case recording(TimeInterval)
     case afterRecording
     case undated
+
+    var label: String {
+        switch self {
+        case .recording(let position): return RecordedTime.format(position)
+        case .afterRecording: return "After recording"
+        case .undated: return "Undated"
+        }
+    }
 }
 
 struct MeetingNoteEntry: Identifiable, Equatable, Codable {
@@ -42,9 +50,7 @@ enum MeetingNoteDocument {
             guard let end = chunk.range(of: " -->\n"),
                   let data = Data(base64Encoded: String(chunk[..<end.lowerBound])),
                   let metadata = try? JSONDecoder().decode(Metadata.self, from: data),
-                  metadata.attachments.allSatisfy({ name in
-                      name.hasSuffix(".png") && UUID(uuidString: String(name.dropLast(4))) != nil
-                  }) else { return legacy() }
+                  metadata.attachments.allSatisfy(MeetingScreenshotStore.isValidName) else { return legacy() }
             if case .recording(let time) = metadata.time, !time.isFinite || time < 0 { return legacy() }
             let body = String(chunk[end.upperBound...]) + (index < chunks.count - 1 ? "\n" : "")
             guard let textStart = body.range(of: "\n\n"),
@@ -60,6 +66,18 @@ enum MeetingNoteDocument {
         return render(entries) == text ? entries : legacy()
     }
 
+    /// What the summary tool reads: each row's time, text, and screenshot links, without the
+    /// metadata, markers, and indentation that `render` stores.
+    static func summaryText(_ entries: [MeetingNoteEntry]) -> String {
+        entries.compactMap { entry -> String? in
+            let hasText = !entry.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            guard hasText || !entry.attachments.isEmpty else { return nil }
+            let lines = ["**\(entry.time.label)**"] + (hasText ? [entry.text] : [])
+                + entry.attachments.map { "![Screenshot](attachments/\($0))" }
+            return lines.joined(separator: "\n")
+        }.joined(separator: "\n\n")
+    }
+
     static func render(_ entries: [MeetingNoteEntry]) -> String {
         let entries = entries.filter { !$0.text.isEmpty || !$0.attachments.isEmpty }
         guard !entries.isEmpty else { return "" }
@@ -67,15 +85,9 @@ enum MeetingNoteDocument {
         encoder.outputFormatting = .sortedKeys
         let rows = entries.compactMap { entry -> String? in
             guard let data = try? encoder.encode(Metadata(id: entry.id, time: entry.time, attachments: entry.attachments)) else { return nil }
-            let label: String
-            switch entry.time {
-            case .recording(let time): label = RecordedTime.format(time)
-            case .afterRecording: label = "After recording"
-            case .undated: label = "Undated"
-            }
             let lines = entry.text.components(separatedBy: "\n").map { "    " + $0 }.joined(separator: "\n")
             let images = entry.attachments.map { "\n![Screenshot](attachments/\($0))" }.joined()
-            return marker + data.base64EncodedString() + " -->\n**\(label)**\(images)\n\n" + lines + "\n<!-- Ku-Ka end -->\n"
+            return marker + data.base64EncodedString() + " -->\n**\(entry.time.label)**\(images)\n\n" + lines + "\n<!-- Ku-Ka end -->\n"
         }
         return header + rows.joined()
     }

@@ -85,7 +85,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         XCTAssertEqual(requests, 1)
         session.context = { (.idle, .summarizing(snapshot: "")) }
         XCTAssertFalse(update.isEnabled)
-        session.edit("Later action")
+        session.setFirstRow("Later action")
         XCTAssertFalse(update.isEnabled)
         session.context = { (.idle, .updated(snapshot: "")) }
         XCTAssertTrue(update.isEnabled)
@@ -99,11 +99,11 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         let editor = MeetingTypedNotesHost(session: session, requestUpdate: {},
                                                        activation: .fake(setPolicy: { policies.append($0) }), present: { _ in })
         editor.show()
-        session.edit(String(repeating: "x", count: MeetingTypedNotesFile.maximumBytes + 1))
+        session.setFirstRow(String(repeating: "x", count: MeetingTypedNotesFile.maximumBytes + 1))
         XCTAssertTrue(session.hasUnsavedChanges)
         editor.close()
         editor.show()
-        XCTAssertEqual(session.text.count, MeetingTypedNotesFile.maximumBytes + 1)
+        XCTAssertEqual(session.firstRowText?.count, MeetingTypedNotesFile.maximumBytes + 1)
         XCTAssertEqual(policies, [.regular, .accessory, .regular])
         editor.close()
     }
@@ -161,7 +161,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         let next = MeetingTypedNotesHost(view: view, activation: .fake(), present: { _ in })
         next.show()
         defer { next.close() }
-        session.edit("Retained session")
+        session.setFirstRow("Retained session")
         XCTAssertEqual(descendants(view).compactMap { $0 as? NSTextView }.map(\.string), ["Retained session"])
     }
 
@@ -172,7 +172,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let session = try MeetingTypedNotesSession(meeting: meeting())
-        session.edit("# Decisions\n\nShip the release on Monday after QA signs off.\n\n# Action items\n\n- Mira: send the release checklist.\n- Jon: confirm the rollback steps.\n\n# Questions\n\nDo we need a separate notice for the pilot group?")
+        session.setFirstRow("# Decisions\n\nShip the release on Monday after QA signs off.\n\n# Action items\n\n- Mira: send the release checklist.\n- Jon: confirm the rollback steps.\n\n# Questions\n\nDo we need a separate notice for the pilot group?")
         let editor = MeetingTypedNotesHost(session: session, requestUpdate: {},
                                                        activation: .fake(), present: { _ in })
         editor.show()
@@ -193,7 +193,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
             }
             if saveError {
                 try session.meeting.write("Changed in another editor", to: .notes)
-                session.edit("My unsaved draft. Mira owns the checklist.")
+                session.setFirstRow("My unsaved draft. Mira owns the checklist.")
             }
             window.appearance = NSAppearance(named: appearance)
             window.setContentSize(size)
@@ -224,7 +224,7 @@ final class MeetingTypedNotesWindowTests: XCTestCase {
 
     func testMinimumWidthKeepsLongStatusAndEditorInsideTheWindow() throws {
         let session = try MeetingTypedNotesSession(meeting: meeting())
-        session.edit("A saved note")
+        session.setFirstRow("A saved note")
         session.context = { (.idle, .summarizing(snapshot: "Earlier note")) }
         let editor = MeetingTypedNotesHost(session: session, requestUpdate: {},
                                                        activation: .fake(), present: { _ in })

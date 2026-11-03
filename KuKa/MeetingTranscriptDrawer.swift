@@ -7,8 +7,7 @@ final class MeetingTranscriptDrawer: NSView {
 
     private let reduceMotion: () -> Bool
     private var follow = TranscriptFollow()
-    private var rows: [LiveRow] = []
-    private var rowLengths: [Int] = []
+    private var transcript = TranscriptText()
     /// True while the panel or the drawer itself scrolls or resizes the transcript, so only a
     /// scroll by the user changes `follow`.
     private var isMovingTranscript = false
@@ -84,35 +83,23 @@ final class MeetingTranscriptDrawer: NSView {
         if let chip, chip != behindLabel.stringValue { behindLabel.stringValue = chip }
     }
 
-    func showRows(_ newRows: [LiveRow]) {
-        guard newRows != rows else { return }
-        let oldCount = rows.count
-        let keptRows = zip(rows, newRows).prefix { $0 == $1 }.count
-        let prefixLength = rowLengths.prefix(keptRows).reduce(0, +)
-        let rendered = render(Array(newRows.dropFirst(keptRows)))
-        let oldText = transcriptView.string as NSString
-        var kept = prefixLength + zip(oldText.substring(from: prefixLength).utf16, rendered.text.string.utf16)
-            .prefix { $0 == $1 }.count
-        if kept > 0, (0xD800...0xDBFF).contains(oldText.character(at: kept - 1)) { kept -= 1 }
+    /// `keepScrollPosition` holds the transcript still while the user writes notes below it.
+    func showRows(_ newRows: [LiveRow], keepScrollPosition: Bool = false) {
+        guard newRows != transcript.rows else { return }
+        let oldCount = transcript.rows.count
+        let shown = transcriptView.string
+        let replacement = transcript.update(to: newRows, shown: shown)
         let selection = transcriptView.selectedRange()
         let scrollOrigin = scrollView.contentView.bounds.origin
-        let wasSelected = selection.length > 0
-        let editingNotes = (window?.firstResponder as? NSTextView).map { $0 !== transcriptView && $0.isEditable } ?? false
-        rows = newRows
-        rowLengths = Array(rowLengths.prefix(keptRows)) + rendered.lengths
         ignoringScroll {
-            transcriptView.textStorage?.replaceCharacters(in: NSRange(location: kept, length: oldText.length - kept),
-                with: rendered.text.attributedSubstring(from: NSRange(location: kept - prefixLength,
-                    length: rendered.text.length - (kept - prefixLength))))
-            if NSMaxRange(selection) <= kept {
-                transcriptView.setSelectedRange(selection)
-            } else {
-                transcriptView.setSelectedRange(NSRange(location: min(selection.location, kept), length: 0))
-            }
+            transcriptView.textStorage?.replaceCharacters(
+                in: NSRange(location: replacement.location, length: (shown as NSString).length - replacement.location),
+                with: replacement.text)
+            transcriptView.setSelectedRange(TranscriptText.selection(selection, keptBefore: replacement.location))
             sizeTranscript()
-            if wasSelected { follow.scrolled(lastRowVisible: false) }
+            if selection.length > 0 { follow.scrolled(lastRowVisible: false) }
             follow.rowsChanged(from: oldCount, to: newRows.count)
-            if follow.isFollowing && !editingNotes {
+            if follow.isFollowing && !keepScrollPosition {
                 scrollToEnd(animated: false)
             } else {
                 scrollView.contentView.scroll(to: scrollOrigin)
@@ -120,35 +107,6 @@ final class MeetingTranscriptDrawer: NSView {
             }
         }
         renderReturnToLive()
-    }
-
-    private func render(_ rows: [LiveRow]) -> (text: NSAttributedString, lengths: [Int]) {
-        let text = NSMutableAttributedString(string: "")
-        var lengths: [Int] = []
-        let body = NSMutableParagraphStyle()
-        body.lineSpacing = 3
-        for row in rows {
-            let start = text.length
-            switch row.content {
-            case .speech(let speaker, let words, let isFinal):
-                let heading = "\(RecordedTime.format(row.at))  \(speaker.label)" + (isFinal ? "" : " · Draft") + "\n"
-                text.append(NSAttributedString(string: heading, attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium),
-                    .foregroundColor: Colors.speaker(speaker),
-                ]))
-                text.append(NSAttributedString(string: MeetingPanelCopy.speech(words, isFinal: isFinal) + "\n\n", attributes: [
-                    .font: NSFont.systemFont(ofSize: Layout.textSize),
-                    .foregroundColor: isFinal ? NSColor.labelColor : NSColor.secondaryLabelColor,
-                    .paragraphStyle: body,
-                ]))
-            case .pause(let duration):
-                text.append(NSAttributedString(string: MeetingPanelCopy.pauseRow(at: row.at, duration: duration) + "\n\n",
-                    attributes: [.font: NSFont.systemFont(ofSize: 11.5, weight: .medium),
-                                 .foregroundColor: NSColor.secondaryLabelColor]))
-            }
-            lengths.append(text.length - start)
-        }
-        return (text, lengths)
     }
 
     override func layout() {
@@ -198,7 +156,7 @@ final class MeetingTranscriptDrawer: NSView {
     }
 
     private func scrollToEnd(animated: Bool) {
-        guard !rows.isEmpty else { return }
+        guard !transcript.rows.isEmpty else { return }
         // The panel's root view sets this view's frame, so the layout starts there.
         superview?.layoutSubtreeIfNeeded()
         let clip = scrollView.contentView
@@ -225,7 +183,7 @@ final class MeetingTranscriptDrawer: NSView {
     }
 
     @objc private func transcriptScrolled() {
-        guard !isMovingTranscript, !rows.isEmpty else { return }
+        guard !isMovingTranscript, !transcript.rows.isEmpty else { return }
         follow.scrolled(lastRowVisible: transcriptView.selectedRange().length == 0 &&
                         scrollView.contentView.bounds.maxY >= transcriptView.bounds.maxY - 4)
         renderReturnToLive()

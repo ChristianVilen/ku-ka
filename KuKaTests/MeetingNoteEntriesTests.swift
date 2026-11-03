@@ -25,7 +25,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
-        let id = session.insertEntry()
+        let id = session.entries[0].id
         session.noteTime = { .recording(45) }
         session.updateEntry(id: id, text: "First text")
         XCTAssertEqual(session.entries.first?.time, .recording(45))
@@ -39,7 +39,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
-        let id = session.insertEntry()
+        let id = session.entries[0].id
         session.updateEntry(id: id, text: "")
         session.noteTime = { .afterRecording }
         session.updateEntry(id: id, text: "Written after Stop")
@@ -69,7 +69,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
-        let id = session.insertEntry()
+        let id = session.entries[0].id
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
@@ -87,7 +87,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
-        let id = session.insertEntry()
+        let id = session.entries[0].id
         session.noteTime = { .recording(30) }
         XCTAssertThrowsError(try MeetingScreenshot.decode(Data("invalid".utf8)))
         session.noteTime = { .afterRecording }
@@ -102,7 +102,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(754) }
-        let id = session.insertEntry()
+        let id = session.entries[0].id
         session.updateEntry(id: id, text: "Mira checks access.\nKeep thirty days.")
         session.noteTime = { .recording(800) }
         session.updateEntry(id: id, text: "Mira checks access tomorrow.\nKeep thirty days.")
@@ -115,9 +115,32 @@ final class MeetingNoteEntriesTests: XCTestCase {
     func testEmptyPlaceholderDoesNotBecomeSummaryEvidence() throws {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
-        session.insertEntry()
+        XCTAssertEqual(session.entries.map(\.text), [""])
         XCTAssertEqual(session.text, "")
         XCTAssertEqual(try MeetingTypedNotesFile.read(in: meeting), "")
+    }
+
+    func testSummaryTextHasLabelsTextAndScreenshotLinksButNoStorageMarkers() {
+        let name = UUID().uuidString + ".png"
+        let entries = [
+            MeetingNoteEntry(time: .recording(754), text: "Mira checks access.\nKeep thirty days.", attachments: [name]),
+            MeetingNoteEntry(time: .recording(760), text: " \n"),
+            MeetingNoteEntry(time: .afterRecording, attachments: [name]),
+            MeetingNoteEntry(time: .undated, text: "# Old notes"),
+        ]
+        XCTAssertEqual(MeetingNoteDocument.summaryText(entries), """
+            **12:34**
+            Mira checks access.
+            Keep thirty days.
+            ![Screenshot](attachments/\(name))
+
+            **After recording**
+            ![Screenshot](attachments/\(name))
+
+            **Undated**
+            # Old notes
+            """)
+        XCTAssertEqual(MeetingNoteDocument.summaryText([MeetingNoteEntry(time: .recording(1))]), "")
     }
 
     func testLegacyMarkdownIsNotReinterpretedAsAttachments() {
@@ -141,7 +164,7 @@ final class MeetingNoteEntriesTests: XCTestCase {
         let meeting = try MeetingFolder.create(in: makeTemporaryDirectory(), startingAt: localDate(2026, 11, 3, 10, 0))
         let session = try MeetingTypedNotesSession(meeting: meeting)
         session.noteTime = { .recording(15) }
-        let id = session.insertEntry()
+        let id = session.entries[0].id
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
                                      bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                      colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!

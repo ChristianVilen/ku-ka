@@ -89,6 +89,39 @@ final class MeetingPanelPlacementTests: XCTestCase {
         XCTAssertEqual(MeetingPanelPlacement.clampedDrawerHeight(300), 300)
         XCTAssertEqual(MeetingPanelPlacement.clampedDrawerHeight(900), 460)
     }
+
+    func testTheNotesWidthClampsTo460Through900() {
+        XCTAssertEqual(MeetingPanelPlacement.clampedNotesWidth(100), 460)
+        XCTAssertEqual(MeetingPanelPlacement.clampedNotesWidth(600), 600)
+        XCTAssertEqual(MeetingPanelPlacement.clampedNotesWidth(1200), 900)
+    }
+
+    func testAFittedNotesFrameStaysOnItsScreenAndMovesThePillCornerWithIt() {
+        let fitted = MeetingPanelPlacement.fitted(CGRect(x: 1000, y: -100, width: 460, height: 542),
+                                                  pillTopRight: CGPoint(x: 1460, y: 442), drawerAbove: false,
+                                                  screens: [primary])
+
+        XCTAssertEqual(fitted.frame, CGRect(x: 980, y: 0, width: 460, height: 542))
+        XCTAssertEqual(fitted.pillTopRight, CGPoint(x: 1440, y: 542))
+    }
+
+    func testAFittedFrameWithThePillAtTheBottomKeepsTheCornerAtThePill() {
+        let fitted = MeetingPanelPlacement.fitted(CGRect(x: 100, y: 800, width: 460, height: 542),
+                                                  pillTopRight: CGPoint(x: 560, y: 842), drawerAbove: true,
+                                                  screens: [primary])
+
+        XCTAssertEqual(fitted.frame, CGRect(x: 100, y: 333, width: 460, height: 542))
+        XCTAssertEqual(fitted.pillTopRight, CGPoint(x: 560, y: 375))
+    }
+
+    func testAFittedFrameTallerThanTheScreenShrinksToItsVisibleFrame() {
+        let fitted = MeetingPanelPlacement.fitted(CGRect(x: 900, y: -200, width: 460, height: 1200),
+                                                  pillTopRight: CGPoint(x: 1360, y: 1000), drawerAbove: false,
+                                                  screens: [primary])
+
+        XCTAssertEqual(fitted.frame, CGRect(x: 900, y: 0, width: 460, height: 875))
+        XCTAssertEqual(fitted.pillTopRight, CGPoint(x: 1360, y: 875))
+    }
 }
 
 final class TranscriptFollowTests: XCTestCase {

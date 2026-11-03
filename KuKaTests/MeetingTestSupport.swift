@@ -7,6 +7,20 @@ struct TestError: LocalizedError {
 
 let defaultNotes = "## Summary\nShip Friday."
 
+extension MeetingTypedNotesSession {
+    /// Gives the first row `text`, as typing into a new editor does.
+    func setFirstRow(_ text: String) {
+        updateEntry(id: entries[0].id, text: text)
+    }
+
+    var firstRowText: String? { entries.first?.text }
+}
+
+/// The text of each row that notes.md holds.
+func savedNoteTexts(in meeting: MeetingFolder) throws -> [String] {
+    MeetingNoteDocument.parse(try meeting.read(.notes)).map(\.text)
+}
+
 extension Result where Success == CommandResult, Failure == any Error {
     static func reply(_ stdout: String) -> Self {
         .success(CommandResult(termination: .exited(0), stdout: stdout, stderr: ""))

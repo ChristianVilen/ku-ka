@@ -54,7 +54,8 @@ final class MeetingCombinedPanelTests: XCTestCase {
         let image = try MeetingScreenshot.decode(XCTUnwrap(bitmap.representation(using: .png, properties: [:])))
         try session.addScreenshot(image, to: XCTUnwrap(session.entries.first?.id))
         let preview = try XCTUnwrap(descendants(view).compactMap { $0 as? NSImageView }.first)
-        session.insertEntry()
+        XCTAssertNotNil(session.splitEntry(id: session.entries[0].id, selection: NSRange(location: 0, length: 0)))
+        XCTAssertEqual(session.entries.count, 2)
         XCTAssertTrue(descendants(view).contains { $0 === preview })
         XCTAssertTrue(descendants(view).contains { $0 === editor })
     }
@@ -80,7 +81,8 @@ final class MeetingCombinedPanelTests: XCTestCase {
         session.noteTime = { recorder.noteTime(for: meeting) }
         let view = MeetingTypedNotesView(session: session, requestUpdate: {})
         var closed = 0
-        panel.showNotes(view, onClose: { closed += 1 })
+        panel.onCloseNotes = { closed += 1 }
+        panel.attachNotes(view)
         let drawer = try XCTUnwrap(descendants(try XCTUnwrap(panel.contentView)).compactMap { $0 as? MeetingTranscriptDrawer }.first)
         XCTAssertFalse(drawer.isHidden)
         XCTAssertGreaterThan(drawer.frame.height, 0)
@@ -133,14 +135,10 @@ final class MeetingCombinedPanelTests: XCTestCase {
         XCTAssertTrue(session.entries.first?.text.contains("after stop") == true)
         panel.cancelOperation(nil)
         XCTAssertTrue(view.isHidden)
-        var rehosted: MeetingTypedNotesView?
-        panel.onRehostNotes = { rehosted = $0 }
-        await recorder.toggleRecording()
-        XCTAssertTrue(rehosted === view)
+        panel.detachNotes()
         XCTAssertFalse(view.isHidden)
-        XCTAssertNotEqual(recorder.activeMeeting, meeting)
         XCTAssertFalse(descendants(try XCTUnwrap(panel.contentView)).contains { $0 === view })
-        XCTAssertEqual(view.session.meeting, meeting)
+        XCTAssertEqual(closed, 0)
         panel.close()
     }
 
@@ -160,7 +158,11 @@ final class MeetingCombinedPanelTests: XCTestCase {
         await recorder.toggleRecording()
         let view = MeetingTypedNotesView(session: try MeetingTypedNotesSession(meeting: XCTUnwrap(recorder.activeMeeting)), requestUpdate: {})
         var closed = 0
-        panel.showNotes(view, onClose: { closed += 1 })
+        panel.onCloseNotes = {
+            closed += 1
+            panel.detachNotes()
+        }
+        panel.attachNotes(view)
         recorder.stopRecording()
         expire?()
         let close = try XCTUnwrap(descendants(try XCTUnwrap(panel.contentView)).compactMap { $0 as? NSButton }

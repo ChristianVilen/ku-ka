@@ -7,7 +7,8 @@ import Cocoa
 ///
 /// It never calls `NSApp.activate` and never makes itself key when it appears, so the meeting
 /// app keeps the keyboard. Unlike `ClipboardPanel`, it does not close on `resignKey`.
-final class MeetingControlsPanel: FloatingPanel {
+final class MeetingControlsPanel: FloatingPanel, MeetingNotesSlot {
+    /// What the user asked to see. Each new recording starts compact.
     private enum Presentation: Equatable { case compact, transcript, readAndWrite }
     private var presentation = Presentation.compact
     private struct Placement {
@@ -18,41 +19,13 @@ final class MeetingControlsPanel: FloatingPanel {
         let drawerAbove: Bool
     }
 
-    private enum Shape: Equatable {
-        case starting
-        case recording(paused: Bool, content: Presentation, liveStatus: LiveTranscript.Status?)
-        case saved
-        case interrupted(String)
-        case notes(expanded: Bool)
+    private struct Shape: Equatable {
+        /// What the pill draws.
+        let status: MeetingControls.Status
+        let content: PanelContent
+        let liveStatus: LiveTranscript.Status?
 
-        var status: MeetingControls.Status {
-            switch self {
-            case .starting: return .starting
-            case .recording(let paused, _, _): return paused ? .paused : .recording
-            case .saved, .notes: return .saved
-            case .interrupted(let reason): return .interrupted(reason: reason)
-            }
-        }
-
-        var isTranscriptOpen: Bool {
-            switch self {
-            case .recording(_, let content, _): return content != .compact
-            case .notes(let expanded): return expanded
-            case .starting, .saved, .interrupted: return false
-            }
-        }
-
-        var showsNotes: Bool {
-            switch self {
-            case .recording(_, .readAndWrite, _), .notes(true): return true
-            default: return false
-            }
-        }
-
-        var liveStatus: LiveTranscript.Status? {
-            guard case .recording(_, _, let status) = self else { return nil }
-            return status
-        }
+        var isOpen: Bool { content != .none }
     }
 
     private let recorder: MeetingRecorder
@@ -92,17 +65,16 @@ final class MeetingControlsPanel: FloatingPanel {
     private let drawer: MeetingTranscriptDrawer
     private let notesGrip = MeetingDrawerGrip()
     private var notesView: MeetingTypedNotesView?
-    private var closeNotes: (() -> Void)?
-    var onRehostNotes: ((MeetingTypedNotesView) -> Void)?
+    var onCloseNotes: (() -> Void)?
 
-    func showNotes(_ view: MeetingTypedNotesView, onClose: @escaping () -> Void) {
+    /// Shows `view` below the transcript, or alone after Stop, and gives it the keyboard.
+    func attachNotes(_ view: MeetingTypedNotesView) {
         if notesView !== view {
             notesView?.removeFromSuperview()
             notesView = view
             root.addSubview(view)
             root.notes = view
         }
-        closeNotes = onClose
         presentation = .readAndWrite
         drawnShape = nil
         reload()
@@ -110,12 +82,11 @@ final class MeetingControlsPanel: FloatingPanel {
         view.focus()
     }
 
-    func detachNotes(_ view: MeetingTypedNotesView) {
-        guard notesView === view else { return }
+    func detachNotes() {
+        guard let view = notesView else { return }
         notesView = nil
         presentation = .compact
         root.notes = nil
-        closeNotes = nil
         view.removeFromSuperview()
         view.isHidden = false
         drawnShape = nil
@@ -210,42 +181,17 @@ final class MeetingControlsPanel: FloatingPanel {
             sessionID = activeSession
             presentation = .compact
         }
-        if let notesView, let active = recorder.activeMeeting, notesView.session.meeting != active {
-            self.notesView = nil
-            root.notes = nil
-            notesView.removeFromSuperview()
-            notesView.isHidden = false
-            onRehostNotes?(notesView)
-            closeNotes = nil
-            presentation = .compact
-        }
         let controls = recorder.controls
         if let announcement = MeetingPanelCopy.announcement(from: announcedStatus, to: controls?.status) {
             announce(announcement.text, announcement.priority)
         }
         announcedStatus = controls?.status
         if controls == nil, recorder.activeSessionID != nil { return disappear() }
-        let shape: Shape
-        let preview: LivePreview?
-        switch controls?.status {
-        case .starting?:
-            shape = .starting
-            preview = nil
-        case .recording?, .paused?:
-            preview = presentation == .compact ? nil : recorder.livePreview
-            shape = .recording(paused: controls?.status == .paused, content: presentation, liveStatus: preview?.status)
-        case .saved?, .interrupted?, nil:
-            preview = nil
-            if notesView != nil {
-                shape = .notes(expanded: presentation == .readAndWrite)
-            } else if case .interrupted(let reason)? = controls?.status {
-                shape = .interrupted(reason)
-            } else if controls != nil {
-                shape = .saved
-            } else {
-                return disappear()
-            }
-        }
+        // After the saved notice ends, open notes keep the saved look.
+        guard let status = controls?.status ?? (notesView == nil ? nil : .saved) else { return disappear() }
+        let content = content(for: status)
+        let preview = content.showsTranscript ? recorder.livePreview : nil
+        let shape = Shape(status: status, content: content, liveStatus: preview?.status)
         let wasOpen = !drawer.isHidden
         let isAppearing = !isVisible
         renderTime(controls?.recordedTime)
@@ -255,9 +201,26 @@ final class MeetingControlsPanel: FloatingPanel {
             render(shape)
             relayout(shape, animated: !isAppearing && !displayOptions().reduceMotion)
         }
-        drawer.showRows(preview?.rows ?? [])
+        drawer.showRows(preview?.rows ?? [], keepScrollPosition: notesHaveKeyboard)
         if !drawer.isHidden, !wasOpen { drawer.opened() }
         if isAppearing { appear() }
+    }
+
+    /// The live transcript exists only while recording, and notes show only while attached.
+    private func content(for status: MeetingControls.Status) -> PanelContent {
+        let isRecording = status == .recording || status == .paused
+        switch presentation {
+        case .compact: return .none
+        case .transcript: return isRecording ? .transcript : .none
+        case .readAndWrite:
+            if isRecording { return notesView == nil ? .transcript : .transcriptAndNotes }
+            return notesView == nil || status == .starting ? .none : .notesOnly
+        }
+    }
+
+    private var notesHaveKeyboard: Bool {
+        guard let notesView, let responder = firstResponder as? NSView else { return false }
+        return responder.isDescendant(of: notesView)
     }
 
     private func renderTime(_ recorded: TimeInterval?) {
@@ -293,19 +256,18 @@ final class MeetingControlsPanel: FloatingPanel {
                                                : Self.symbol("pause.fill", size: 12, color: .labelColor),
                               copy: MeetingPanelCopy.pauseButton(isPaused: isPaused))
 
-        noteLabel.show(MeetingPanelCopy.note(for: status))
-        if shape.showsNotes { noteLabel.isHidden = true }
+        noteLabel.show(shape.isOpen ? nil : MeetingPanelCopy.note(for: status))
 
-        root.notesOnly = shape.showsNotes && !isRecorder
-        notesView?.isHidden = !shape.showsNotes
-        notesGrip.isHidden = !shape.showsNotes
-        drawer.isHidden = !shape.isTranscriptOpen || root.notesOnly
+        root.content = shape.content
+        notesView?.isHidden = !shape.content.showsNotes
+        notesGrip.isHidden = !shape.content.showsNotes
+        drawer.isHidden = !shape.content.showsTranscript
         drawer.showMessage(for: shape.liveStatus)
     }
 
     private func pillSize(for shape: Shape) -> CGSize {
-        guard !shape.isTranscriptOpen else {
-            return CGSize(width: shape.showsNotes ? notesWidth : Layout.openWidth, height: Layout.pillHeight)
+        guard !shape.isOpen else {
+            return CGSize(width: shape.content.showsNotes ? notesWidth : Layout.openWidth, height: Layout.pillHeight)
         }
         switch shape.status {
         case .starting: return CGSize(width: Layout.startingWidth, height: Layout.pillHeight)
@@ -318,9 +280,9 @@ final class MeetingControlsPanel: FloatingPanel {
         }
     }
 
-    private var drawerHeight: CGFloat {
+    private func drawerHeight(for shape: Shape) -> CGFloat {
         let height = resizeHeight ?? MeetingPanelPlacement.clampedDrawerHeight(CGFloat(settings.meetingTranscriptHeight))
-        return presentation == .readAndWrite ? max(380, height) : height
+        return shape.content.showsNotes ? max(MeetingPanelPlacement.minimumNotesDrawerHeight, height) : height
     }
 
     private func placement(for shape: Shape) -> Placement? {
@@ -328,25 +290,22 @@ final class MeetingControlsPanel: FloatingPanel {
         let layout = screens.all
         guard let corner = MeetingPanelPlacement.pillTopRight(saved: dragCorner ?? settings.meetingControlsTopRight,
                                                               pillSize: size, screens: layout) else { return nil }
-        let open = MeetingPanelPlacement.frame(pillTopRight: corner, pillSize: size, drawerHeight: drawerHeight, screens: layout)
-        var frame = shape.isTranscriptOpen
+        let open = MeetingPanelPlacement.frame(pillTopRight: corner, pillSize: size,
+                                               drawerHeight: drawerHeight(for: shape), screens: layout)
+        var frame = shape.isOpen
             ? open.frame
             : MeetingPanelPlacement.frame(pillTopRight: corner, pillSize: size, drawerHeight: nil, screens: layout).frame
-        if shape.showsNotes, let visible = layout.max(by: {
-            $0.visibleFrame.intersection(frame).width * $0.visibleFrame.intersection(frame).height <
-            $1.visibleFrame.intersection(frame).width * $1.visibleFrame.intersection(frame).height
-        })?.visibleFrame {
-            frame.size.width = min(frame.width, visible.width)
-            frame.size.height = min(frame.height, visible.height)
-            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
-            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        var pillTopRight = corner
+        if shape.content.showsNotes {
+            (frame, pillTopRight) = MeetingPanelPlacement.fitted(frame, pillTopRight: corner,
+                                                                 drawerAbove: open.drawerAbove, screens: layout)
         }
-        return Placement(frame: frame, pillHeight: size.height, pillTopRight: corner, drawerAbove: open.drawerAbove)
+        return Placement(frame: frame, pillHeight: size.height, pillTopRight: pillTopRight, drawerAbove: open.drawerAbove)
     }
 
     private func relayout(_ shape: Shape, animated: Bool) {
         guard let placement = placement(for: shape) else { return }
-        apply(placement, isOpen: shape.isTranscriptOpen, animated: animated)
+        apply(placement, isOpen: shape.isOpen, animated: animated)
     }
 
     private func apply(_ placement: Placement, isOpen: Bool, animated: Bool) {
@@ -408,7 +367,7 @@ final class MeetingControlsPanel: FloatingPanel {
     @objc private func pauseClicked() { recorder.togglePause() }
     @objc private func stopClicked() { recorder.stopRecording() }
     @objc private func closeClicked() {
-        hideNotes()
+        if notesView != nil { onCloseNotes?() }
         recorder.dismissControls()
     }
 
@@ -426,17 +385,10 @@ final class MeetingControlsPanel: FloatingPanel {
         guard recorder.activeMeeting != nil else { return }
         if let notesView {
             if presentation == .readAndWrite { cancelOperation(nil) }
-            else { showNotes(notesView, onClose: closeNotes ?? {}) }
+            else { attachNotes(notesView) }
             return
         }
         onWriteNotes?()
-    }
-
-    private func hideNotes() {
-        guard let view = notesView else { return }
-        let close = closeNotes
-        detachNotes(view)
-        close?()
     }
 
     private func dragBegan() {
@@ -458,8 +410,8 @@ final class MeetingControlsPanel: FloatingPanel {
     }
 
     private func resizeBegan() {
-        guard let placement else { return }
-        resizeStart = (drawerHeight, notesWidth, placement.drawerAbove)
+        guard let placement, let drawnShape else { return }
+        resizeStart = (drawerHeight(for: drawnShape), notesWidth, placement.drawerAbove)
     }
 
     /// Keeps the drawer on its side: a height that would flip it is not taken.
@@ -468,13 +420,13 @@ final class MeetingControlsPanel: FloatingPanel {
         let previous = resizeHeight
         let previousWidth = notesWidth
         resizeHeight = MeetingPanelPlacement.clampedDrawerHeight(start.height + (start.drawerAbove ? offset.height : -offset.height))
-        if presentation == .readAndWrite { notesWidth = min(900, max(460, start.width - offset.width)) }
+        if drawnShape.content.showsNotes { notesWidth = MeetingPanelPlacement.clampedNotesWidth(start.width - offset.width) }
         guard let placement = placement(for: drawnShape), placement.drawerAbove == start.drawerAbove else {
             resizeHeight = previous
             notesWidth = previousWidth
             return
         }
-        apply(placement, isOpen: drawnShape.isTranscriptOpen, animated: false)
+        apply(placement, isOpen: drawnShape.isOpen, animated: false)
     }
 
     private func resizeEnded() {
@@ -523,7 +475,7 @@ final class MeetingControlsPanel: FloatingPanel {
             pill.topAnchor.constraint(equalTo: background.topAnchor),
             pill.bottomAnchor.constraint(equalTo: background.bottomAnchor),
         ])
-        if let placement { apply(placement, isOpen: drawnShape?.isTranscriptOpen == true, animated: false) }
+        if let placement { apply(placement, isOpen: drawnShape?.isOpen == true, animated: false) }
     }
 
     private func buildPill() {
@@ -574,19 +526,29 @@ final class MeetingControlsPanel: FloatingPanel {
     }
 }
 
-/// Puts the pill at its edge of the window and gives the drawer the rest, at every size while
-/// the window's frame animates.
+/// What shows below the pill.
+fileprivate enum PanelContent: Equatable {
+    case none, transcript, transcriptAndNotes, notesOnly
+
+    var showsTranscript: Bool { self == .transcript || self == .transcriptAndNotes }
+    var showsNotes: Bool { self == .transcriptAndNotes || self == .notesOnly }
+}
+
+/// Puts the pill at its edge of the window and gives the drawer and the notes the rest, at
+/// every size while the window's frame animates.
 private final class RootView: NSView {
+    private static let gripHeight: CGFloat = 16
+
     var pillHeight = MeetingControlsPanel.Layout.pillHeight
     var drawerAbove = false
+    var content = PanelContent.none { didSet { needsDisplay = true } }
     weak var pill: NSView?
     weak var drawer: NSView?
     weak var notes: NSView?
     weak var notesGrip: NSView?
-    var notesOnly = false
 
     override func draw(_ dirtyRect: NSRect) {
-        if let notes, !notes.isHidden {
+        if content.showsNotes {
             MeetingControlsPanel.Colors.drawer.setFill()
             dirtyRect.fill()
         }
@@ -596,15 +558,17 @@ private final class RootView: NSView {
         pill?.frame = NSRect(x: 0, y: drawerAbove ? 0 : bounds.height - pillHeight, width: bounds.width, height: pillHeight)
         let contentY = drawerAbove ? pillHeight : 0
         let contentHeight = max(0, bounds.height - pillHeight)
-        if let notes, !notes.isHidden {
-            let gripHeight: CGFloat = 16
-            notesGrip?.frame = NSRect(x: 0, y: contentY, width: bounds.width, height: gripHeight)
-            let height = notesOnly ? contentHeight : contentHeight / 2
-            notes.frame = NSRect(x: 0, y: contentY + gripHeight, width: bounds.width, height: max(0, height - gripHeight))
-            drawer?.frame = NSRect(x: 0, y: contentY + height, width: bounds.width, height: contentHeight - height)
-        } else {
-            drawer?.frame = NSRect(x: 0, y: contentY, width: bounds.width, height: contentHeight)
+        let notesHeight: CGFloat = switch content {
+        case .notesOnly: contentHeight
+        case .transcriptAndNotes: contentHeight / 2
+        case .none, .transcript: 0
         }
+        if notesHeight > 0 {
+            notesGrip?.frame = NSRect(x: 0, y: contentY, width: bounds.width, height: Self.gripHeight)
+            notes?.frame = NSRect(x: 0, y: contentY + Self.gripHeight, width: bounds.width,
+                                  height: max(0, notesHeight - Self.gripHeight))
+        }
+        drawer?.frame = NSRect(x: 0, y: contentY + notesHeight, width: bounds.width, height: contentHeight - notesHeight)
         super.layout()
     }
 }

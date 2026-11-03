@@ -139,10 +139,9 @@ struct LiveTranscript: Equatable {
     func preview(on clock: RecordingClock) -> LivePreview {
         var rows = finalLines.map { LiveRow(at: $0.start,
                                             content: .speech($0.speaker, text: $0.text, isFinal: true)) }
-        for (index, pause) in clock.pauses.enumerated() {
-            let position = pause.at + Double(index) * RecordingClock.resumeGap
-            rows.insert(LiveRow(at: position, content: .pause(duration: pause.duration)),
-                        at: rows.firstIndex { $0.at >= position } ?? rows.endIndex)
+        for pause in clock.pauses {
+            rows.insert(LiveRow(at: pause.filePosition, content: .pause(duration: pause.duration)),
+                        at: rows.firstIndex { $0.at >= pause.filePosition } ?? rows.endIndex)
         }
         var drafts: [LiveRow] = []
         for track in [MeetingTrack.system, .microphone] {

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 
 @MainActor
 final class MeetingTypedNotesView: NSView {
@@ -73,7 +74,6 @@ final class MeetingTypedNotesView: NSView {
             summaryLabel.widthAnchor.constraint(equalTo: outer.widthAnchor)
         ])
         session.onChange = { [weak self] in self?.render() }
-        if session.entries.isEmpty { session.insertEntry() }
         render()
     }
 
@@ -112,10 +112,6 @@ final class MeetingTypedNotesView: NSView {
     }
 
     private func render() {
-        if session.entries.isEmpty {
-            session.insertEntry()
-            return
-        }
         let ids = Set(session.entries.map(\.id))
         for view in stack.arrangedSubviews {
             guard let row = view as? MeetingNoteRowView, !ids.contains(row.editor.entryID) else { continue }
@@ -219,11 +215,7 @@ private final class MeetingNoteRowView: NSStackView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func show(_ entry: MeetingNoteEntry) {
-        switch entry.time {
-        case .recording(let position): time.stringValue = RecordedTime.format(position)
-        case .afterRecording: time.stringValue = "After recording"
-        case .undated: time.stringValue = "Undated"
-        }
+        time.stringValue = entry.time.label
         if editor.string != entry.text { editor.replaceFromSession(entry.text) }
         guard attachmentNames != entry.attachments else { return }
         attachmentNames = entry.attachments
@@ -300,7 +292,7 @@ final class NoteRowTextView: NSTextView, NSTextStorageDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 && !event.modifierFlags.contains(.shift) { onNewRow?(); return }
+        if Int(event.keyCode) == kVK_Return && !event.modifierFlags.contains(.shift) { onNewRow?(); return }
         super.keyDown(with: event)
     }
     override func paste(_ sender: Any?) {

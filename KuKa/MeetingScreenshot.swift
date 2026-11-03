@@ -57,6 +57,11 @@ struct MeetingScreenshotStore {
 
     init(meeting: MeetingFolder) { self.meeting = meeting }
 
+    /// Only names that `write` makes, so a name from notes.md cannot reach another file.
+    static func isValidName(_ name: String) -> Bool {
+        name.hasSuffix(".png") && UUID(uuidString: String(name.dropLast(4))) != nil
+    }
+
     func write(_ screenshot: MeetingScreenshot) throws -> String {
         let directory = try openDirectory(create: true)
         defer { Darwin.close(directory) }
@@ -76,8 +81,7 @@ struct MeetingScreenshotStore {
     }
 
     func read(named name: String) -> Data? {
-        guard name.hasSuffix(".png"), UUID(uuidString: String(name.dropLast(4))) != nil,
-              let directory = try? openDirectory(create: false) else { return nil }
+        guard Self.isValidName(name), let directory = try? openDirectory(create: false) else { return nil }
         defer { Darwin.close(directory) }
         let descriptor = openat(directory, name, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
         guard descriptor >= 0 else { return nil }
