@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run after a full test run. Fails when a test takes 0.1 s or more and
+# Run after a full test run. Fails when a test takes more than the limit and
 # scripts/slow-tests-allowed.txt gives no reason for it, or when AGENTS.md
 # is over 150 lines.
 #
@@ -9,7 +9,9 @@
 set -eu
 
 cd "$(dirname "$0")/.."
-limit=0.1
+# The goal is 0.1 s, but XCTest adds up to about 0.12 s to some async tests at
+# random in this test host. A 0.1 s limit would fail one run and pass the next.
+limit=0.15
 allowed=scripts/slow-tests-allowed.txt
 failed=0
 
@@ -24,10 +26,11 @@ if [ -z "$result" ]; then
 fi
 [ -n "$result" ] || { echo "No test result found. Run the tests, or pass a .xcresult path." >&2; exit 2; }
 
-# Each test that takes at least the limit, as "Class/testName() seconds".
-slow=$(xcrun xcresulttool get test-results tests --path "$result" | jq -r --argjson limit "$limit" '
-    [.. | objects | select(.nodeType == "Test Case" and .result != "Skipped" and .durationInSeconds >= $limit)]
+# Every test that ran, slowest first, as "Class/testName() seconds".
+durations=$(xcrun xcresulttool get test-results tests --path "$result" | jq -r '
+    [.. | objects | select(.nodeType == "Test Case" and .result != "Skipped")]
     | sort_by(-.durationInSeconds)[] | "\(.nodeIdentifier) \(.durationInSeconds * 1000 | round / 1000)"')
+slow=$(awk -v limit="$limit" '$2 > limit' <<< "$durations")
 
 while read -r test seconds; do
     [ -n "$test" ] || continue
@@ -37,10 +40,13 @@ while read -r test seconds; do
     fi
 done <<< "$slow"
 
-# An entry for a test that is fast now only makes the list longer.
+# An entry for a test that now meets the 0.1 s goal only makes the list longer.
 while read -r test _; do
     case "$test" in ''|'#'*) continue ;; esac
-    grep -q "^$test " <<< "$slow" || echo "No longer slow, remove it from $allowed: $test"
+    seconds=$(awk -v t="$test" '$1 == t { print $2 }' <<< "$durations")
+    if [ -z "$seconds" ] || awk -v s="$seconds" 'BEGIN { exit !(s < 0.1) }'; then
+        echo "No longer slow, remove it from $allowed: $test"
+    fi
 done < "$allowed"
 
 lines=$(wc -l < AGENTS.md)

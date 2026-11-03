@@ -95,7 +95,18 @@ final class ProcessCommandRunnerTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is CancellationError, "\(error)")
         }
-        XCTAssertNotEqual(kill(child, 0), 0, "the child kept running after cancellation")
+        let ended = await processEnds(child)
+        XCTAssertTrue(ended, "the child kept running after cancellation")
+    }
+
+    /// The runner returns after it sends SIGTERM, and the child ends a moment later.
+    private func processEnds(_ pid: pid_t) async -> Bool {
+        let deadline = Date().addingTimeInterval(2)
+        while kill(pid, 0) == 0 {
+            guard Date() < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        return true
     }
 
     private func startedChild(writingItsIDTo file: URL) async throws -> pid_t {
