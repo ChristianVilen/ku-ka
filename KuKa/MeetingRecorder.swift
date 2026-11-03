@@ -167,6 +167,11 @@ final class MeetingRecorder {
         return meeting.state.clock.recordedTime(at: hostNow())
     }
 
+    func noteTime(for folder: MeetingFolder) -> MeetingNoteTime {
+        guard case .active(let meeting) = state, meeting.folder == folder else { return .afterRecording }
+        return .recording(meeting.state.clock.notePosition(at: hostNow()))
+    }
+
     /// Nil when the panel is off screen.
     var controls: MeetingControls? {
         let status: MeetingControls.Status

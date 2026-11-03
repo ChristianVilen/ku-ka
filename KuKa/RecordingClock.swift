@@ -61,6 +61,12 @@ struct RecordingClock: Equatable, Sendable {
         runs.reduce(0) { sum, run in sum + max(0, min(run.end ?? time, time) - run.start) }
     }
 
+    func notePosition(at time: HostTime) -> TimeInterval {
+        let elapsed = recordedTime(at: time)
+        let resumes = boundaries.enumerated().filter { $0.offset % 2 == 1 && $0.element <= time }.count
+        return elapsed + Double(resumes) * Self.resumeGap
+    }
+
     /// Where audio captured at `time` lands in the files. Nil before `origin` or inside a pause.
     func filePosition(at time: HostTime) -> TimeInterval? {
         runs.firstIndex { $0.contains(time) }.map { filePosition(at: time, inRun: $0) }

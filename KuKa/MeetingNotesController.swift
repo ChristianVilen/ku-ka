@@ -216,6 +216,7 @@ final class MeetingNotesController: NSObject, NSMenuItemValidation, MenuSection 
     func typedNotes(for meeting: MeetingFolder) throws -> MeetingTypedNotesSession {
         if let session = notesSessions[meeting] { return session }
         let session = try MeetingTypedNotesSession(meeting: meeting)
+        session.noteTime = { [weak self] in self?.recorder.noteTime(for: meeting) ?? .afterRecording }
         notesSessions[meeting] = session
         session.context = { [weak self] in self?.notesContext(for: meeting) ?? (.idle, .idle) }
         session.onSaved = { [weak self] in self?.notesSaved(for: meeting) }
